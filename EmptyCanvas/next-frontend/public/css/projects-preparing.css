@@ -5445,3 +5445,100 @@ html[data-theme="dark"] .pr-root .pr-label-schools-all button{background:#303948
  .pr-root .pr-intake-v401 .pr-stage-filter-tabs>button svg {width:15px;height:15px;}
  .pr-root .pr-intake-v401 .pr-intake-tabs-toolbar {gap:4px;}
 }
+
+/* v417 — stage search uses the exact visual order and expand/close behavior of
+   HeaderSearch; expanded overlay stays on the toolbar without moving its row.
+   History is now a title action beside the modal X (Stages 1–5). */
+.pr-root .pr-intake-v401 .pr-pt-title .pr-intake-header-actions {
+ display:flex;align-items:center;justify-content:flex-end;flex:0 0 auto;gap:8px;margin-left:auto;
+}
+.pr-root .pr-intake-v401 .pr-pt-title .pr-intake-header-actions .pr-pt-history-button {
+ box-sizing:border-box;display:inline-grid;place-items:center;
+ flex:0 0 42px;width:42px;height:42px;min-width:42px;min-height:42px;
+ margin:0;padding:0;border:1px solid #e4e7ec;border-radius:13px;
+ background:#fff;color:#101828;cursor:pointer;
+ transition:background-color .2s ease,border-color .2s ease;
+}
+.pr-root .pr-intake-v401 .pr-pt-title .pr-intake-header-actions .pr-pt-history-button:hover {
+ background:#f2f4f7;border-color:#cbd5e1;
+}
+.pr-root .pr-intake-v401 .pr-pt-title .pr-intake-header-actions .pr-pt-history-button.is-active {
+ background:#101828;color:#fff;border-color:#101828;
+}
+.pr-root .pr-intake-v401 .pr-pt-title .pr-intake-header-actions .pr-pt-history-button:focus-visible {
+ outline:3px solid #93a2b6;outline-offset:2px;
+}
+.pr-root .pr-intake-v401 .pr-intake-search-control {
+ /* HeaderSearch: icon -> input -> clear, never reversed. The overlay grows left
+    because its right edge remains fixed to the toolbar search slot. */
+ flex-direction:row;align-items:center;justify-content:flex-start;
+ border:1px solid #e4e7ec;background:#f8fafc;
+ box-shadow:0 1px 2px rgba(16,24,40,.04),0 6px 18px rgba(16,24,40,.06);
+ transition:width .34s cubic-bezier(.22,1,.36,1),border-color .24s ease,background-color .24s ease,box-shadow .24s ease;
+}
+.pr-root .pr-intake-v401 .pr-intake-search-control.is-open {
+ background:#fff;border-color:#d9dee7;
+ box-shadow:0 1px 2px rgba(16,24,40,.04),0 10px 24px rgba(16,24,40,.08);
+}
+.pr-root .pr-intake-v401 .pr-intake-search-control.is-open .pr-intake-search-toggle {
+ flex:0 0 32px;width:32px;height:32px;min-width:32px;min-height:32px;
+ margin:0 0 0 3px;border-radius:999px;
+}
+.pr-root .pr-intake-v401 .pr-intake-search-control .pr-intake-search-expand {
+ flex:1 1 auto;width:0;min-width:0;
+}
+.pr-root .pr-intake-v401 .pr-intake-search-control .pr-intake-search-expand input,
+.pr-root .pr-intake-v401 .pr-intake-search-control .pr-intake-search-expand input:focus {
+ flex:1 1 auto;width:0;min-width:0;padding:0 9px;
+ border:0;outline:0;box-shadow:none;background:transparent;
+}
+.pr-root .pr-intake-v401 .pr-intake-search-control .pr-intake-search-clear {
+ flex:0 0 28px;width:28px;min-width:28px;height:28px;
+ margin:0 3px 0 0;border-radius:999px;
+ opacity:0;transform:scale(.8) translateX(5px);pointer-events:none;
+ transition:opacity .2s ease,transform .2s ease,background-color .2s ease;
+}
+.pr-root .pr-intake-v401 .pr-intake-search-control.is-open .pr-intake-search-clear {
+ opacity:1;transform:scale(1) translateX(0);pointer-events:auto;
+}
+@media (max-width:800px) {
+ .pr-root .pr-intake-v401 .pr-pt-title .pr-intake-header-actions {gap:6px;}
+ .pr-root .pr-intake-v401 .pr-pt-title .pr-intake-header-actions .pr-pt-history-button {
+  flex-basis:38px;width:38px;height:38px;min-width:38px;min-height:38px;border-radius:12px;
+ }
+ .pr-root .pr-intake-v401 .pr-intake-search-control.is-open {
+  /* Make room for the unchanged Download/Labels actions; cover the tabs only. */
+  width:min(320px,calc(100vw - 110px));
+ }
+}
+@media (prefers-reduced-motion:reduce) {
+ .pr-root .pr-intake-v401 .pr-intake-search-control,
+ .pr-root .pr-intake-v401 .pr-intake-search-control .pr-intake-search-clear {
+  transition:none;
+ }
+}
+html[data-theme="dark"] .pr-root .pr-intake-v401 .pr-pt-title .pr-intake-header-actions .pr-pt-history-button {
+ background:#222936;color:#e8edf5;border-color:#414b5a;
+}
+html[data-theme="dark"] .pr-root .pr-intake-v401 .pr-pt-title .pr-intake-header-actions .pr-pt-history-button.is-active {
+ background:#0b111a;color:#fff;border-color:#626e80;
+}
+@media (max-width:600px) {
+ .pr-root .pr-intake-v401 .pr-manifest-title.pr-pt-title {
+  flex-wrap:nowrap;align-items:center;gap:7px;
+ }
+ .pr-root .pr-intake-v401 .pr-intake-heading {
+  flex:1 1 auto;min-width:0;gap:7px;
+ }
+ .pr-root .pr-intake-v401 .pr-intake-heading>svg {
+  flex:0 0 36px;width:36px;height:36px;
+ }
+ .pr-root .pr-intake-v401 .pr-intake-heading h3 {
+  font-size:clamp(16px,4.2vw,20px);line-height:1.15;overflow-wrap:break-word;
+ }
+ .pr-root .pr-intake-v401 .pr-pt-title .pr-intake-header-actions .pr-pt-history-button,
+ .pr-root .pr-intake-v401 .pr-pt-title .pr-intake-header-actions .pr-pt-close {
+  flex:0 0 36px;width:36px;min-width:36px;height:36px;min-height:36px;
+  border-radius:12px;
+ }
+}

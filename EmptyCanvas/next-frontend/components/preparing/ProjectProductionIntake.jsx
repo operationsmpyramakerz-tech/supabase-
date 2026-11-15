@@ -189,7 +189,10 @@ export default function ProjectProductionIntake({projectId,projectName,canTest,e
  return <div className="pr-wh pr-pt pr-pt-modern pr-intake-v401">
   <header className="pr-manifest-title pr-wh-title pr-pt-title">
    <div className="pr-intake-heading"><TestingIcon name="engineer" size={48}/><div><h3>Production Receiving</h3></div></div>
-   <button type="button" className="pr-pt-close" onClick={onClose} aria-label="Close Production Receiving" title="Close"><TestingIcon name="close" size={19}/></button>
+   <div className="pr-intake-header-actions">
+    <button type="button" aria-pressed={tab==="history"} aria-label={`Receiving History (${entries.length} changes)`} title={`Receiving History (${entries.length})`} className={`pr-pt-history-button${tab==="history"?" is-active":""}`} onClick={()=>{setTab(tab==="history"?"testing":"history");if(tab!=="history")closeSearch();}}><TestingIcon name="history" size={19}/></button>
+    <button type="button" className="pr-pt-close" onClick={onClose} aria-label="Close Production Receiving" title="Close"><TestingIcon name="close" size={19}/></button>
+   </div>
   </header>
   {error&&<div className="pr-alert" role="alert">{error}<button type="button" onClick={()=>setError("")} aria-label="Dismiss">×</button></div>}
   {success&&<div className="pr-manifest-success" role="status">{success}</div>}
@@ -214,7 +217,6 @@ export default function ProjectProductionIntake({projectId,projectName,canTest,e
        </div>
       </div>
      </div>
-     <button type="button" aria-pressed={tab==="history"} aria-label={`Receiving History (${entries.length} changes)`} title={`Receiving History (${entries.length})`} className={`pr-pt-history-button${tab==="history"?" is-active":""}`} onClick={()=>{setTab(tab==="history"?"testing":"history");if(tab!=="history")closeSearch();}}><TestingIcon name="history" size={19}/></button>
      <button type="button" className="pr-pt-download-button" aria-label="Download receiving report" title="Download receiving report" onClick={()=>setShowExport(true)} disabled={!data.items.length}><TestingIcon name="download" size={21}/></button>
     </div>
    </div>

@@ -90,6 +90,7 @@ export default function ProjectBoxDistribution({projectId,rows,kitGroups,request
  const [data,setData]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState(""),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false);
  const [search,setSearch]=useState(""),[searchOpen,setSearchOpen]=useState(false),searchInputRef=useRef(null),[opened,setOpened]=useState(null),[editing,setEditing]=useState(""),[rowError,setRowError]=useState("");
  const closeSearch=()=>{setSearchOpen(false);setSearch("");};
+ useEffect(()=>{if(mode==="history"){setSearchOpen(false);setSearch("");}},[mode]);
  useEffect(()=>{if(searchOpen&&mode==="boxes")searchInputRef.current?.focus();},[searchOpen,mode]);
  useEffect(()=>{if(mode!=="boxes")closeSearch();},[mode]);
  const [preview,setPreview]=useState(null),[previewIndex,setPreviewIndex]=useState(0);
@@ -222,7 +223,6 @@ export default function ProjectBoxDistribution({projectId,rows,kitGroups,request
       <div className="pr-intake-search-expand"><input ref={searchInputRef} id="pr-box-distribution-search" type="search" aria-label="Search box distribution" placeholder="Search component or code…" disabled={!searchOpen} tabIndex={searchOpen?0:-1} value={search} onChange={event=>setSearch(event.target.value)} onKeyDown={event=>{if(event.key==="Escape"){event.preventDefault();closeSearch();}}}/><button type="button" className="pr-intake-search-clear" aria-label="Close box search" title="Close search" disabled={!searchOpen} tabIndex={searchOpen?0:-1} onClick={closeSearch}><BoxIcon name="close" size={17}/></button></div>
      </div></div>
      <button type="button" className="pr-box-v409-label-button" aria-label="Boxes Label" title="Manage box labels" onClick={openBoxLabels}><BoxIcon name="box" size={20}/>{activeCartons.length>0&&<span className="pr-box-v409-label-count">{activeCartons.length}</span>}</button>
-     <button type="button" aria-label="Box History" aria-pressed={historyActive} title="Box History" className={`pr-pt-history-button${historyActive?" is-active":""}`} onClick={()=>{closeSearch();onHistoryToggle?.();}}><BoxIcon name="history" size={20}/></button>
      <button type="button" className="pr-pt-download-button" aria-label="Download Box Distribution report" title="Download Box Distribution report" onClick={onDownload} disabled={downloadDisabled}><BoxIcon name="download" size={20}/></button>
     </div>
    </div>

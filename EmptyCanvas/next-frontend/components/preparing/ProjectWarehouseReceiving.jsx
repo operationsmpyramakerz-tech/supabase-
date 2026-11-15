@@ -175,7 +175,10 @@ export default function ProjectWarehouseReceiving({projectId,projectName,canRece
  return <div className="pr-wh pr-wr-modern pr-pt pr-pt-modern pr-warehouse-parity pr-intake-v401 pr-warehouse-v407">
   <header className="pr-manifest-title pr-wh-title pr-pt-title">
    <div className="pr-intake-heading"><WarehouseIcon name="warehouse" size={48}/><div><h3>Warehouse Return</h3></div></div>
-   <button type="button" className="pr-pt-close" aria-label="Close Warehouse Return" title="Close" onClick={onClose}><WarehouseIcon name="close" size={19}/></button>
+   <div className="pr-intake-header-actions">
+    <button type="button" aria-pressed={tab==="history"} className={`pr-pt-history-button${tab==="history"?" is-active":""}`} aria-label={`Return History (${historyEntries.length} changes)`} title={`Return History (${historyEntries.length})`} onClick={()=>{setTab(tab==="history"?"receiving":"history");if(tab!=="history")closeSearch();setError("");}}><WarehouseIcon name="history" size={19}/></button>
+    <button type="button" className="pr-pt-close" aria-label="Close Warehouse Return" title="Close" onClick={onClose}><WarehouseIcon name="close" size={19}/></button>
+   </div>
   </header>
   {error&&<div className="pr-alert" role="alert">{error}<button type="button" onClick={()=>setError("")} aria-label="Dismiss">×</button></div>}
   {success&&<div className="pr-manifest-success" role="status">{success}</div>}
@@ -200,7 +203,6 @@ export default function ProjectWarehouseReceiving({projectId,projectName,canRece
        </div>
       </div>
      </div>
-     <button type="button" aria-pressed={tab==="history"} className={`pr-pt-history-button${tab==="history"?" is-active":""}`} aria-label={`Return History (${historyEntries.length} changes)`} title={`Return History (${historyEntries.length})`} onClick={()=>{setTab(tab==="history"?"receiving":"history");if(tab!=="history")closeSearch();setError("");}}><WarehouseIcon name="history" size={19}/></button>
      <button type="button" className="pr-pt-download-button" aria-label="Download warehouse return report" title="Download warehouse return report" onClick={()=>setShowExport(true)} disabled={!state.items.length}><WarehouseIcon name="download" size={21}/></button>
     </div>
    </div>

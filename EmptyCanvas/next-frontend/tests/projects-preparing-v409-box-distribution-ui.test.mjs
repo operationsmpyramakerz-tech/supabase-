@@ -24,8 +24,11 @@ test('Box Distribution has the same stage header, progress and sign-off as Stage
 });
 
 test('Stage 5 toolbar follows global search style with a single custom close X',()=>{
- for(const token of ['pr-intake-tabs-toolbar','pr-intake-tabs-actions','pr-intake-search-control','pr-intake-search-expand','pr-intake-search-clear','pr-box-v409-label-button','pr-pt-history-button','pr-pt-download-button']) assert.ok(boxes.includes(token),token);
- for(const label of ['All Components','Remaining to Pack','Packed','Boxes Label','Box History','Download Box Distribution report','Close box search']) assert.ok(boxes.includes(label),label);
+ for(const token of ['pr-intake-tabs-toolbar','pr-intake-tabs-actions','pr-intake-search-control','pr-intake-search-expand','pr-intake-search-clear','pr-box-v409-label-button','pr-pt-download-button']) assert.ok(boxes.includes(token),token);
+ for(const label of ['All Components','Remaining to Pack','Packed','Boxes Label','Download Box Distribution report','Close box search']) assert.ok(boxes.includes(label),label);
+ assert.match(parent,/aria-label="Box History"/);
+ assert.match(parent,/pr-intake-header-actions/);
+ assert.doesNotMatch(boxes,/aria-label="Box History"/);
  assert.match(boxes,/id="pr-box-distribution-search" type="search"/);
  assert.match(boxes,/onClick=\{closeSearch\}/);
  assert.match(boxes,/if\(event\.key==="Escape"\)\{event\.preventDefault\(\);closeSearch\(\);\}/);

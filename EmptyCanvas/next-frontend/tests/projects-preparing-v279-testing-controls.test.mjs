@@ -22,13 +22,14 @@ test('Passed / Failed / Remaining have green / red / yellow solid cards with leg
  assert.match(css,/\.pr-pt-stat--failed\s*\{[^}]*--pt-card-text:#fff/s);
 });
 
-test('Download is visible labeled button, History is icon-only right beside it',()=>{
- assert.match(ui,/className="pr-pt-download-button"[^\n]+?><TestingIcon name="download" size=\{18\}\/>(?:<span>)Download<\/span>/);
+test('Download remains in toolbar while History sits beside stage close button',()=>{
+ assert.match(ui,/className="pr-pt-download-button"[^\n]+?><TestingIcon name="download" size=\{21\}\/><\/button>/);
  assert.match(ui,/aria-label=\{`Testing History \(\$\{entries.length\} changes\)`\}/);
  assert.match(ui,/className=\{`pr-pt-history-button/);
  assert.match(ui,/<TestingIcon name="history" size=\{19\}\/>(?:<\/button>)/);
- assert.ok(ui.indexOf('pr-pt-history-button')<ui.indexOf('pr-pt-download-button'));
- assert.match(ui,/onClick=\{\(\)=>setTab\(tab==="history"\?"testing":"history"\)\}/);
+ assert.ok(ui.indexOf('pr-pt-history-button')<ui.indexOf('pr-pt-close'));
+ assert.match(ui,/pr-intake-header-actions/);
+ assert.match(ui,/setTab\(tab==="history"\?"testing":"history"\)/);
  assert.match(ui,/onClick=\{\(\)=>setShowExport\(true\)\}/);
 });
 
@@ -36,7 +37,7 @@ test('Refresh is removed, stage tabs preserves all three filter values',()=>{
  const toolbar=ui.split('<StageFilterTabs')[1].split('pr-wh-list pr-pt-list')[0];
  assert.doesNotMatch(toolbar,/>Refresh</);
  assert.doesNotMatch(toolbar,/PreparingSelect iconOnly/);
- assert.match(toolbar,/pr-stage-filter-toolbar/);
+ assert.match(ui,/pr-intake-tabs-toolbar/);
  assert.match(toolbar,/label="Testing component status"/);
  for(const value of ['all','pending','done']) assert.ok(toolbar.includes(`value:"${value}"`));
  assert.match(select,/iconOnly \? <svg/);

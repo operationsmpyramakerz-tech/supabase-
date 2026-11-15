@@ -19,8 +19,11 @@ test('tabs and the three actions share one row in the requested order',()=>{
  assert.ok(start>=0 && end>start);
  const markup=component.slice(start,end);
  assert.ok(markup.indexOf('<StageFilterTabs') < markup.indexOf('pr-intake-tabs-actions'));
- assert.ok(markup.indexOf('pr-intake-search-toggle') < markup.indexOf('pr-pt-history-button'));
- assert.ok(markup.indexOf('pr-pt-history-button') < markup.indexOf('pr-pt-download-button'));
+ assert.ok(markup.indexOf('pr-intake-search-toggle') < markup.indexOf('pr-pt-download-button'));
+ assert.doesNotMatch(markup,/pr-pt-history-button/);
+ const heading=component.slice(component.indexOf('<header className="pr-manifest-title'),start);
+ assert.ok(heading.indexOf('pr-pt-history-button') < heading.indexOf('pr-pt-close'));
+ assert.match(heading,/pr-intake-header-actions/);
  assert.doesNotMatch(markup,/pr-stage-filter-toolbar pr-pt-toolbar/);
  assert.match(css,/\.pr-root \.pr-intake-v401 \.pr-intake-tabs-toolbar\s*\{[^}]*display:flex/);
  assert.match(css,/\.pr-root \.pr-intake-v401 \.pr-intake-tabs-toolbar \.pr-stage-filter-tabs\s*\{[^}]*flex:1 1 auto/);

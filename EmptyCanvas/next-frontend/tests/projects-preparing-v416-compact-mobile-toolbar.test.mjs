@@ -42,11 +42,11 @@ test('Mobile toolbar stays on a single line, with compact buttons and a scrollab
 });
 test('Search remains anchored in its slot and expands LEFT above tabs, including narrow screens', () => {
  assert.match(section, /\.pr-intake-search-control\s*\{[^}]*position:absolute;top:0;right:0;left:auto/s);
- assert.match(section, /\.pr-intake-search-control\s*\{[^}]*flex-direction:row-reverse/s);
+ assert.match(css, /\/\* v417[^]*?\.pr-intake-search-control\s*\{[^}]*flex-direction:row;/s);
  assert.match(section, /\.pr-intake-search-control\.is-open\s*\{[^}]*top:0;right:0;left:auto/s);
  assert.match(section, /width:min\(320px,calc\(100vw - 132px\)\)/);
  assert.doesNotMatch(css, /top:calc\(100% \+ 8px\);right:-88px/);
 });
 test('New styles are cache-busted so mobile receives the patch', () => {
- assert.match(page, /v416-compact-stage-toolbar-and-clean-copy/);
+ assert.match(page, /v417-header-search-parity-history-in-title/);
 });

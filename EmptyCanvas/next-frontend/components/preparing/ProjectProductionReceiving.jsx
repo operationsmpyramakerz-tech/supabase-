@@ -120,7 +120,10 @@ export default function ProjectProductionReceiving({projectId,projectName,allowe
  if(!boxView)return <div className="pr-delivery pr-production pr-pt pr-pt-modern pr-intake-v401 pr-production-v408">
   <header className="pr-manifest-title pr-pt-title">
    <div className="pr-intake-heading"><ProductionIcon name="engineer" size={48}/><div><h3>Operations Receiving</h3></div></div>
-   <button type="button" className="pr-pt-close" aria-label="Close Operations Receiving" title="Close" onClick={onClose}><ProductionIcon name="close" size={19}/></button>
+   <div className="pr-intake-header-actions">
+    <button type="button" aria-pressed={tab==="receiving-history"} className={`pr-pt-history-button${tab==="receiving-history"?" is-active":""}`} aria-label={`Receiving History (${data.handoffs.length} changes)`} title={`Receiving History (${data.handoffs.length})`} onClick={()=>{setTab(tab==="receiving-history"?"receiving":"receiving-history");if(tab!=="receiving-history")closeSearch();setError("");}}><ProductionIcon name="history" size={19}/></button>
+    <button type="button" className="pr-pt-close" aria-label="Close Operations Receiving" title="Close" onClick={onClose}><ProductionIcon name="close" size={19}/></button>
+   </div>
   </header>
   {error&&<div className="pr-alert" role="alert">{error}<button type="button" aria-label="Dismiss error" onClick={()=>setError("")}>×</button></div>}
   {notice&&<div className="pr-manifest-success" role="status">{notice}</div>}
@@ -143,7 +146,6 @@ export default function ProjectProductionReceiving({projectId,projectName,allowe
        <button type="button" className="pr-intake-search-clear" aria-label="Close component search" title="Close search" onClick={closeSearch} tabIndex={searchOpen?0:-1} disabled={!searchOpen}><ProductionIcon name="close" size={17}/></button>
       </div>
      </div></div>
-     <button type="button" aria-pressed={tab==="receiving-history"} className={`pr-pt-history-button${tab==="receiving-history"?" is-active":""}`} aria-label={`Receiving History (${data.handoffs.length} changes)`} title={`Receiving History (${data.handoffs.length})`} onClick={()=>{setTab(tab==="receiving-history"?"receiving":"receiving-history");if(tab!=="receiving-history")closeSearch();setError("");}}><ProductionIcon name="history" size={19}/></button>
      <button type="button" className="pr-pt-download-button" aria-label="Download Operations Receiving report" title="Download Operations Receiving report" onClick={openExport} disabled={!rows.length}><ProductionIcon name="download" size={21}/></button>
     </div>
    </div>
@@ -193,7 +195,10 @@ export default function ProjectProductionReceiving({projectId,projectName,allowe
  return <div className="pr-delivery pr-production pr-pt pr-pt-modern pr-intake-v401 pr-box-v409">
   <header className="pr-manifest-title pr-pt-title">
    <div className="pr-intake-heading"><ProductionIcon name="box" size={48}/><div><h3>Box Distribution</h3></div></div>
-   <button type="button" className="pr-pt-close" aria-label="Close Box Distribution" title="Close" onClick={onClose}><ProductionIcon name="close" size={19}/></button>
+   <div className="pr-intake-header-actions">
+    <button type="button" aria-pressed={tab==="box-history"} className={`pr-pt-history-button${tab==="box-history"?" is-active":""}`} aria-label="Box History" title="Box History" onClick={()=>setTab(value=>value==="box-history"?"boxes":"box-history")}><ProductionIcon name="history" size={19}/></button>
+    <button type="button" className="pr-pt-close" aria-label="Close Box Distribution" title="Close" onClick={onClose}><ProductionIcon name="close" size={19}/></button>
+   </div>
   </header>
   {error&&<div className="pr-alert" role="alert">{error}<button type="button" aria-label="Dismiss error" onClick={()=>setError("")}>×</button></div>}
   {notice&&<div className="pr-manifest-success" role="status">{notice}</div>}

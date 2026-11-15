@@ -1,0 +1,25 @@
+ERP Pyramakerz v417 — changes relative to uploaded supabase--main.zip
+
+Application:
+components/preparing/ProjectProductionIntake.jsx
+components/preparing/ProjectTesting.jsx
+components/preparing/ProjectWarehouseReceiving.jsx
+components/preparing/ProjectProductionReceiving.jsx
+components/preparing/ProjectBoxDistribution.jsx
+public/css/projects-preparing.css
+app/projects-preparing/page.jsx
+
+Tests adjusted for the revised placement (existing assertions were for old layout):
+tests/projects-preparing-v279-testing-controls.test.mjs
+tests/projects-preparing-v285-box-distribution-parity.test.mjs
+tests/projects-preparing-v287-boxes-label-panel.test.mjs
+tests/projects-preparing-v404-intake-search-toolbar.test.mjs
+tests/projects-preparing-v409-box-distribution-ui.test.mjs
+tests/projects-preparing-v416-compact-mobile-toolbar.test.mjs
+
+New:
+tests/projects-preparing-v417-header-search-history.test.mjs
+README_v417_HEADER_SEARCH_HISTORY.md
+MODIFIED_FILES_v417.txt
+
+No SQL migration. No stage workflow data or permissions logic changed.

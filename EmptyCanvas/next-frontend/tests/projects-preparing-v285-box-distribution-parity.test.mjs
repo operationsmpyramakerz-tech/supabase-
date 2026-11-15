@@ -12,7 +12,9 @@ const css=read('public/css/projects-preparing.css');
 
 test('Box Distribution has independent close, icon history and labeled download',()=>{
  for(const re of [/pr-box-v409/,/aria-label="Close Box Distribution"/,/onHistoryToggle/,/onDownload=\{openExport\}/,/mode=\{tab==="box-history"\?"history":"boxes"\}/])assert.match(parent,re);
- for(const re of [/aria-label="Box History"/,/pr-pt-history-button/,/aria-label="Download Box Distribution report"/,/pr-pt-download-button/,/BoxIcon name="download"/])assert.match(boxes,re);
+ for(const re of [/aria-label="Box History"/,/pr-pt-history-button/,/pr-intake-header-actions/])assert.match(parent,re);
+ for(const re of [/aria-label="Download Box Distribution report"/,/pr-pt-download-button/,/BoxIcon name="download"/])assert.match(boxes,re);
+ assert.doesNotMatch(boxes,/aria-label="Box History"/);
  assert.doesNotMatch(parent,/>Box History<\/button>/);
  assert.match(parent,/value=>value==="box-history"\?"boxes":"box-history"/);
 });
