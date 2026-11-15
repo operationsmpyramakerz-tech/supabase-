@@ -1,0 +1,15 @@
+ERP Pyramakerz v415 — Direct Detailed Permissions per page
+
+Modified:
+  components/users-center/UsersCenterDialogs.jsx
+  app/users-center/page.jsx
+  tests/users-center-per-page-preferences-v414.test.mjs
+
+New:
+  lib/users-center-legacy-permission-preview.mjs
+  tests/users-center-direct-detailed-v415.test.mjs
+  README_v415_USERS_CENTER_DIRECT_DETAILED_PERMISSIONS.md
+  MODIFIED_FILES_v415.txt
+
+No database migration or bulk member update. Opening Preferences does not save.
+See README_v415_USERS_CENTER_DIRECT_DETAILED_PERMISSIONS.md for first-time legacy migration safety and deployment checks.
