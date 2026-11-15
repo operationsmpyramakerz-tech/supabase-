@@ -1,0 +1,11 @@
+ERP Pyramakerz v414 — changed/new files
+
+components/users-center/UsersCenterDialogs.jsx
+lib/users-center-page-feature-map.mjs
+public/css/user-access.css
+app/users-center/page.jsx
+tests/users-center-per-page-preferences-v414.test.mjs
+tests/permissions-phase2b-regression.test.mjs
+README_v414_USERS_CENTER_PAGE_PREFERENCES.md
+
+No SQL migration required. See README_v414_USERS_CENTER_PAGE_PREFERENCES.md.

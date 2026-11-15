@@ -3950,3 +3950,56 @@ html[data-theme="dark"] .ua-feature-module-toggle { color:inherit; }
 .ua-feature-tab-row .ua-page-access-name small {color:#a46d4f;}
 
 @media(max-width:630px) { .ua-feature-stage-hint {margin:9px 8px;padding:10px;} .ua-feature-stage-row {padding-left:12px!important;} .ua-feature-tab-row {padding-left:20px!important;} }
+
+/* v414 — page-scoped preferences replace the View/Edit/Admin dropdown. */
+.ua-modal--page-access .ua-page-access-row--page { grid-template-columns: minmax(0, 1fr) 60px 74px; gap: 10px; }
+.ua-modal--page-access .ua-page-access-head { grid-template-columns: minmax(0, 1fr) 60px 74px; gap: 10px; }
+.ua-page-preferences-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 42px; padding: 8px 10px; border-radius: 13px; border: 1px solid #e2e4e8; background: #f8fafc; color: #172033; cursor: pointer; font: inherit; font-size: 12px; font-weight: 850; }
+.ua-page-preferences-btn:hover, .ua-page-preferences-btn:focus-visible { background: #fff3e9; border-color: #e46520; outline-offset: 2px; }
+.ua-page-preferences-btn svg { width: 19px; height: 19px; flex: 0 0 19px; }
+.ua-modal--page-preferences { width: min(525px, 94vw); }
+.ua-page-preferences-body { display: grid; gap: 12px; padding: 16px !important; }
+.ua-page-preferences-panel { display: grid; gap: 10px; padding: 14px; border: 1px solid #e6e8ed; border-radius: 17px; background: #fff; }
+.ua-page-preferences-panel > strong, .ua-page-preferences-heading strong { color: #131b2b; font-size: 14px; font-weight: 900; }
+.ua-page-preferences-panel p, .ua-page-preferences-note { margin: 0; color: #737d8c; font-size: 12px; line-height: 1.5; }
+.ua-page-preferences-levels { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.ua-page-preferences-level { display: flex; justify-content: center; align-items: center; min-height: 44px; padding: 8px; border: 1px solid #e4e7ed; border-radius: 11px; background: #f9fafb; cursor: pointer; color: #222b3a; font-size: 12px; font-weight: 850; }
+.ua-page-preferences-level.is-selected { background: #121a2b; border-color: #121a2b; color: #fff; }
+.ua-page-preferences-level input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.ua-page-preferences-level:focus-within { outline: 2px solid #e46520; outline-offset: 2px; }
+.ua-page-preferences-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ua-page-preferences-warning { padding: 12px; border-radius: 13px; border: 1px solid #f2d3b9; background: #fff8f2; }
+.ua-page-preferences-warning strong { font-size: 13px; }
+.ua-page-preferences-warning p { margin: 4px 0 12px; }
+.ua-page-preferences-toggle { display: flex; gap: 10px; align-items: center; font-size: 12px; font-weight: 780; cursor: pointer; }
+.ua-page-preferences-toggle input { accent-color: #e46520; width: 18px; height: 18px; flex: 0 0 18px; }
+.ua-page-preferences-module-toggle { padding: 10px; border-radius: 12px; background: #f8fafc; }
+.ua-page-preferences-actions { display: grid; gap: 7px; max-height: min(320px, 38vh); overflow: auto; padding-right: 2px; }
+.ua-page-preferences-action { display: flex; gap: 12px; align-items: center; justify-content: space-between; padding: 9px 10px; border: 1px solid #eef0f4; border-radius: 12px; }
+.ua-page-preferences-action > div:first-child { min-width: 0; }
+.ua-page-preferences-action strong { display: block; font-size: 12px; font-weight: 850; line-height: 1.4; }
+.ua-page-preferences-action small { display: block; margin-top: 3px; font-size: 10px; color: #8590a0; overflow-wrap: anywhere; }
+.ua-page-preferences-action-controls { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.ua-page-preferences-action .ua-switch { flex: 0 0 54px; }
+.ua-page-preferences-scope { border: 1px solid #ead1bc; border-radius: 11px; background: #fff6ef; min-height: 42px; font: inherit; font-size: 12px; font-weight: 850; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.ua-page-preferences-scope svg { width: 17px; height: 17px; }
+.ua-page-preferences-unsaved { border: 1px solid #edc3a2; border-radius: 11px; padding: 9px 11px; background: #fff7f0; font-size: 12px; }
+@media (max-width: 720px) {
+  .ua-modal--page-access .ua-page-access-row--page { grid-template-columns: minmax(0, 1fr) 48px 56px; align-items: center; gap: 8px; }
+  .ua-modal--page-access .ua-page-access-row--page .ua-page-access-name { grid-column: 1; }
+  .ua-page-preferences-btn { width: 44px; height: 44px; min-height: 44px; padding: 0; }
+  .ua-page-preferences-btn__label { display: none; }
+  .ua-modal--page-access .ua-page-access-row--page .ua-page-access-enable { justify-content: flex-end; }
+  .ua-modal--page-access .ua-page-access-row--page .ua-page-access-enable::before { content: none; }
+  .ua-modal--page-preferences .ua-modal__header h2 { overflow-wrap: anywhere; }
+}
+
+/* icon-only preference control on desktop, tablet and mobile */
+.ua-modal--page-access .ua-page-access-row--page .ua-page-preferences-btn { width: 46px; height: 46px; min-height: 46px; padding: 0; justify-self: center; }
+.ua-modal--page-preferences { max-height: min(760px, 92dvh); }
+.ua-modal--page-preferences .ua-modal__header { gap: 12px; padding: 20px 60px 16px 20px; }
+.ua-modal--page-preferences .ua-modal__header h2 { font-size: clamp(20px, 3vw, 27px); line-height: 1.15; letter-spacing: -0.03em; }
+.ua-modal--page-preferences .ua-modal__header p { font-size: 12px; line-height: 1.35; }
+.ua-modal--page-preferences .ua-modal__avatar { width: 52px; height: 52px; }
+.ua-modal--page-preferences .ua-modal__avatar svg { width: 23px; height: 23px; }
+@media (max-width: 720px) { .ua-modal--page-access .ua-page-access-row--page { grid-template-columns: minmax(0, 1fr) 52px 56px; } }

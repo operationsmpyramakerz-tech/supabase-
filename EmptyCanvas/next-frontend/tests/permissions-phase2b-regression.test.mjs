@@ -56,8 +56,10 @@ test('Server supplies separate, non-secret diagnostics for missing deployment se
   assert.ok(server.includes('server_flag_disabled'));
   assert.ok(server.includes('missing_service_credential'));
   assert.ok(dialog.includes('setupReason === "server_flag_disabled"'));
-  assert.ok(dialog.includes('ua-advanced-access-cta__icon'));
-  assert.ok(file('../public/css/user-access.css').includes('.ua-advanced-access-cta__icon svg { width: 22px !important'));
+  // v414 replaces the standalone Advanced Permissions CTA with the per-page Preferences icon.
+  assert.ok(dialog.includes('ua-page-preferences-btn'));
+  assert.ok(dialog.includes('function FeatureAccessModal'));
+  assert.ok(file('../public/css/user-access.css').includes('.ua-modal--page-preferences'));
 });
 
 test('Legacy Phase 2A enrolled profiles retain My Orders access until explicit 2B module opt-in', () => {

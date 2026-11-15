@@ -10,6 +10,7 @@ import { cacheUsersCenterAuthorization, currentUsersCenterAuthorizationToken, re
 import { TASK_SCOPE_MARKER } from "../../lib/task-data-scope.mjs";
 import { FEATURE_DEFINITIONS, ACTIVE_PILOT_FEATURE_KEYS, OPTIONAL_FEATURE_FALLBACKS, LEGACY_DEFAULT_FEATURE_KEYS, MY_ORDERS_ENFORCEMENT_MARKER, PHASE2A_LEGACY_MARKERS, ORDER_SCOPE_MARKERS } from "../../lib/feature-permissions-registry";
 import { permissionDraft, permissionDraftChanges, modulePermissionStatus } from "../../lib/feature-permissions-ui.mjs";
+import { featureModuleForPage } from "../../lib/users-center-page-feature-map.mjs";
 import { resolveExternalMediaLink } from "../../lib/user-media-external-link.mjs";
 
 function text(value) { return String(value ?? "").trim(); }
@@ -143,6 +144,7 @@ function UAIcon({ name }) {
     mail: <><path d="M4 4h16v16H4z"/><polyline points="22,6 12,13 2,6"/></>,
     move: <><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></>,
     shield: <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>,
+    preferences: <><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="2" fill="white"/><circle cx="15" cy="17" r="2" fill="white"/></>,
     users: <><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></>,
     lock: <><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></>,
     unlock: <><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.5-2"/></>,
@@ -408,7 +410,7 @@ function memberHasPage(member, rows, pageName) {
   return allowed.some((item) => pageToken(item) === pageToken(pageName));
 }
 
-function MemberForm({ member, selectedDepartment, editableFields, departments, pageAccessRows, svRows, onOpenPageAccess, onOpenSvAccess, onOpenFeatureAccess, onClose, onSaved, notify, access = {} }) {
+function MemberForm({ member, selectedDepartment, editableFields, departments, pageAccessRows, svRows, onOpenPageAccess, onOpenSvAccess, onClose, onSaved, notify, access = {} }) {
   const schema = useMemo(() => orderEditableFieldsForForm(editableFields.length ? editableFields : [
     { name: "Profile picture", type: "ua_profile_upload" }, { name: "Employee Code", type: "text" }, { name: "Name", type: "title", required: true }, { name: "Password", type: "rich_text" }, { name: "Phone", type: "phone_number" }, { name: "Email", type: "email" }, { name: "Department", type: "select" }, { name: "Position", type: "text" }, { name: "Files & media", type: "ua_file_links" }, { name: "S.V Schools", type: "ua_sv_access_manager" }, { name: "Allowed Pages", type: "ua_page_access_manager" }, { name: "School", type: "school_select" },
   ]), [editableFields]);
@@ -476,12 +478,6 @@ function MemberForm({ member, selectedDepartment, editableFields, departments, p
     const key = fieldKey(field.name); const value = values[field.name] ?? ""; const type = field.type || "rich_text";
     if (type === "ua_page_access_manager" || key === "allowedpages") {
       if (access.pageAccess) return <PageAccessManager key={field.name} summary={accessSummaryText(pageAccessRows, member)} onOpen={onOpenPageAccess}/>;
-      if (access.featureAccess && member?.id) return <div key={field.name} className="ua-form-field ua-form-field--wide ua-sv-access-field">
-        <span>Advanced Feature Permissions</span>
-        <div className="ua-page-access-card ua-sv-access-card"><div><strong>Feature Access</strong><small>Configure this user's allowed actions individually.</small></div>
-          <button type="button" className="ua-page-access-open" onClick={onOpenFeatureAccess}><UAIcon name="shield"/><span>Manage Features</span></button>
-        </div>
-      </div>;
       return null;
     }
     if (type === "ua_sv_access_manager" || key === "svschools") return access.svAccess ? <SvAccessManager key={field.name} summary={svSummaryText(svRows, member)} onOpen={onOpenSvAccess} hidden={!hasOrdersReview}/> : null;
@@ -509,8 +505,32 @@ function MoveMemberModal({ member, departments, onClose, onSaved }) {
   return <Modal title="Move Member" subtitle={`Move ${member.name || "this user"} to another department.`} onClose={onClose} modalClass="ua-modal--small" compact icon="move" closeDisabled={busy} bodyClass="ua-modal__body--compact" footer={<><button type="button" className="ua-btn ua-btn--light" onClick={onClose} disabled={busy}>Cancel</button><button type="submit" form="ua-next-move-member" className="ua-btn ua-btn--dark" disabled={busy}><UAIcon name="move"/><span>{busy ? "Moving..." : "Move"}</span></button></>}><form id="ua-next-move-member" onSubmit={submit}><div className="ua-form-field ua-form-field--wide ua-form-field--modern-select"><span>Target Department</span><ModernSelect value={selected?.name || ""} onChange={(name) => setDepartmentId(departments.find((department) => department.name === name)?.id || "")} options={departments.map((department) => department.name)} placeholder="Choose department"/></div><div className="ua-form-error">{error}</div></form></Modal>;
 }
 
-function PageAccessRow({ row, onChange, subpage = false }) {
-  return <div className={`ua-page-access-row ${row.isEnabled ? "" : "is-disabled"}${subpage ? " ua-page-access-row--subpage" : ""}`}><div className="ua-page-access-name"><strong>{subpage ? <span className="ua-page-access-branch" aria-hidden="true"/> : null}{row.pageName}</strong><small>{row.moduleName}{row.routePath ? ` • ${row.routePath}` : ""}</small></div><div><ModernSelect compact value={accessLevelLabel(row.accessLevel)} onChange={(label) => onChange({ accessLevel: lower(label) })} options={["View", "Edit", "Admin"]} placeholder="Select access" ariaLabel={`Access type for ${row.pageName}`}/></div><div className="ua-page-access-enable"><label className="ua-switch" title={`Enable ${row.pageName}`}><input type="checkbox" checked={!!row.isEnabled} onChange={(event) => onChange({ isEnabled: event.target.checked })}/><span/></label></div></div>;
+function PageAccessRow({ row, onChange, onPreferences, subpage = false }) {
+  return <div className={`ua-page-access-row ua-page-access-row--page ${row.isEnabled ? "" : "is-disabled"}${subpage ? " ua-page-access-row--subpage" : ""}`}>
+    <div className="ua-page-access-name"><strong>{subpage ? <span className="ua-page-access-branch" aria-hidden="true"/> : null}{row.pageName}</strong><small>{row.moduleName}{row.routePath ? ` • ${row.routePath}` : ""}</small></div>
+    <button type="button" className="ua-page-preferences-btn" onClick={onPreferences} aria-label={`Preferences for ${row.pageName}`} title={`Manage ${row.pageName} permissions`}><UAIcon name="preferences"/></button>
+    <div className="ua-page-access-enable"><label className="ua-switch" title={`Enable ${row.pageName}`}><input type="checkbox" checked={!!row.isEnabled} onChange={(event) => onChange({ isEnabled: event.target.checked })}/><span/></label></div>
+  </div>;
+}
+
+function PageAccessLevelChoices({ value, onChange }) {
+  return <div className="ua-page-preferences-levels" role="radiogroup" aria-label="Base page access level">
+    {["view", "edit", "admin"].map(level => <label key={level} className={`ua-page-preferences-level ${value === level ? "is-selected" : ""}`}>
+      <input type="radio" name="page-preferences-level" value={level} checked={value === level} onChange={() => onChange(level)}/>
+      <span>{accessLevelLabel(level)}</span>
+    </label>)}
+  </div>;
+}
+
+// New accounts do not have a member ID for the feature-permissions API yet;
+// or this editor may have Page Access authority without Feature authority.
+function PageAccessBasicPreferences({ row, onClose, onChange, detailedAvailable }) {
+  const [level, setLevel] = useState(normalizeAccessLevel(row.accessLevel));
+  return <Modal title={row.pageName} subtitle="Page preferences" onClose={onClose} icon="preferences" compact modalClass="ua-modal--page-preferences" bodyClass="ua-page-preferences-body" zIndex={10040}
+    footer={<><button type="button" className="ua-btn ua-btn--light" onClick={onClose}>Cancel</button><button type="button" className="ua-btn ua-btn--dark" onClick={() => { onChange({ accessLevel: level }); onClose(); }}><UAIcon name="check"/><span>Apply to Page Access</span></button></>}>
+    <section className="ua-page-preferences-panel"><strong>Base access</strong><p>Select a page access level. This setting is saved with the parent Save Access button.</p><PageAccessLevelChoices value={level} onChange={setLevel}/></section>
+    <p className="ua-page-preferences-note">{detailedAvailable ? "Create the user first to configure their detailed actions." : "Only Page Access settings are available to your account. Detailed feature settings require Feature Access permission."}</p>
+  </Modal>;
 }
 
 const EVENT_REQUEST_ROW_KEYS = new Set([
@@ -588,7 +608,9 @@ function TeamScopeModal({ member, protect, onClose }) {
 
 // Pilot modules only: other keys are registered but not yet protected across
 // every route. Do not expose switches that would give a false sense of security.
-function FeatureAccessModal({ member, onClose, protect }) {
+function FeatureAccessModal({ member, onClose, protect, pageRow, onPageLevelChange }) {
+  const [pageLevel, setPageLevel] = useState(() => normalizeAccessLevel(pageRow?.accessLevel));
+  const selectedPageModule = pageRow ? featureModuleForPage(pageRow) : null;
   const [available, setAvailable] = useState(false);
   const [setupReason, setSetupReason] = useState("");
   const [active, setActive] = useState(false);
@@ -789,10 +811,48 @@ function FeatureAccessModal({ member, onClose, protect }) {
               .map(module => ({ key: `${module.key}.view`, allowed: false, scope: "all" })),
           ],
         });
+        if (pageRow) onPageLevelChange?.({ accessLevel: pageLevel });
         onClose();
       } catch (e) { setError(e.message); }
       finally { setBusy(false); }
     });
+  }
+  if (pageRow) {
+    const module = modules.find(item => item.key === selectedPageModule);
+    const features = shown.filter(item => item.module === selectedPageModule);
+    const detailedEnabled = !!(module && enabledModules[module.key]);
+    const changedLevel = pageLevel !== normalizeAccessLevel(pageRow.accessLevel);
+    const needsFeatureSave = hasUnsavedChanges;
+    function savePage() {
+      if (busy || loading) return;
+      if (needsFeatureSave) { if (!available) { setError("Feature permissions are not available. No settings were saved."); return; } save(); return; }
+      if (changedLevel) onPageLevelChange?.({ accessLevel: pageLevel });
+      onClose();
+    }
+    return <><Modal title={pageRow.pageName} subtitle={`Configure page permissions for ${member.name}.`} onClose={closeEditor} modalClass="ua-modal--page-preferences" compact icon="preferences" closeDisabled={busy} bodyClass="ua-page-preferences-body" zIndex={10040}
+      footer={<><button type="button" className="ua-btn ua-btn--light" disabled={busy} onClick={closeEditor}>Cancel</button><button type="button" className="ua-btn ua-btn--dark" disabled={busy || loading || (!changedLevel && !needsFeatureSave)} onClick={savePage}><UAIcon name="save"/><span>{busy ? "Saving..." : "Save Preferences"}</span></button></>}>
+      <section className="ua-page-preferences-panel"><strong>Base access</strong><p>View / Edit / Admin is saved when you press Save Access in the parent window.</p><PageAccessLevelChoices value={pageLevel} onChange={setPageLevel}/></section>
+      {loading ? <div className="ua-page-access-loading"><span/> Loading feature permissions...</div> : null}
+      {!loading && !available ? <p className="ua-feature-setup-notice" role="status">Advanced feature permissions are not available on this server. Base access can still be edited. {setupReason ? `(${setupReason})` : ""}</p> : null}
+      {available && module && features.length > 0 ? <section className="ua-page-preferences-panel">
+        <div className="ua-page-preferences-heading"><div><strong>Detailed permissions</strong><p>{features.length} actions for {module.label}</p></div></div>
+        {!active ? <div className="ua-page-preferences-warning"><strong>Legacy profile</strong><p>Advanced permissions are currently OFF for this user. Enabling them changes enforcement across their account, including Projects Preparing. Review other page grants before enabling.</p><label className="ua-page-preferences-toggle"><input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)}/><span>Enable Advanced Permissions for this user</span></label></div> : null}
+        {active && module.optIn ? <label className="ua-page-preferences-toggle ua-page-preferences-module-toggle"><input type="checkbox" checked={detailedEnabled} onChange={e => setEnabledModules(current => ({ ...current, [module.key]: e.target.checked }))}/><span>Use detailed permissions for {module.label}</span></label> : null}
+        {active && !detailedEnabled ? <p className="ua-page-preferences-note">This page is using Legacy Page Access. Enable detailed permissions above to manage individual actions.</p> : null}
+        {active && detailedEnabled ? <>
+          {(ORDER_SCOPE_MARKERS[module.key] || module.key === "tasks" || module.key === "events.requests") ? <label className="ua-page-preferences-toggle"><input type="checkbox" checked={!!scopedOrders[module.key]} onChange={e => setScopedOrders(current => ({ ...current, [module.key]: e.target.checked }))}/><span>Enable row-level Own / Team / All scope</span></label> : null}
+          <div className="ua-page-preferences-actions">{features.map(item => <div className="ua-page-preferences-action" key={item.key}>
+            <div><strong>{item.label}</strong><small>{item.key}</small></div><div className="ua-page-preferences-action-controls">
+            {((item.key === "home.analysis" || item.key.startsWith("expenses.users.")) || ((ORDER_SCOPE_MARKERS[item.module] || item.module === "tasks" || EVENT_REQUEST_ROW_KEYS.has(item.key)) && scopedOrders[item.module] && item.key !== "orders.tracking.view")) && grants[item.key] === true ? <select className="ua-feature-scope-select" aria-label={`${item.label} data scope`} value={grantScopes[item.key] || "all"} onChange={e => setGrantScopes(current => ({ ...current, [item.key]: e.target.value }))}><option value="own">Own</option><option value="team">Team</option><option value="all">All</option></select> : null}
+            <label className="ua-switch" title={item.label}><input type="checkbox" checked={grants[item.key] === true} disabled={(item.key.startsWith("preparing.stage.") && grants["preparing.stages.__granular"] !== true) || (item.key.startsWith("preparing.tab.") && (grants["preparing.tabs.__granular"] !== true || (grants["preparing.stages.__granular"] === true && grants[`preparing.stage.${item.key.split(".")[2]}`] !== true))) || (item.key.startsWith("orders.shopping.source.") && grants["orders.shopping.sources.__granular"] !== true)} onChange={e => setGrants(current => ({ ...current, [item.key]: e.target.checked }))}/><span/></label>
+            </div></div>)}</div>
+          {features.some(item => item.key === "home.analysis" || item.key.startsWith("expenses.users.") || ORDER_SCOPE_MARKERS[item.module] || item.module === "tasks" || EVENT_REQUEST_ROW_KEYS.has(item.key)) ? <button type="button" className="ua-page-preferences-scope" onClick={() => setTeamScopeOpen(true)}><UAIcon name="users"/> Manage Team Visibility</button> : null}
+        </> : null}
+      </section> : null}
+      {!module || !features.length ? <p className="ua-page-preferences-note">This page has no individually enforced feature actions in the current permissions registry. Use Base access and Enable in Page Access.</p> : null}
+      {needsFeatureSave ? <p className="ua-page-preferences-unsaved" role="status">{draftChanges.length} detailed permission change(s) to save. Unrelated modules will keep their existing settings.</p> : null}
+      {error ? <p role="alert" className="ua-form-error">{error}</p> : null}
+    </Modal>{teamScopeOpen ? <TeamScopeModal member={member} protect={protect} onClose={() => setTeamScopeOpen(false)}/> : null}</>;
   }
   return <><Modal title="Advanced Permissions" subtitle={`Control exact features for ${member.name}.`} onClose={closeEditor} modalClass="ua-modal--page-access" compact icon="shield" closeDisabled={busy} bodyClass="ua-page-access-body" zIndex={10040} footer={<><button type="button" className="ua-btn ua-btn--light" onClick={closeEditor} disabled={busy}>Cancel</button><button type="button" className="ua-btn ua-btn--dark" onClick={save} disabled={busy || loading || !available || !hasUnsavedChanges}><UAIcon name="save"/><span>{busy ? "Saving..." : "Save Features"}</span></button></>}>
     <div style={{ padding: "12px 14px" }}>
@@ -852,7 +912,7 @@ function FeatureAccessModal({ member, onClose, protect }) {
 }
 
 function PageAccessModal({ member, draftRows, onDraftRows, onClose, onSaved, protect, allowAdvanced = true }) {
-  const [rows, setRows] = useState([]); const [loading, setLoading] = useState(true); const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const [advancedOpen, setAdvancedOpen] = useState(false); const isCreate = !member;
+  const [rows, setRows] = useState([]); const [loading, setLoading] = useState(true); const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const [preferencesIndex, setPreferencesIndex] = useState(null); const isCreate = !member;
   useEffect(() => { let active = true; (async () => { try { if (draftRows?.length) { if (active) setRows(normalizeAccessRows(draftRows)); return; } const body = isCreate
         ? await requestJson("/next/api/users-center/pages")
         : await requestJson(`/next/api/users-center/page-access?id=${encodeURIComponent(member.id)}`); const nextRows = isCreate ? normalizeAccessRows((body.pages || []).map((page) => ({ ...page, accessLevel: "edit", isEnabled: false }))) : normalizeAccessRows(body.pages || []); if (active) setRows(nextRows); } catch (err) { if (active) setError(err.message); } finally { if (active) setLoading(false); } })(); return () => { active = false; }; }, [member?.id]);
@@ -862,8 +922,16 @@ function PageAccessModal({ member, draftRows, onDraftRows, onClose, onSaved, pro
   function inSet(row, set) { return set.has(lower(row.pageKey)); }
   const eventRows = rows.map((row, index) => ({ row, index })).filter(({ row }) => inSet(row, events)); const taskRows = rows.map((row, index) => ({ row, index })).filter(({ row }) => inSet(row, tasks)); const b2cRows = rows.map((row, index) => ({ row, index })).filter(({ row }) => inSet(row, b2c));
   const firstEvent = eventRows[0]?.index; const firstTask = taskRows[0]?.index; const firstB2c = b2cRows[0]?.index;
-  const markup = []; rows.forEach((row, index) => { if (index === firstEvent) markup.push(<section className="ua-page-access-group ua-page-access-group--events" key="events-group"><div className="ua-page-access-group__heading"><UAIcon name="calendar"/><span>Events</span><small>Sub-pages</small></div><div className="ua-page-access-group__rows">{eventRows.map(({ row: child, index: childIndex }) => <PageAccessRow key={child.pageId || child.pageKey} row={child} subpage onChange={(values) => patch(childIndex, values)}/>)}</div></section>); if (index === firstTask) markup.push(<section className="ua-page-access-group ua-page-access-group--task-management" key="task-group"><div className="ua-page-access-group__heading"><UAIcon name="branch"/><span>Task Management</span><small>Sub-pages</small></div><div className="ua-page-access-group__rows">{taskRows.map(({ row: child, index: childIndex }) => <PageAccessRow key={child.pageId || child.pageKey} row={child} subpage onChange={(values) => patch(childIndex, values)}/>)}</div></section>); if (index === firstB2c) markup.push(<section className="ua-page-access-group ua-page-access-group--b2c" key="b2c-group"><div className="ua-page-access-group__heading"><UAIcon name="users"/><span>B2C</span><small>Sub-pages</small></div><div className="ua-page-access-group__rows">{b2cRows.map(({ row: child, index: childIndex }) => <PageAccessRow key={child.pageId || child.pageKey} row={child} subpage onChange={(values) => patch(childIndex, values)}/>)}</div></section>); if (!inSet(row, events) && !inSet(row, tasks) && !inSet(row, b2c)) markup.push(<PageAccessRow key={row.pageId || row.pageKey} row={row} onChange={(values) => patch(index, values)}/>); });
-  return <><Modal title="Page Access" subtitle={`Configure page access for ${isCreate ? "new team member" : member?.name || "this team member"}.`} onClose={onClose} modalClass="ua-modal--page-access" compact icon="shield" closeDisabled={busy} bodyClass="ua-page-access-body" zIndex={10020} footer={<><button type="button" className="ua-btn ua-btn--light" onClick={onClose} disabled={busy}>Cancel</button><button type="button" className="ua-btn ua-btn--dark" onClick={save} disabled={busy || loading}><UAIcon name="save"/><span>{busy ? "Saving..." : "Save Access"}</span></button></>}>{!isCreate && allowAdvanced ? <div className="ua-advanced-access-cta"><button type="button" className="ua-advanced-access-cta__button" onClick={() => setAdvancedOpen(true)} disabled={busy || loading}><span className="ua-advanced-access-cta__icon"><UAIcon name="shield"/></span><span className="ua-advanced-access-cta__copy"><strong>Advanced Feature Permissions</strong><small>Control individual actions, such as Edit, Delete and Export.</small></span><UAIcon name="chevron"/></button><small className="ua-advanced-access-cta__hint">Save any Page Access changes before configuring features.</small></div> : null}<div className="ua-page-access-head"><div>Page name</div><div>Access type</div><div>Enable</div></div><div className="ua-page-access-list">{loading ? <div className="ua-page-access-loading"><span/> Loading pages...</div> : markup}</div>{error ? <div className="ua-form-error ua-page-access-error">{error}</div> : null}</Modal>{advancedOpen && !isCreate ? <FeatureAccessModal member={member} onClose={() => setAdvancedOpen(false)} protect={protect}/> : null}</>;
+  const markup = []; rows.forEach((row, index) => { if (index === firstEvent) markup.push(<section className="ua-page-access-group ua-page-access-group--events" key="events-group"><div className="ua-page-access-group__heading"><UAIcon name="calendar"/><span>Events</span><small>Sub-pages</small></div><div className="ua-page-access-group__rows">{eventRows.map(({ row: child, index: childIndex }) => <PageAccessRow key={child.pageId || child.pageKey} row={child} subpage onChange={(values) => patch(childIndex, values)} onPreferences={() => setPreferencesIndex(childIndex)}/>)}</div></section>); if (index === firstTask) markup.push(<section className="ua-page-access-group ua-page-access-group--task-management" key="task-group"><div className="ua-page-access-group__heading"><UAIcon name="branch"/><span>Task Management</span><small>Sub-pages</small></div><div className="ua-page-access-group__rows">{taskRows.map(({ row: child, index: childIndex }) => <PageAccessRow key={child.pageId || child.pageKey} row={child} subpage onChange={(values) => patch(childIndex, values)} onPreferences={() => setPreferencesIndex(childIndex)}/>)}</div></section>); if (index === firstB2c) markup.push(<section className="ua-page-access-group ua-page-access-group--b2c" key="b2c-group"><div className="ua-page-access-group__heading"><UAIcon name="users"/><span>B2C</span><small>Sub-pages</small></div><div className="ua-page-access-group__rows">{b2cRows.map(({ row: child, index: childIndex }) => <PageAccessRow key={child.pageId || child.pageKey} row={child} subpage onChange={(values) => patch(childIndex, values)} onPreferences={() => setPreferencesIndex(childIndex)}/>)}</div></section>); if (!inSet(row, events) && !inSet(row, tasks) && !inSet(row, b2c)) markup.push(<PageAccessRow key={row.pageId || row.pageKey} row={row} onChange={(values) => patch(index, values)} onPreferences={() => setPreferencesIndex(index)}/>); });
+  const preferencesRow = preferencesIndex === null ? null : rows[preferencesIndex];
+  return <><Modal title="Page Access" subtitle={`Configure page access for ${isCreate ? "new team member" : member?.name || "this team member"}.`} onClose={onClose} modalClass="ua-modal--page-access" compact icon="shield" closeDisabled={busy} bodyClass="ua-page-access-body" zIndex={10020} footer={<><button type="button" className="ua-btn ua-btn--light" onClick={onClose} disabled={busy}>Cancel</button><button type="button" className="ua-btn ua-btn--dark" onClick={save} disabled={busy || loading}><UAIcon name="save"/><span>{busy ? "Saving..." : "Save Access"}</span></button></>}>
+    <div className="ua-page-access-head"><div>Page name</div><div>Preferences</div><div>Enable</div></div>
+    <div className="ua-page-access-list">{loading ? <div className="ua-page-access-loading"><span/> Loading pages...</div> : markup}</div>
+    {error ? <div className="ua-form-error ua-page-access-error">{error}</div> : null}
+  </Modal>
+    {preferencesRow && (!member || !allowAdvanced) ? <PageAccessBasicPreferences key={preferencesRow.pageId || preferencesRow.pageKey} row={preferencesRow} onClose={() => setPreferencesIndex(null)} onChange={values => patch(preferencesIndex, values)} detailedAvailable={allowAdvanced}/> : null}
+    {preferencesRow && member && allowAdvanced ? <FeatureAccessModal key={preferencesRow.pageId || preferencesRow.pageKey} member={member} pageRow={preferencesRow} onPageLevelChange={values => patch(preferencesIndex, values)} onClose={() => setPreferencesIndex(null)} protect={protect}/> : null}
+  </>;
 }
 
 function SvAccessModal({ member, allMembers, draftRows, onDraftRows, onClose, onSaved, protect }) {
@@ -887,15 +955,13 @@ export default function UsersCenterDialogs({
   svAccessOpen, allMembers, setSvRows, onSvAccessClose, onSvAccessSaved,
   signupOpen, positions, onSignupClose, onSignupChanged,
 }) {
-  const [featureAccessOpen, setFeatureAccessOpen] = useState(false);
   return <>
     {passwordAction ? <PasswordModal action={passwordAction} onClose={onPasswordClose} onVerified={onPasswordVerified}/> : null}
     {confirm ? <ConfirmModal value={confirm} onClose={onConfirmClose}/> : null}
     {departmentForm ? <DepartmentForm department={departmentForm.department} onClose={onDepartmentFormClose} onSaved={onDepartmentSaved}/> : null}
-    {memberForm ? <MemberForm member={memberForm.member} selectedDepartment={selectedDepartment} editableFields={editableFields} departments={departments} pageAccessRows={pageAccessRows} svRows={svRows} notify={notify} access={access} onOpenPageAccess={onOpenPageAccess} onOpenSvAccess={onOpenSvAccess} onOpenFeatureAccess={() => setFeatureAccessOpen(true)} onClose={onMemberFormClose} onSaved={onMemberSaved}/> : null}
+    {memberForm ? <MemberForm member={memberForm.member} selectedDepartment={selectedDepartment} editableFields={editableFields} departments={departments} pageAccessRows={pageAccessRows} svRows={svRows} notify={notify} access={access} onOpenPageAccess={onOpenPageAccess} onOpenSvAccess={onOpenSvAccess} onClose={onMemberFormClose} onSaved={onMemberSaved}/> : null}
     {moveMember ? <MoveMemberModal member={moveMember} departments={departments} onClose={onMoveMemberClose} onSaved={onMoveMemberSaved}/> : null}
     {pageAccessOpen && memberForm ? <PageAccessModal member={memberForm.member} draftRows={pageAccessRows} onDraftRows={setPageAccessRows} onClose={onPageAccessClose} protect={protect} allowAdvanced={access.featureAccess} onSaved={onPageAccessSaved}/> : null}
-    {featureAccessOpen && memberForm?.member && access.featureAccess ? <FeatureAccessModal member={memberForm.member} onClose={() => setFeatureAccessOpen(false)} protect={protect}/> : null}
     {svAccessOpen && memberForm ? <SvAccessModal member={memberForm.member} allMembers={allMembers} draftRows={svRows} onDraftRows={setSvRows} onClose={onSvAccessClose} protect={protect} onSaved={onSvAccessSaved}/> : null}
     {signupOpen ? <SignupRequestsModal departments={departments} positions={positions} canApprove={access.signupApprove} canReject={access.signupReject} onClose={onSignupClose} notify={notify} onChanged={onSignupChanged}/> : null}
   </>;
