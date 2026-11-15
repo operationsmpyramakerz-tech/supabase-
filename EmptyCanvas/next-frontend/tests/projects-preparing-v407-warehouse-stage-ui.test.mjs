@@ -25,7 +25,7 @@ test('Stage 3 uses the same header, progress, sign-off, tabs, component cards an
 });
 
 test('Warehouse stage retains the original filter IDs and permissions, with updated labels',()=>{
- for(const choice of ['value:"all",label:"All Components"','value:"available",label:"Remaining to Return"','value:"received",label:"Returned"'])assert.ok(stage.includes(choice),choice);
+ for(const choice of ['value:"all",label:"Production Received"','value:"available",label:"Remaining to Return"','value:"received",label:"Returned"'])assert.ok(stage.includes(choice),choice);
  assert.match(stage,/canReceive && editTabs\[filter\] !== false/);
  assert.match(stage,/editTab:action==="receive"\?filter:"all"/);
  assert.match(stage,/request\("\/warehouse","POST"/);
@@ -77,17 +77,17 @@ test('Catalog images and public profile photos enrich GET only, without modifyin
  assert.match(warehouse,/erp_preparing_warehouse_receive_v241/);
 });
 
-test('Warehouse Return totals and tab filters still depend on tested quantities and protect allocations',()=>{
+test('Warehouse Return first tab follows production intake, other tabs follow testing/return and protect allocations',()=>{
  const rows=warehouseReceivingBalances(warehouseTotals([
   {id:'a',required_qty:10,product_name:'A'},
   {id:'b',required_qty:10,product_name:'B'},
   {id:'c',required_qty:10,product_name:'C'},
- ],[{item_id:'a',accepted_delta:2},{item_id:'b',accepted_delta:4}],[{item_id:'b',delta_qty:1}]),[{item_id:'a',tested:4},{item_id:'b',tested:4}]);
+ ],[{item_id:'a',accepted_delta:2},{item_id:'b',accepted_delta:4}],[{item_id:'b',delta_qty:1}]),[{item_id:'a',tested:4},{item_id:'b',tested:4}],[{itemId:'a',received:4},{itemId:'c',received:2}]);
  assert.equal(rows[0].readyToReceive,2);
- assert.deepEqual(filterWarehouseReceivingRows(rows,'all').map(r=>r.id),['a','b']);
+ assert.deepEqual(filterWarehouseReceivingRows(rows,'all').map(r=>r.id),['a','c']);
  assert.deepEqual(filterWarehouseReceivingRows(rows,'available').map(r=>r.id),['a']);
  assert.deepEqual(filterWarehouseReceivingRows(rows,'received').map(r=>r.id),['a','b']);
- assert.equal(preparingRowMatchesTab('warehouse','all',rows[2]),false);
+ assert.equal(preparingRowMatchesTab('warehouse','all',rows[2]),true);
  assert.equal(warehouseReceiptLimit(2,'4',4,0),2);
  assert.throws(()=>warehouseReceiptLimit(2,'5',4,0),/tested/);
  assert.throws(()=>warehouseReceiptLimit(4,'0',4,1),/allocated/);

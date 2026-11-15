@@ -5329,3 +5329,7 @@ html[data-theme="dark"] .pr-root .pr-carton-v410 .pr-carton-v410-kit-row.is-sele
 html[data-theme="dark"] .pr-root .pr-carton-v410 .pr-school-cartons-kit-details {background:#283142;border-color:#414b5a;}
 html[data-theme="dark"] .pr-root .pr-carton-v410 .pr-carton-v410-group-select {background:#202633;border-color:#414b5a;color:#fff;}
 html[data-theme="dark"] .pr-root .pr-carton-v410 .pr-carton-v410-group-select:hover:not(:disabled) {background:#323b4a;}
+
+/* v411 - Stage 3 Production Received tab also shows the independently tested total. */
+.pr-warehouse-v407 .pr-warehouse-intake-count small {font-size:10px;line-height:1.25;color:#69758b;font-weight:650;white-space:nowrap;}
+html[data-theme="dark"] .pr-warehouse-v407 .pr-warehouse-intake-count small {color:#aab6ca;}

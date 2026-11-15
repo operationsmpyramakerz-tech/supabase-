@@ -23,11 +23,11 @@ const demoRows=()=>warehouseReceivingBalances(
   {item_id:'tested-only',tested:3},
   {item_id:'part-return',tested:5},
   {item_id:'complete',tested:4},
- ]);
+ ],[{itemId:'tested-only',received:3},{itemId:'part-return',received:5},{itemId:'not-tested',received:2}]);
 
-test('Warehouse Return includes tested components only and separates Ready to Return from Returned',()=>{
+test('Warehouse Return first tab lists Production Received, while Ready to Return and Returned use their own ledgers',()=>{
  const rows=demoRows();
- assert.deepEqual(filterWarehouseReceivingRows(rows,'all').map(r=>r.id),['tested-only','part-return','complete']);
+ assert.deepEqual(filterWarehouseReceivingRows(rows,'all').map(r=>r.id),['tested-only','part-return','not-tested']);
  assert.deepEqual(filterWarehouseReceivingRows(rows,'available').map(r=>r.id),['tested-only','part-return']);
  assert.deepEqual(filterWarehouseReceivingRows(rows,'received').map(r=>r.id),['part-return','complete']);
  assert.deepEqual(filterWarehouseReceivingRows(rows,'short'),[]);
@@ -69,7 +69,8 @@ test('Unused Not Packed and warehouse shortage tabs are absent in UI, filters, g
  assert.equal(preparingRowMatchesTab('boxes','not-packed',{productionReceived:4,packedQty:0}),false);
  assert.equal(preparingRowMatchesTab('warehouse','short',{required_qty:8,tested:2,accepted:0}),false);
  assert.equal(preparingRowMatchesTab('warehouse','all',{tested:0,accepted:0}),false);
- assert.equal(preparingRowMatchesTab('warehouse','all',{tested:2,accepted:0}),true);
+ assert.equal(preparingRowMatchesTab('warehouse','all',{tested:2,accepted:0}),false);
+ assert.equal(preparingRowMatchesTab('warehouse','all',{productionIntakeReceived:2,tested:0}),true);
  assert.equal(preparingRowMatchesTab('warehouse','available',{tested:2,accepted:1}),true);
  assert.equal(preparingRowMatchesTab('warehouse','available',{tested:2,accepted:2}),false);
  assert.equal(preparingRowMatchesTab('warehouse','received',{tested:2,accepted:1}),true);

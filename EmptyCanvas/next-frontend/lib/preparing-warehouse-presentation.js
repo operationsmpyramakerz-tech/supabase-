@@ -1,5 +1,6 @@
 import "server-only";
 import {warehouseWorkspace} from "./preparing-warehouse";
+import {rpc} from "./supabase-rest";
 import {getProductsList} from "./products-service";
 import {getTeamMemberPublicProfile} from "./team-members-service";
 
@@ -8,6 +9,9 @@ const productKey=value=>String(value||"").trim().toLowerCase();
 
 export async function warehousePresentationWorkspace(projectId){
  const snapshot=await warehouseWorkspace(projectId);
+ // Stage 3 first tab reflects Stage 1 receiving, not the testing/return ledgers.
+ // Use the same authoritative snapshot RPC as Production Receiving.
+ const intake=await rpc("erp_preparing_intake_snapshot_v388",{p_project_id:snapshot.projectId},{profileName:"preparing.warehouse.production-intake"});
  const productsPromise=getProductsList().catch(()=>[]);
  const users=[...new Map((snapshot.receipts||[]).filter(row=>row.created_by_id&&row.created_by_name).map(row=>[String(row.created_by_id),row])).values()].slice(0,60);
  const profiles=new Map();
@@ -26,7 +30,7 @@ export async function warehousePresentationWorkspace(projectId){
   const key=productKey(product.name);
   if(key)byName.set(key,byName.has(key)?null:product);
  }
- return {...snapshot,
+ return {...snapshot,intakeBalances:intake?.balances||[],
   receipts:(snapshot.receipts||[]).map(row=>({...row,created_by_photo_url:profiles.get(String(row.created_by_id))||""})),
   items:(snapshot.items||[]).map(row=>{
    const product=byProductId.get(productKey(row.product_id))||byDisplayCode.get(productKey(row.product_id))||byName.get(productKey(row.product_name));

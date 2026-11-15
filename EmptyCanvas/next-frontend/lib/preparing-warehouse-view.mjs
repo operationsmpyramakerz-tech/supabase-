@@ -7,14 +7,14 @@ export const WAREHOUSE_COLUMNS=[
  {key:"available",label:"Ready to Return"},{key:"receivedBy",label:"Recorded By"},
  {key:"signature",label:"Signature"},
 ];
-// Warehouse Return is ONLY for tested components, and the returned balance is
-// the existing append-only warehouse receipt ledger. A partly returned item can
-// be in both Ready to Return and Returned until its whole tested batch is back.
+// The first tab lists only components actually received in Stage 1 from the
+// warehouse, even if they have not yet been tested. The return workflow itself
+// remains tested-only; Ready to Return and Returned keep their ledger criteria.
 export function filterWarehouseReceivingRows(rows,filter="all"){
- const items=(Array.isArray(rows)?rows:[]).filter(row=>qty(row.tested)>0||qty(row.accepted)>0);
+ const items=Array.isArray(rows)?rows:[];
+ if(filter==="all")return items.filter(row=>qty(row.productionIntakeReceived)>0);
  if(filter==="available")return items.filter(row=>Math.max(0,qty(row.tested)-qty(row.accepted))>0);
  if(filter==="received")return items.filter(row=>qty(row.accepted)>0);
- if(filter==="all")return items;
  return [];
 }
 export function warehouseGroups(rows=[],kitGroups=[]){

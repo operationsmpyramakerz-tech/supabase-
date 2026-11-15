@@ -1,0 +1,21 @@
+ERP Pyramakerz v411 — changed files (relative to EmptyCanvas/next-frontend)
+
+app/projects-preparing/page.jsx
+components/preparing/ProjectWarehouseReceiving.jsx
+lib/feature-permissions-registry.js
+lib/preparing-tab-permissions.mjs
+lib/preparing-tab-write-server.js
+lib/preparing-warehouse-math.mjs
+lib/preparing-warehouse-presentation.js
+lib/preparing-warehouse-view.mjs
+public/css/projects-preparing.css
+tests/projects-preparing-v386-stage-tabs.test.mjs
+tests/projects-preparing-v387-received-packed-tabs.test.mjs
+tests/projects-preparing-v394-warehouse-return.test.mjs
+tests/projects-preparing-v407-warehouse-stage-ui.test.mjs
+tests/projects-preparing-v411-warehouse-production-received-tab.test.mjs
+README_v411_WAREHOUSE_PRODUCTION_RECEIVED_TAB.md
+MODIFIED_FILES_v411.txt
+
+Source: uploaded supabase--main-408.zip.
+No SQL changes.

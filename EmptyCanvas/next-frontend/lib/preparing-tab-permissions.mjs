@@ -5,7 +5,7 @@ import { testingReadyToTest } from "./preparing-project-testing-math.mjs";
 export const PREPARING_EDIT_TAB_LABELS = Object.freeze({
   intake: Object.freeze({'all': 'All Components', 'pending': 'Remaining to Receive', 'received': 'Received'}),
   testing: Object.freeze({'all': 'All Components', 'pending': 'Remaining to Test', 'done': 'Fully Tested'}),
-  warehouse: Object.freeze({'all': 'Tested Components', 'available': 'Ready to Return', 'received': 'Returned'}),
+  warehouse: Object.freeze({'all': 'Production Received', 'available': 'Ready to Return', 'received': 'Returned'}),
   production: Object.freeze({'all': 'All Components', 'available': 'Available to Receive', 'not-received': 'Not Received', 'received': 'Received'}),
   boxes: Object.freeze({'all': 'All Components', 'available': 'Available to Pack', 'packed': 'Packed'}),
   cartons: Object.freeze({'all': 'All Cartons', 'draft': 'Draft', 'ready': 'Ready'}),
@@ -18,7 +18,7 @@ export function preparingTabKnown(stage, tab) {
 const num = value => Number(value) || 0;
 export function preparingRowMatchesTab(stage, tab, row) {
   if (!preparingTabKnown(stage, tab) || !row) return false;
-  if (tab === 'all') return stage !== 'warehouse' || num(row.tested) > 0 || num(row.accepted) > 0;
+  if (tab === 'all') return stage !== 'warehouse' || num(row.productionIntakeReceived) > 0;
   if (stage === 'intake' || stage === 'testing') {
     const required = Math.max(0, num(row.projectTotalRequired ?? row.required));
     const received = Math.max(0, num(row.tested));

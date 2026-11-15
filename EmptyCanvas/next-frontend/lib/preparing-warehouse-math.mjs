@@ -15,12 +15,13 @@ export function warehouseTotals(items, receiptLines, allocations) {
 // Tested units are the ONLY units eligible to return to warehouse. Existing
 // accepted receipt totals are the returned warehouse stock available for
 // subsequent Operations Receiving; no audit record is rewritten.
-export function warehouseReceivingBalances(rows, testBalances = []) {
+export function warehouseReceivingBalances(rows, testBalances = [], intakeBalances = []) {
   const testedById = new Map(testBalances.map(item => [item.item_id, n(item.tested)]));
+  const productionIntakeById = new Map(intakeBalances.map(item => [item.itemId, n(item.received)]));
   return rows.map(row => {
     const tested = testedById.get(row.id) || 0;
     const readyToReceive = Math.max(0, tested - n(row.accepted));
-    return { ...row, tested, readyToReceive, readyToReturn: readyToReceive };
+    return { ...row, tested, productionIntakeReceived: productionIntakeById.get(row.id) || 0, readyToReceive, readyToReturn: readyToReceive };
   });
 }
 

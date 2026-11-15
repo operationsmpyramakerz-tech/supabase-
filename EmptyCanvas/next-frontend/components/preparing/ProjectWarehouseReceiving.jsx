@@ -82,7 +82,7 @@ export default function ProjectWarehouseReceiving({projectId,projectName,canRece
  const [error,setError]=useState(""),[success,setSuccess]=useState("");
  async function reload(){const response=await request(`/warehouse?projectId=${encodeURIComponent(projectId)}`);setState(response);setLoading(false);}
  useEffect(()=>{let active=true;request(`/warehouse?projectId=${encodeURIComponent(projectId)}`).then(v=>{if(active){setState(v);setLoading(false);}}).catch(e=>{if(active){setError(e.message);setLoading(false);}});return()=>{active=false;};},[projectId]);
- const summaries=useMemo(()=>warehouseReceivingBalances(warehouseTotals((state.items||[]).map(row=>({...row,required_qty:projectRequired(Number(row.required_qty||0),(state.schools||[]).length)})),state.receiptLines||[],state.allocations||[]),state.testingBalances||[]),[state]);
+ const summaries=useMemo(()=>warehouseReceivingBalances(warehouseTotals((state.items||[]).map(row=>({...row,required_qty:projectRequired(Number(row.required_qty||0),(state.schools||[]).length)})),state.receiptLines||[],state.allocations||[]),state.testingBalances||[],state.intakeBalances||[]),[state]);
  const nameById=useMemo(()=>new Map(state.items.map(row=>[row.id,row.product_name])),[state]);
  const receivedById=useMemo(()=>{
   const result=new Map(),linesByReceipt=new Map();
@@ -101,7 +101,8 @@ export default function ProjectWarehouseReceiving({projectId,projectName,canRece
  },[state.receipts,state.receiptLines]);
  const totals=useMemo(()=>summaries.reduce((sum,row)=>({required:sum.required+number(row.required_qty),accepted:sum.accepted+row.accepted,damaged:sum.damaged+row.damaged,allocated:sum.allocated+row.allocated,available:sum.available+row.available,tested:sum.tested+row.tested,readyToReceive:sum.readyToReceive+row.readyToReceive}),{required:0,accepted:0,damaged:0,allocated:0,available:0,tested:0,readyToReceive:0}),[summaries]);
  const shown=useMemo(()=>filterWarehouseReceivingRows(summaries.filter(row=>`${row.product_name} ${row.product_id}`.toLowerCase().includes(search.toLowerCase().trim())),filter),[summaries,search,filter]);
- const allGroups=useMemo(()=>warehouseGroups(filterWarehouseReceivingRows(summaries,"all"),state.kitGroups),[summaries,state.kitGroups]);
+ // Export remains based on tested/returned components, not the new Stage 1 tab filter.
+ const allGroups=useMemo(()=>warehouseGroups(summaries.filter(row=>number(row.tested)>0||number(row.accepted)>0),state.kitGroups),[summaries,state.kitGroups]);
  const shownGroups=useMemo(()=>warehouseGroups(shown,state.kitGroups),[shown,state.kitGroups]);
  const percent=totals.required>0?Math.min(100,Math.max(0,totals.accepted/totals.required*100)):0;
  useEffect(()=>{
@@ -188,7 +189,7 @@ export default function ProjectWarehouseReceiving({projectId,projectName,canRece
     <div className="pr-intake-signoff">{closurePanel}</div>
    </div>
    <div className="pr-intake-tabs-toolbar">
-    <StageFilterTabs label="Warehouse return status" options={[{value:"all",label:"All Components"},{value:"available",label:"Remaining to Return"},{value:"received",label:"Returned"}]} value={tab==="receiving"?filter:""} onChange={value=>{setFilter(value);setTab("receiving");setEditing({});setDraft({});setClearConfirm(null);setError("");}}/>
+    <StageFilterTabs label="Warehouse return status" options={[{value:"all",label:"Production Received"},{value:"available",label:"Remaining to Return"},{value:"received",label:"Returned"}]} value={tab==="receiving"?filter:""} onChange={value=>{setFilter(value);setTab("receiving");setEditing({});setDraft({});setClearConfirm(null);setError("");}}/>
     <div className="pr-intake-tabs-actions" aria-label="Warehouse Return toolbar">
      <div className="pr-intake-search-slot">
       <div className={`pr-intake-search-control${searchOpen?" is-open":""}`} role="search">
@@ -203,7 +204,7 @@ export default function ProjectWarehouseReceiving({projectId,projectName,canRece
      <button type="button" className="pr-pt-download-button" aria-label="Download warehouse return report" title="Download warehouse return report" onClick={()=>setShowExport(true)} disabled={!state.items.length}><WarehouseIcon name="download" size={21}/></button>
     </div>
    </div>
-   {tab==="receiving"&&<div className="pr-wh-list pr-wr-list pr-pt-list pr-pt-kit-list" aria-label="Tested components ready for warehouse return by Kit">{shownGroups.map(group=>{
+   {tab==="receiving"&&<div className="pr-wh-list pr-wr-list pr-pt-list pr-pt-kit-list" aria-label="Warehouse return components grouped by Kit">{shownGroups.map(group=>{
     const open=!!search.trim()||expandedKit===group.key;
     const appearance=warehouseKitAppearance(group.name);
     return <section className={`pr-pt-kit-group pr-pt-kit--${appearance.tone}${open?" is-open":""}`} key={group.key}>
@@ -215,15 +216,16 @@ export default function ProjectWarehouseReceiving({projectId,projectName,canRece
       return <article className={`pr-pt-row pr-intake-component pr-intake-item--${filter==="available"?"pending":filter}${active?" is-editing":""}`} key={`${group.key}-${row.id}`}>
        <div className={`pr-intake-component-main pr-intake-cols--${filter==="available"?"pending":filter}`}>
         <div className="pr-intake-component-product"><ComponentThumbnail row={{...row,name:row.product_name}} onOpen={showPreview}/><div className="pr-pt-name"><strong title={row.product_id?`Product code: ${row.product_id}`:undefined}>{row.product_name}</strong>{row.product_id&&<small>{row.product_id}</small>}{row.accepted>row.tested&&<small className="pr-pt-warning">Historical returned quantity exceeds tested quantity; review this record.</small>}</div></div>
-        {filter!=="available"&&<div className="pr-intake-cell"><span>Tested</span><strong>{pretty(row.tested)}</strong></div>}
+        {filter==="all"&&<div className="pr-intake-cell pr-warehouse-intake-count"><span>Production Received</span><strong>{pretty(row.productionIntakeReceived)}</strong><small>Tested: {pretty(row.tested)}</small></div>}
+        {filter==="received"&&<div className="pr-intake-cell"><span>Tested</span><strong>{pretty(row.tested)}</strong></div>}
         {filter==="available"&&<div className="pr-intake-cell"><span>Ready to Return</span><strong>{pretty(pendingQuantity)}</strong></div>}
         <div className={`pr-intake-cell pr-intake-cell--received${active?" is-inline-edit":""}`}>
          <span>Returned</span>
          {active?<StageQuantityInput id={`pr-warehouse-qty-${row.id}`} step="1" min="0" inputMode="numeric" aria-label={`Returned quantity ${row.product_name}`} disabled={busy} value={editableDraft} max={Math.max(row.accepted,row.tested)} onValueChange={value=>{setDraft(prev=>({...prev,[row.id]:value}));setRowError(prev=>({...prev,[row.id]:""}));}} onKeyDown={event=>{if(event.key==="Enter"){event.preventDefault();saveReceipt(row);}else if(event.key==="Escape"){event.preventDefault();cancelReceipt(row);}}}/>:<strong>{pretty(row.accepted)}</strong>}
         </div>
-        {filter==="all"&&<div className="pr-intake-cell"><span>Remaining</span><strong>{pretty(pendingQuantity)}</strong></div>}
+        {filter==="all"&&<div className="pr-intake-cell"><span>Ready to Return</span><strong>{pretty(pendingQuantity)}</strong></div>}
         <EditorAvatars people={people}/>
-        <div className="pr-intake-row-actions">{canEditTab&&(active?<>
+        <div className="pr-intake-row-actions">{canEditTab&&(row.tested>0||row.accepted>0)&&(active?<>
          <button type="button" className="pr-intake-action pr-intake-action--cancel" aria-label={`Cancel edit for ${row.product_name}`} title="Cancel" disabled={busy} onClick={()=>cancelReceipt(row)}><WarehouseIcon name="close" size={16}/></button>
          <button type="button" className="pr-intake-action pr-intake-action--save" aria-label={`Save returned quantity for ${row.product_name}`} title="Save" disabled={busy} onClick={()=>saveReceipt(row)}><WarehouseIcon name="check" size={18}/></button>
         </>:<>
@@ -236,7 +238,7 @@ export default function ProjectWarehouseReceiving({projectId,projectName,canRece
       </article>;
      })}</div>}
     </section>;
-   })}{!shownGroups.length&&<div className="pr-wh-empty">No tested components match this filter.</div>}</div>}
+   })}{!shownGroups.length&&<div className="pr-wh-empty">No components match this filter.</div>}</div>}
    {tab==="history"&&<section className="pr-wr-history" aria-label="Warehouse return audit history">
     <div className="pr-pt-history-heading"><div><h4>Return History</h4><p>Every change is retained as a separate transaction.</p></div><span className="pr-pt-history-count">{historyEntries.length} changes</span></div>
     <div className="pr-pt-history-grid">{historyEntries.map(({key,receipt,line,component})=><article className="pr-pt-history-card" key={key}>

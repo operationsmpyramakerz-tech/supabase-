@@ -24,7 +24,7 @@ export const FEATURE_DEFINITIONS = Object.freeze(
   { "module": "preparing", "key": "preparing.tab.testing.pending", "label": "Project Testing · Edit Remaining to Test" },
   { "module": "preparing", "key": "preparing.tab.testing.done", "label": "Project Testing · Edit Fully Tested" },
   { "module": "preparing", "key": "preparing.stage.warehouse", "label": "Stage 3 · Warehouse Return — open and update" },
-  { "module": "preparing", "key": "preparing.tab.warehouse.all", "label": "Warehouse Return · Edit Tested Components" },
+  { "module": "preparing", "key": "preparing.tab.warehouse.all", "label": "Warehouse Return · Edit Production Received" },
   { "module": "preparing", "key": "preparing.tab.warehouse.available", "label": "Warehouse Return · Edit Ready to Return" },
   { "module": "preparing", "key": "preparing.tab.warehouse.received", "label": "Warehouse Return · Edit Returned" },
   { "module": "preparing", "key": "preparing.stage.production", "label": "Stage 4 · Operations Receiving — open and update" },

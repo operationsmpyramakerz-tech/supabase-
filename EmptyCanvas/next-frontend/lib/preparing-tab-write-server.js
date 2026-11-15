@@ -3,6 +3,7 @@ import { preparingTabsGranular, preparingTabEditAllowed } from './preparing-stag
 import { preparingRowMatchesTab } from './preparing-tab-permissions.mjs';
 import { projectTestingOverview, productionIntakeOverview } from './preparing-project-testing.js';
 import { warehouseWorkspace } from './preparing-warehouse.js';
+import { rpc } from './supabase-rest.js';
 import { productionWorkspace } from './preparing-production.js';
 import { projectCartonWorkspace } from './preparing-project-cartons.js';
 import { warehouseTotals, warehouseReceivingBalances, projectRequired } from './preparing-warehouse-math.mjs';
@@ -47,15 +48,19 @@ export async function requirePreparingTabWrite(account, stage, body, { action = 
   if (!ids.length || new Set(ids).size !== ids.length) deny('Choose a valid component in an editable tab.');
   // All Components applies to all rows, and the existing business transaction
   // still verifies project membership, optimistic updates and quantity limits.
-  if (tab === 'all') return;
+  if (tab === 'all' && stage !== 'warehouse') return;
   let rows;
   if (stage === 'intake') rows = (await productionIntakeOverview(body?.projectId)).items;
   else if (stage === 'testing') rows = (await projectTestingOverview(body?.projectId)).items;
   else if (stage === 'warehouse') {
     const state = await warehouseWorkspace(body?.projectId);
+    // Server-side membership check: never trust the client-supplied filter.
+    const intake = tab === 'all'
+      ? await rpc('erp_preparing_intake_snapshot_v388',{p_project_id:state.projectId},{profileName:'preparing.tab.warehouse.intake'})
+      : null;
     rows = warehouseReceivingBalances(
       warehouseTotals(state.items.map(row => ({...row, required_qty: projectRequired(Number(row.required_qty || 0),state.schools.length)})),state.receiptLines,state.allocations),
-      state.testingBalances
+      state.testingBalances,intake?.balances||[]
     );
   } else if (stage === 'production' || stage === 'boxes') {
     const state = await productionWorkspace(body?.projectId);
