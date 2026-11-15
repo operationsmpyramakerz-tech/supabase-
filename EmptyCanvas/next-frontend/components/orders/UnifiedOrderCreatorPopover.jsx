@@ -20,16 +20,14 @@ function safeUrl(value) {
   return /^https?:\/\//i.test(url) || /^\/(?!\/)/.test(url) ? url : "";
 }
 
-// Keep the card attached to its trigger, but never let it leave the viewport.
-// A compact bottom sheet is easier to use than a tiny popover on narrow phones.
+// Anchor creator details to the tapped icon on desktop and mobile.
+// Flip above the icon when there is not enough room below.
 export function creatorPopoverPlacement(anchor) {
   if (!anchor || typeof window === "undefined") return {};
   const rect = anchor.getBoundingClientRect();
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
   const width = Math.min(322, viewportWidth - 24);
-  const mobile = viewportWidth <= 600;
-  if (mobile) return { mobile: true };
   const left = Math.max(12, Math.min(rect.left + rect.width / 2 - width / 2, viewportWidth - width - 12));
   const roomBelow = viewportHeight - rect.bottom - 23;
   const roomAbove = rect.top - 23;
