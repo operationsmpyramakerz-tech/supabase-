@@ -200,14 +200,23 @@ function Modal({ title, subtitle, onClose, children, footer, wide = false }) {
 }
 
 function ClassicModal({ title, onClose, children, compact = false, bottomSheet = false, flushBottom = false }) {
+  // Keep the floating Cash Out badge outside the scrollable section: otherwise
+  // overflow-y:auto clips the half of the icon that sits above the sheet.
+  const dialog = (
+    <section className={`ex-modal-box${compact ? " ex-modal-box--compact" : ""}${bottomSheet ? " ex-modal-box--bottom-sheet" : ""}${flushBottom ? " ex-modal-box--flush-bottom" : ""}`} role="dialog" aria-modal="true" aria-label={title} onMouseDown={(event) => event.stopPropagation()}>
+      {bottomSheet ? <span className="ex-modal-sheet-handle" aria-hidden="true"/> : null}
+      <h3 className="ex-modal-title">{title}</h3>
+      {children}
+    </section>
+  );
   return (
     <div className={`ex-modal${bottomSheet ? " ex-modal--bottom-sheet" : ""}${flushBottom ? " ex-modal--flush-bottom" : ""}`} style={{ display: "flex" }} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <section className={`ex-modal-box${compact ? " ex-modal-box--compact" : ""}${bottomSheet ? " ex-modal-box--bottom-sheet" : ""}${flushBottom ? " ex-modal-box--flush-bottom" : ""}`} role="dialog" aria-modal="true" aria-label={title} onMouseDown={(event) => event.stopPropagation()}>
-        {bottomSheet ? <span className="ex-modal-sheet-handle" aria-hidden="true"/> : null}
-        {bottomSheet ? <span className="ex-modal-sheet-icon" aria-hidden="true"><ClassicExpenseIcon name="money-add" size={27}/></span> : null}
-        <h3 className="ex-modal-title">{title}</h3>
-        {children}
-      </section>
+      {bottomSheet ? (
+        <div className="ex-modal-sheet-frame">
+          {dialog}
+          <span className="ex-modal-sheet-icon" aria-hidden="true"><ClassicExpenseIcon name="arrow-up-right" size={29}/></span>
+        </div>
+      ) : dialog}
     </div>
   );
 }

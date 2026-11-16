@@ -13,13 +13,13 @@ test('only the Cash out Add Expense modal gets the squared flush-to-bottom finis
   assert.match(styles, /\.ex-modal-box--flush-bottom\s*\{[^}]*border-radius:\s*25px 25px 0 0/s);
 });
 
-test('Choose Order fills the bottom edge and has a centered money-add icon', () => {
-  assert.match(dialogs, /bottomSheet \? <span className="ex-modal-sheet-icon"/);
-  assert.match(dialogs, /<ClassicExpenseIcon name="money-add" size=\{27\}\/>/);
+test('Choose Order fills the bottom edge and has a centered floating cash-out icon', () => {
+  assert.match(dialogs, /<div className="ex-modal-sheet-frame">/);
+  assert.match(dialogs, /<ClassicExpenseIcon name="arrow-up-right" size=\{29\}\/>/);
   assert.match(dialogs, /<ClassicModal title="Choose Order" onClose=\{onClose\} compact bottomSheet>/);
-  assert.match(styles, /\.ex-modal--bottom-sheet\s*\{\s*padding:\s*12px 0 0;/);
+  assert.match(styles, /\.ex-modal--bottom-sheet\s*\{[^}]*padding:\s*40px 0 0;/s);
   assert.match(styles, /\.ex-modal-box--bottom-sheet\s*\{[^}]*border-radius:\s*28px 28px 0 0;/s);
-  assert.match(styles, /\.ex-modal-sheet-icon\s*\{[^}]*place-items:\s*center;/s);
+  assert.match(styles, /\.ex-modal-sheet-frame > \.ex-modal-sheet-icon\s*\{[^}]*top:\s*-28px;[^}]*place-items:\s*center;/s);
 });
 
 test('expense card matches picker item presentation, shows date and +N for other orders', () => {
@@ -37,5 +37,5 @@ test('backend order linking still receives every selected order (visual summary 
   assert.match(dialogs, /selectedOrderIds: isManual \? \[\] : selectedOrders\.flatMap/);
   assert.match(dialogs, /selectedOrderKeys: isManual \? \[\] : selectedOrders\.map/);
   assert.match(dialogs, /orderKeys: draft\.selectedOrderKeys/);
-  assert.match(page, /expenses-classic-inline\.css\?v=v431-expenses-modal-cards/);
+  assert.match(page, /expenses-classic-inline\.css\?v=v432-cash-out-floating-badge/);
 });
