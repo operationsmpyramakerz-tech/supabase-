@@ -25,3 +25,26 @@ export function verifiedExpenseOrderLabel(rows = [], requestedKey = "") {
   }
   return `ORD-${number}`;
 }
+
+
+// One Cash Out may reference several complete orders. The client can specify
+// their display order, but labels always come from verified database rows.
+export function verifiedExpenseOrderGroups(rows = [], requestedKeys = []) {
+  const invalid = (message) => { const error = new Error(message); error.status = 400; throw error; };
+  if (!Array.isArray(rows) || !rows.length) invalid("Select at least one order.");
+  if (!Array.isArray(requestedKeys) || requestedKeys.length > 25) invalid("Invalid selected order list.");
+  const numbers = [...new Set(rows.map((row) => clean(row?.order_number)))];
+  if (numbers.some((number) => !/^\d+$/.test(number)) || numbers.length > 25) invalid("Invalid order number.");
+  if (!requestedKeys.length && numbers.length === 1) return [verifiedExpenseOrderLabel(rows)];
+  if (!requestedKeys.length) invalid("Select all orders using the multi-order picker.");
+  const requestedNumbers = requestedKeys.map((key) => {
+    const match = clean(key).match(/^(?:ord:|ORD-)(\d+)$/);
+    if (!match) invalid("Invalid order reference.");
+    return match[1];
+  });
+  const expected = new Set(numbers);
+  if (requestedNumbers.length !== expected.size || new Set(requestedNumbers).size !== expected.size || requestedNumbers.some((number) => !expected.has(number))) {
+    invalid("Selected orders do not match the referenced components.");
+  }
+  return requestedNumbers.map((number) => `ORD-${number}`);
+}

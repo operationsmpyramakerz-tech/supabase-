@@ -278,6 +278,90 @@ function ClassicSelect({ value, onChange, options = [], placeholder = "Select…
   );
 }
 
+// Multi-order picker is intentionally independent from ClassicSelect: the latter is
+// used by single-value fields throughout Expenses.
+function ExpenseOrderMultiSelect({ value = [], onChange, options = [] }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [menuStyle, setMenuStyle] = useState(null);
+  const rootRef = useRef(null);
+  const menuRef = useRef(null);
+  const selectedIds = Array.isArray(value) ? value : [];
+  const selected = options.filter((option) => selectedIds.includes(option.value));
+  const filtered = options.filter((option) => [option.label, option.note, option.searchText]
+    .some((part) => lower(part).includes(lower(query))));
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const position = () => {
+      const rect = rootRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const margin = 12;
+      const width = Math.min(Math.max(rect.width, 290), window.innerWidth - margin * 2);
+      const left = Math.min(Math.max(margin, rect.left), window.innerWidth - width - margin);
+      const below = window.innerHeight - rect.bottom - margin;
+      const above = rect.top - margin;
+      const placeAbove = below < 270 && above > below;
+      const maxHeight = Math.max(170, Math.min(390, placeAbove ? above - 8 : below - 8));
+      const top = placeAbove ? Math.max(margin, rect.top - maxHeight - 8) : Math.min(window.innerHeight - maxHeight - margin, rect.bottom + 8);
+      setMenuStyle({ width, left, top, maxHeight, zIndex: 100500 });
+    };
+    const outside = (event) => {
+      if (rootRef.current?.contains(event.target) || menuRef.current?.contains(event.target)) return;
+      setOpen(false);
+    };
+    const escape = (event) => { if (event.key === "Escape") setOpen(false); };
+    position();
+    window.addEventListener("resize", position);
+    window.addEventListener("scroll", position, true);
+    document.addEventListener("mousedown", outside);
+    document.addEventListener("keydown", escape);
+    return () => {
+      window.removeEventListener("resize", position);
+      window.removeEventListener("scroll", position, true);
+      document.removeEventListener("mousedown", outside);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [open]);
+
+  const toggle = (id) => {
+    if (id === OTHER_SCOPE_ID) {
+      onChange(selectedIds.includes(OTHER_SCOPE_ID) ? [] : [OTHER_SCOPE_ID]);
+      setOpen(false);
+      return;
+    }
+    const existing = selectedIds.filter((entry) => entry !== OTHER_SCOPE_ID);
+    onChange(existing.includes(id) ? existing.filter((entry) => entry !== id) : [...existing, id]);
+  };
+
+  const dropdown = open && menuStyle && typeof document !== "undefined" ? createPortal(
+    <div className="expense-orders-menu" style={menuStyle} ref={menuRef} role="group" aria-label="Select expense orders">
+      <div className="expense-orders-menu__search"><ClassicExpenseIcon name="search" size={17}/><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search order number or user..." aria-label="Search orders"/><span className="expense-orders-menu__count">{selectedIds.length} selected</span></div>
+      <div className="expense-orders-menu__list">
+        {filtered.length ? filtered.map((option) => {
+          const active = selectedIds.includes(option.value);
+          return <button type="button" key={option.value} role="checkbox" aria-checked={active}
+            className={`expense-orders-menu__card${active ? " is-selected" : ""}`} onClick={() => toggle(option.value)}>
+            <span className={`expense-orders-menu__icon expense-orders-menu__icon--${option.tone || "default"}`}><ClassicExpenseIcon name={option.icon || "shopping-cart"} size={19}/></span>
+            <span className="expense-orders-menu__copy"><strong>{option.label}</strong><small dir="auto">{option.note || "—"}</small></span>
+            <span className={`expense-orders-menu__check${active ? " is-selected" : ""}`} aria-hidden="true">{active ? "✓" : ""}</span>
+          </button>;
+        }) : <div className="order-select__status">No matching orders.</div>}
+      </div>
+      <div className="expense-orders-menu__footer"><span>Select multiple orders</span><button type="button" onClick={() => setOpen(false)}>Done</button></div>
+    </div>, document.body,
+  ) : null;
+
+  return <div className="expense-orders-picker" ref={rootRef}>
+    <button type="button" className={`expense-orders-picker__trigger${open ? " is-open" : ""}`} onClick={() => setOpen((current) => !current)} aria-haspopup="dialog" aria-expanded={open}>
+      <span className="expense-orders-picker__summary">{selected.length ? <><strong>{selected.length} {selected.length === 1 ? "selection" : "orders selected"}</strong><span>{selected.map((item) => item.label).join(", ")}</span></> : <span className="expense-orders-picker__placeholder">Select orders...</span>}</span>
+      <ClassicExpenseIcon name="chevron-down" size={18}/>
+    </button>
+    {selected.length ? <div className="expense-orders-picker__chips">{selected.map((option) => <span className="expense-orders-picker__chip" key={option.value}><ClassicExpenseIcon name={option.icon || "shopping-cart"} size={14}/>{option.label}<button type="button" onClick={() => onChange(selectedIds.filter((id) => id !== option.value))} aria-label={`Remove ${option.label}`}>×</button></span>)}</div> : null}
+    {dropdown}
+  </div>;
+}
+
 function ClassicFileField({ files, onChange, required = false, hint = "Upload receipt screenshots (JPG/PNG)." }) {
   const inputRef = useRef(null);
   const names = files.length ? files.map((file) => file?.name).filter(Boolean).join(", ") : "No file chosen";
@@ -423,7 +507,7 @@ function CashInModal({ options, onClose, onSaved, notify }) {
 }
 
 function CashOutModal({ fundsTypes, orderOptions, ownCarRate = DEFAULT_OWN_CAR_RATE_EGP_PER_KM, onClose, onSaved, notify }) {
-  const [scopeId, setScopeId] = useState("");
+  const [scopeIds, setScopeIds] = useState([]);
   const [date, setDate] = useState("");
   const [manualReason, setManualReason] = useState("");
   const [drafts, setDrafts] = useState([]);
@@ -432,25 +516,31 @@ function CashOutModal({ fundsTypes, orderOptions, ownCarRate = DEFAULT_OWN_CAR_R
   const [busy, setBusy] = useState(false);
   const [step, setStep] = useState("order");
   const [showOwnCarInfo, setShowOwnCarInfo] = useState(false);
-  const selectedOrder = scopeId === OTHER_SCOPE_ID ? null : orderOptions.find((item) => text(item?.id) === scopeId) || null;
-  const isManual = scopeId === OTHER_SCOPE_ID;
+  const isManual = scopeIds.includes(OTHER_SCOPE_ID);
+  const selectedOrders = (Array.isArray(orderOptions) ? orderOptions : []).filter((item) => scopeIds.includes(text(item?.id)));
+  const selectedOrderNames = selectedOrders.map((item) => text(item.orderId));
+  const currentOrderLabel = isManual ? "Other reason" : selectedOrderNames.join(", ");
   const isOwnCar = typeKey(form.fundsType) === "owncar";
   const screenshotRequired = SCREENSHOT_REQUIRED_KEYS.has(typeKey(form.fundsType));
   const scopeOptions = useMemo(() => [
-    { value: OTHER_SCOPE_ID, label: "Other reason", note: "Write the reason manually", badge: "Manual", tone: "neutral" },
-    ...(Array.isArray(orderOptions) ? orderOptions : []).map((item) => ({
-      value: text(item?.id),
-      label: text(item?.orderId) || text(item?.label) || "Order",
-      note: [text(item?.orderType), text(item?.productName)].filter(Boolean).join(" · "),
-      badge: text(item?.orderType) || "Order",
-      tone: typeKey(item?.orderType).includes("maintenance") ? "orange" : "neutral",
-    })),
+    { value: OTHER_SCOPE_ID, label: "Other reason", note: "Write the reason manually", icon: "edit-3", tone: "manual" },
+    ...(Array.isArray(orderOptions) ? orderOptions : []).map((item) => {
+      const kind = typeKey(item?.orderType);
+      return {
+        value: text(item?.id),
+        label: text(item?.orderId) || "Order",
+        note: text(item?.createdByName) || "Unknown user",
+        searchText: [item?.orderType, item?.label].map(text).join(" "),
+        icon: kind.includes("maintenance") ? "tool" : kind.includes("withdraw") ? "log-out" : "shopping-cart",
+        tone: kind.includes("maintenance") ? "maintenance" : kind.includes("withdraw") ? "withdrawal" : "products",
+      };
+    }),
   ], [orderOptions]);
   const fundsTypeOptions = useMemo(() => fundsTypes.map(fundsTypeOption), [fundsTypes]);
   const update = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }));
 
   const openExpenseStep = () => {
-    if (!scopeId || (!selectedOrder && !isManual)) return notify("Choose an order or Other reason first.", "error");
+    if (!scopeIds.length || (!selectedOrders.length && !isManual)) return notify("Choose one or more orders or Other reason first.", "error");
     if (isManual && !text(manualReason)) return notify("Write the expense reason.", "error");
     if (!date) return notify("Choose the expense date first.", "error");
     setStep("expense");
@@ -471,7 +561,11 @@ function CashOutModal({ fundsTypes, orderOptions, ownCarRate = DEFAULT_OWN_CAR_R
         ...form,
         amount: number(form.amount),
         kilometer: number(form.kilometer),
-        reason: isManual ? text(manualReason) : text(selectedOrder?.label),
+        reason: isManual ? text(manualReason) : currentOrderLabel,
+        selectedOrderIds: isManual ? [] : selectedOrders.flatMap((item) => Array.isArray(item.relationIds) ? item.relationIds : []),
+        selectedOrderKeys: isManual ? [] : selectedOrders.map((item) => text(item.id)),
+        selectedOrderLabel: currentOrderLabel,
+        expenseDate: date,
         screenshots: shots,
       }]);
       setForm({ fundsType: "", from: "", to: "", amount: "", kilometer: "" });
@@ -491,14 +585,15 @@ function CashOutModal({ fundsTypes, orderOptions, ownCarRate = DEFAULT_OWN_CAR_R
     for (const draft of drafts) {
       try {
         await requestExpenseMutation("cash-out", {
-          orderId: isManual ? "" : text(selectedOrder?.id),
-          orderIds: isManual ? [] : (Array.isArray(selectedOrder?.relationIds) ? selectedOrder.relationIds : []),
-          orderLabel: isManual ? "Other reason" : text(selectedOrder?.label),
-          orderType: isManual ? "Manual reason" : text(selectedOrder?.orderType),
-          orderDisplayId: isManual ? "" : text(selectedOrder?.orderId),
+          orderId: draft.selectedOrderKeys?.length === 1 ? draft.selectedOrderKeys[0] : "",
+          orderIds: draft.selectedOrderIds || [],
+          orderKeys: draft.selectedOrderKeys || [],
+          orderLabel: draft.selectedOrderLabel,
+          orderType: draft.selectedOrderKeys?.length ? "Multiple orders" : "Manual reason",
+          orderDisplayId: draft.selectedOrderLabel,
           reason: draft.reason,
           fundsType: draft.fundsType,
-          date,
+          date: draft.expenseDate,
           from: draft.from,
           to: draft.to,
           ...(typeKey(draft.fundsType) === "owncar" ? { kilometer: draft.kilometer } : { amount: draft.amount }),
@@ -522,9 +617,9 @@ function CashOutModal({ fundsTypes, orderOptions, ownCarRate = DEFAULT_OWN_CAR_R
         <div className="order-preview-card order-preview-card--inline">
           <div className="order-preview-row">
             <div>
-              <div className="order-preview-label">Selected order</div>
-              <div className="order-preview-text">{isManual ? "Other reason" : (text(selectedOrder?.label) || text(selectedOrder?.orderId) || "Order")}</div>
-              <div className="order-preview-meta">{isManual ? text(manualReason) : [text(selectedOrder?.orderType), formatDate(date, date)].filter(Boolean).join(" · ")}</div>
+              <div className="order-preview-label">Selected orders</div>
+              <div className="order-preview-text">{currentOrderLabel || "Order"}</div>
+              <div className="order-preview-meta">{isManual ? text(manualReason) : [selectedOrders.map((item) => text(item.createdByName)).filter(Boolean).join(", "), formatDate(date, date)].filter(Boolean).join(" · ")}</div>
             </div>
             <button type="button" className="order-change-btn" onClick={() => setStep("order")} disabled={busy}>Change</button>
           </div>
@@ -586,16 +681,10 @@ function CashOutModal({ fundsTypes, orderOptions, ownCarRate = DEFAULT_OWN_CAR_R
 
   return (
     <ClassicModal title="Choose Order" onClose={onClose} compact>
-      <p className="order-picker-hint">Select the order and date first, then add one or more expenses before confirming.</p>
+      <p className="order-picker-hint">Select one or more orders and a date, then add expenses before confirming.</p>
 
-      <ClassicFieldLabel icon="file-text">Order <span className="req-star">*</span></ClassicFieldLabel>
-      <ClassicSelect
-        value={scopeId}
-        onChange={(value) => { setScopeId(value); setDrafts([]); }}
-        options={scopeOptions}
-        placeholder="Select order..."
-        ariaLabel="Orders"
-      />
+      <ClassicFieldLabel icon="file-text">Orders <span className="req-star">*</span></ClassicFieldLabel>
+      <ExpenseOrderMultiSelect value={scopeIds} onChange={setScopeIds} options={scopeOptions}/>
 
       {isManual ? <div className="cashout-manual-reason">
         <ClassicFieldLabel icon="edit-3">Reason <span className="req-star">*</span></ClassicFieldLabel>
@@ -603,7 +692,7 @@ function CashOutModal({ fundsTypes, orderOptions, ownCarRate = DEFAULT_OWN_CAR_R
       </div> : null}
 
       <ClassicFieldLabel icon="calendar">Date <span className="req-star">*</span></ClassicFieldLabel>
-      <input type="date" className="ex-input" value={date} onChange={(event) => { setDate(event.target.value); setDrafts([]); }}/>
+      <input type="date" className="ex-input" value={date} onChange={(event) => setDate(event.target.value)}/>
 
       <button type="button" className="ex-btn ex-dark ex-btn--block" onClick={openExpenseStep} disabled={busy}>Add Expense</button>
 

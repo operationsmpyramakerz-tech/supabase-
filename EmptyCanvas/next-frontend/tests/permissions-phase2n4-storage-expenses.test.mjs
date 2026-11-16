@@ -35,7 +35,7 @@ test("Phase 2N4: scoped Expenses verify every order row using Member ID and neve
   assert.match(source, /orderScopeFor\(account, key\)/);
   assert.match(source, /visibleOrderRow\(row, scope\)/);
   assert.match(source, /ids\.some\(id => !indexed\.has\(id\)\)/);
-  assert.match(source, /if \(scopes === null\) return null/);
+  assert.match(source, /if \(scopes === null\) return await enrichOrderNames\(options\)/);
   assert.match(source, /scopeExpenseOrderOptions/);
   assert.match(source, /candidateOptions\.filter/);
   assert.match(source, /Select all verified components of the order/);

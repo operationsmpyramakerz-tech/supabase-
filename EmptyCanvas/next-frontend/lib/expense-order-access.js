@@ -3,7 +3,7 @@ import { loadRawOrderRowsByIds } from "./order-details-data";
 import { select } from "./supabase-rest";
 import { orderScopeFor } from "./order-data-scope.mjs";
 import { resolveOrderScope, visibleOrderRow } from "./order-data-scope";
-import { expenseOrderReferenceIds, verifiedExpenseOrderLabel } from "./expense-order-access.mjs";
+import { expenseOrderReferenceIds, verifiedExpenseOrderLabel, verifiedExpenseOrderGroups } from "./expense-order-access.mjs";
 
 const KEYS = ["orders.my.view", "orders.operations.view"];
 function deny(message, status = 403) {
@@ -21,6 +21,21 @@ async function allowedScopes(account) {
   }
   return resolved;
 }
+function createdByName(row = {}) {
+  return String(row?.team_member_name || row?.teams_members || row?.created_by_name || row?.created_by || row?.supervisor || "").trim();
+}
+async function enrichOrderNames(options = [], indexed = null) {
+  const firstIds = [...new Set(options.map((option) => String(option?.relationIds?.[0] || "").trim()).filter(Boolean))];
+  if (!firstIds.length) return options;
+  const names = new Map(indexed || []);
+  const missing = firstIds.filter((id) => !names.has(id));
+  for (let i = 0; i < missing.length; i += 200) {
+    for (const row of await loadRawOrderRowsByIds(missing.slice(i, i + 200))) {
+      names.set(String(row?.id || "").trim(), row);
+    }
+  }
+  return options.map((option) => ({ ...option, createdByName: createdByName(names.get(String(option?.relationIds?.[0] || "").trim())) }));
+}
 async function verifiedRows(ids) {
   if (!ids.length || ids.length > 200) deny("Invalid order references.", 400);
   const rows = await loadRawOrderRowsByIds(ids);
@@ -34,34 +49,36 @@ function rowsAllowed(rows, scopes) {
 
 export async function assertExpenseOrderReferences(account, payload = {}) {
   const scopes = await allowedScopes(account);
-  if (scopes === null) return null;
   const ids = expenseOrderReferenceIds(payload);
   if (!ids.length) {
-    if (String(payload?.orderId || "").trim()) deny("Select a verified order before linking the expense.", 400);
+    if (String(payload?.orderId || "").trim() || (Array.isArray(payload?.orderKeys) && payload.orderKeys.length)) {
+      deny("Select verified orders before linking the expense.", 400);
+    }
     return null; // Manual expenses are not order-linked.
   }
   const rows = await verifiedRows(ids);
-  const orderLabel = verifiedExpenseOrderLabel(rows, payload?.orderId);
-  // Validate the ENTIRE order group, not a user-selected subset of its rows.
-  // Otherwise an attacker could submit only an in-scope component from a
-  // multi-owner order and create an unauthorized expense association.
-  const numericOrder = orderLabel.slice(4);
-  if (!/^\d+$/.test(numericOrder)) deny("Unsupported order number.", 400);
+  const requestedKeys = Array.isArray(payload.orderKeys) && payload.orderKeys.length
+    ? payload.orderKeys : (String(payload?.orderId || "").trim() ? [payload.orderId] : []);
+  const labels = verifiedExpenseOrderGroups(rows, requestedKeys);
+  const numbers = labels.map((label) => label.slice(4));
+
+  // Validate the ENTIRE set of selected order groups. A browser must not be
+  // able to link just one visible component of an otherwise private order.
   const group = await select(String(process.env.SUPABASE_ORDERS_TABLE || "orders"), {
-    select: "*", order_number: `eq.${numericOrder}`, limit: "5001",
+    select: "*", order_number: `in.(${numbers.join(",")})`, limit: "5001",
   }, { profileName: "expenses.verify-linked-order-group" });
   if (!Array.isArray(group) || !group.length || group.length >= 5001) deny("Order group could not be fully verified.", 503);
-  const expected = new Set(group.map(row => String(row?.id || "").trim()));
-  if (expected.size !== ids.length || ids.some(id => !expected.has(id))) {
+  const expected = new Set(group.map((row) => String(row?.id || "").trim()));
+  if (expected.size !== ids.length || ids.some((id) => !expected.has(id))) {
     deny("Select all verified components of the order.", 400);
   }
-  if (!rowsAllowed(group, scopes)) deny("Order is outside your permitted data scope.");
-  return { orderLabel };
+  if (scopes !== null && !rowsAllowed(group, scopes)) deny("Order is outside your permitted data scope.");
+  return { orderLabel: labels.join(", "), orderLabels: labels };
 }
 
 export async function scopeExpenseOrderOptions(account, options = []) {
   const scopes = await allowedScopes(account);
-  if (scopes === null) return options;
+  if (scopes === null) return await enrichOrderNames(options);
   // Picker results must be reduced on the server, rather than rendered then hidden.
   const candidateOptions = [];
   const uniqueIds = new Set();
@@ -86,5 +103,5 @@ export async function scopeExpenseOrderOptions(account, options = []) {
     const rows = ids.map(id => indexed.get(id));
     try { verifiedExpenseOrderLabel(rows, option.id); } catch { return false; }
     return rowsAllowed(rows, scopes);
-  }).map(({ option }) => option);
+  }).map(({ option }) => ({ ...option, createdByName: createdByName(indexed.get(String(option?.relationIds?.[0] || "").trim())) }));
 }

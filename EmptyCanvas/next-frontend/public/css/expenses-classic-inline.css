@@ -2566,3 +2566,40 @@ body.expenses-page .expense-own-car-preview strong {
   color: #15243b;
   font-weight: 750;
 }
+
+/* V426 — compact multi-order Reason picker in Cash Out */
+.expense-orders-picker{position:relative;min-width:0}
+.expense-orders-picker__trigger{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:62px;padding:12px 16px;border:1px solid #dce2e9;border-radius:18px;background:#fff;color:#101828;box-shadow:0 8px 18px rgba(16,24,40,.055);cursor:pointer;text-align:left}
+.expense-orders-picker__trigger.is-open{border-color:#ff8c36;box-shadow:0 0 0 3px rgba(249,115,22,.1)}
+.expense-orders-picker__summary{display:flex;min-width:0;flex:1;flex-direction:column;gap:3px}
+.expense-orders-picker__summary strong{font-size:13px;font-weight:800}
+.expense-orders-picker__summary>span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:#667085}
+.expense-orders-picker__summary>.expense-orders-picker__placeholder{font-size:15px;color:#667085;font-weight:600}
+.expense-orders-picker__trigger>svg{flex-shrink:0;color:#667085}
+.expense-orders-picker__chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.expense-orders-picker__chip{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:5px 6px 5px 9px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;color:#0f172a;font-size:12px;font-weight:750}
+.expense-orders-picker__chip>svg{color:#ea580c;flex-shrink:0}
+.expense-orders-picker__chip button{width:19px;height:19px;display:grid;place-items:center;border:0;border-radius:6px;background:#e8edf3;color:#334155;font-size:17px;cursor:pointer;line-height:1}
+.expense-orders-menu{position:fixed;display:flex;flex-direction:column;overflow:hidden;padding:8px;border:1px solid #e3e8ef;border-radius:17px;background:white;box-shadow:0 20px 45px rgba(15,23,42,.18)}
+.expense-orders-menu__search{display:flex;flex:0 0 auto;align-items:center;gap:8px;padding:8px 10px;border:1px solid #e5eaf1;border-radius:11px;background:#f8fafc;color:#64748b}
+.expense-orders-menu__search input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:#111827;font:inherit;font-size:13px}
+.expense-orders-menu__search input::placeholder{color:#94a3b8}
+.expense-orders-menu__count{white-space:nowrap;font-size:10px;font-weight:750;color:#64748b}
+.expense-orders-menu__list{flex:1;min-height:0;display:flex;flex-direction:column;gap:6px;margin:7px 0;overflow-y:auto;overscroll-behavior:contain}
+.expense-orders-menu__card{display:flex;align-items:center;gap:10px;flex-shrink:0;min-height:61px;width:100%;padding:8px 10px;border:1px solid #e5e7eb;border-radius:13px;background:white;color:#111827;text-align:left;cursor:pointer;transition:background .15s,border-color .15s}
+.expense-orders-menu__card:hover{background:#f8fafc;border-color:#fdba74}
+.expense-orders-menu__card.is-selected{background:#fff7ed;border-color:#fb923c}
+.expense-orders-menu__icon{display:grid;place-items:center;flex-shrink:0;width:37px;height:37px;border-radius:11px}
+.expense-orders-menu__icon--products{background:#dcfce7;color:#166534}
+.expense-orders-menu__icon--maintenance{background:#fef3c7;color:#92400e}
+.expense-orders-menu__icon--withdrawal{background:#fee2e2;color:#b91c1c}
+.expense-orders-menu__icon--manual{background:#f1f5f9;color:#334155}
+.expense-orders-menu__icon--default{background:#f1f5f9;color:#334155}
+.expense-orders-menu__copy{display:flex;flex:1;flex-direction:column;gap:4px;min-width:0}
+.expense-orders-menu__copy strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:850;color:#0f172a}
+.expense-orders-menu__copy small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:#64748b;font-weight:600}
+.expense-orders-menu__check{flex:0 0 auto;display:grid;place-items:center;width:21px;height:21px;border:1px solid #cbd5e1;border-radius:7px;background:#fff;color:#fff;font-size:13px;font-weight:800}
+.expense-orders-menu__check.is-selected{background:#ea580c;border-color:#ea580c}
+.expense-orders-menu__footer{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 4px 1px;border-top:1px solid #eff2f5;color:#94a3b8;font-size:11px}
+.expense-orders-menu__footer button{padding:5px 12px;border:0;border-radius:8px;background:#111827;color:#fff;font-size:12px;font-weight:800;cursor:pointer}
+@media(max-width:540px){.expense-orders-menu{border-radius:15px}.expense-orders-menu__card{min-height:58px;padding:7px}.expense-orders-picker__trigger{min-height:58px}}
