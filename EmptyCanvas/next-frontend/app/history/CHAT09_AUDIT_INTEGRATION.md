@@ -102,3 +102,20 @@ The History page has a **Test audit write** action for a verified History page a
 > Wire `recordHistoryForAccount` from `lib/history-audit.js` into successful authenticated server-side operations in your own group. Derive `account` and `memberId` from `getDirectAccountGate` (or the existing verified session gate), never from the request body. Save action/page/entity metadata only **after success**, do not include passwords, session tokens, raw request bodies, or private files, and log audit failures visibly to server logs. Do not modify Chat 09 files or central Core files unless they belong to your group. Coordinate shared DB/API contracts before deployment.
 
 **Scope note:** Chat 09 owns the History reader/writer/diagnostics and Backup events. It cannot provide reliable attribution for other groups' backend activity without instrumentation at their real endpoints. Database triggers alone generally cannot recover the current ERP user identity when the backend writes via a service-role key.
+
+
+## Chat 09 follow-up — 16 November 2026 (after successful live write probe)
+
+The user verified that the test event was written and visible in History on 16 November 2026. This confirms **writing to the live table works for the diagnostic endpoint**. It does NOT confirm any login/order/project endpoint is instrumented.
+
+### Tamper-evident clear event (in Chat 09)
+
+- History `DELETE` now writes a verified administrator `history.cleared` event **before** deleting rows and excludes its ID from the deletion. If the audit write fails, clearing is blocked.
+- The client reloads the retained audit event and no longer claims the table has become empty.
+- This is a best-effort application-level audit marker, **not** an immutable ledger. A database superuser/service-role or Backup database administration can still erase or alter audit data. Enforce database-level restrictions and retention independently where required.
+
+### What to do next
+
+The next integration step belongs in **Chat 01**, starting with `app/api/auth/login/route.js` and `app/api/auth/logout/route.js`. Then each owning Chat 02–08 must instrument its own successful mutations. See `CHAT09_OTHER_CHATS_AUDIT_TASKS.md` in this directory for verified route paths and tailored work instructions. Do not modify those modules in Chat 09.
+
+**Check after each integration:** perform one successful action using user A and another using user B; History must show the correct actor, action, timestamp, page and entity label. Repeat a failed operation; it must never be logged as a successful action.

@@ -328,7 +328,7 @@ export function HistoryClearModal({ onClose, onCleared }) {
 
   return <DeleteConfirmDialog
     title="Delete every history record?"
-    message="The audit trail will become empty immediately. The deleted records cannot be recovered from this page."
+    message="Earlier activity records will be permanently removed. A record of who cleared History and when will be retained for accountability."
     busy={busy}
     error={error}
     onCancel={() => setStage("password")}

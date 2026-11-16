@@ -529,7 +529,10 @@ export default function HistoryClient({ initialRows, bootstrapWarnings = [], can
         setHasMore(false);
         setNextOffset(0);
         clearFilters();
-        setToast({ type: "success", title: "History deleted", message: "All system-history records were removed successfully." });
+        // Reload the preserved administrator audit event rather than showing
+        // a misleading empty audit log after a successful clear.
+        void loadRecent({ silent: true });
+        setToast({ type: "success", title: "History cleared", message: "Previous records were deleted. The administrator's clearing event remains in History." });
       }} /> : null}
     </main>
   );

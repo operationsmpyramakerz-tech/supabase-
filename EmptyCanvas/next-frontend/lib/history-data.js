@@ -1,6 +1,7 @@
 import "server-only";
 
 import { isSupabaseConfigured, select } from "./supabase-rest";
+import { redactHistoryPayload } from "./history-redaction.mjs";
 
 const DEFAULT_LIMIT = 250;
 const MAX_LIMIT = 1000;
@@ -244,9 +245,9 @@ function serializeRow(row = {}, { orderMap = null, includeDetails = false } = {}
   };
 
   if (includeDetails) {
-    output.requestQuery = value(row, ["request_query", "requestQuery"]) || {};
-    output.requestBody = value(row, ["request_body", "requestBody"]) || {};
-    output.details = value(row, ["details"]) || {};
+    output.requestQuery = redactHistoryPayload(value(row, ["request_query", "requestQuery"]) || {});
+    output.requestBody = redactHistoryPayload(value(row, ["request_body", "requestBody"]) || {});
+    output.details = redactHistoryPayload(value(row, ["details"]) || {});
     output.ipAddress = value(row, ["ip_address", "ipAddress"]) || "";
     output.userAgent = value(row, ["user_agent", "userAgent"]) || "";
   }
