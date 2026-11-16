@@ -410,10 +410,12 @@ export default function ExpensesClient({ account, initialPayload = {}, initialTy
   const [expenseTypeOptions, setExpenseTypeOptions] = useState(() => Array.isArray(initialTypes) ? initialTypes : []);
   const [ownCarRate, setOwnCarRate] = useState(() => number(initialPayload?.ownCarRate) || DEFAULT_OWN_CAR_RATE_EGP_PER_KM);
   const [cashInPeople, setCashInPeople] = useState(() => Array.isArray(cashInFromOptions) ? cashInFromOptions : []);
+  const [destinationPeople, setDestinationPeople] = useState([]);
   const [expenseOrderOptions, setExpenseOrderOptions] = useState(() => Array.isArray(orderOptions) ? orderOptions : []);
   const supportLoadedRef = useRef({
     types: Array.isArray(initialTypes) && initialTypes.length > 0,
     cashInPeople: Array.isArray(cashInFromOptions) && cashInFromOptions.length > 0,
+    destinations: false,
     orders: Array.isArray(orderOptions) && orderOptions.length > 0,
   });
   const supportInflightRef = useRef({});
@@ -482,6 +484,9 @@ export default function ExpensesClient({ account, initialPayload = {}, initialTy
       } else if (kind === "orders") {
         const body = await requestJson("/next/api/expenses/orders/options");
         setExpenseOrderOptions(Array.isArray(body?.options) ? body.options : []);
+      } else if (kind === "destinations") {
+        const body = await requestJson("/next/api/expenses/destinations/options");
+        setDestinationPeople(Array.isArray(body?.options) ? body.options : []);
       }
       supportLoadedRef.current[kind] = true;
     };
@@ -502,7 +507,7 @@ export default function ExpensesClient({ account, initialPayload = {}, initialTy
 
   const openCashOut = () => {
     setModal("cash-out");
-    void Promise.all([ensureSupportOptions("types"), ensureSupportOptions("orders")])
+    void Promise.all([ensureSupportOptions("types"), ensureSupportOptions("orders"), ensureSupportOptions("destinations")])
       .catch((error) => notify(error?.message || "Expense options could not be refreshed.", "error"));
   };
 
@@ -590,6 +595,7 @@ export default function ExpensesClient({ account, initialPayload = {}, initialTy
           account={account}
           items={items}
           cashInPeople={cashInPeople}
+          destinationPeople={destinationPeople}
           fundsTypes={fundsTypes}
           ownCarRate={ownCarRate}
           orderOptions={expenseOrderOptions}

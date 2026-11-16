@@ -552,9 +552,10 @@ function CashInModal({ options, onClose, onSaved, notify }) {
   );
 }
 
-function CashOutModal({ fundsTypes, orderOptions, ownCarRate = DEFAULT_OWN_CAR_RATE_EGP_PER_KM, onClose, onSaved, notify }) {
+function CashOutModal({ fundsTypes, orderOptions, destinationPeople = [], ownCarRate = DEFAULT_OWN_CAR_RATE_EGP_PER_KM, onClose, onSaved, notify }) {
   const [scopeIds, setScopeIds] = useState([]);
   const [date, setDate] = useState("");
+  const [destinationUserId, setDestinationUserId] = useState("");
   const [manualReason, setManualReason] = useState("");
   const [drafts, setDrafts] = useState([]);
   const [form, setForm] = useState({ fundsType: "", from: "", to: "", amount: "", kilometer: "" });
@@ -582,17 +583,28 @@ function CashOutModal({ fundsTypes, orderOptions, ownCarRate = DEFAULT_OWN_CAR_R
     }),
   ], [orderOptions]);
   const fundsTypeOptions = useMemo(() => fundsTypes.map(fundsTypeOption), [fundsTypes]);
+  const destinationOptions = useMemo(() => (Array.isArray(destinationPeople) ? destinationPeople : []).map((member) => ({
+    value: text(member?.id),
+    label: text(member?.name),
+    note: text(member?.department),
+  })).filter((option) => option.value && option.label), [destinationPeople]);
   const update = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }));
 
   const openExpenseStep = () => {
     if (!scopeIds.length || (!selectedOrders.length && !isManual)) return notify("Choose one or more orders or Other reason first.", "error");
     if (isManual && !text(manualReason)) return notify("Write the expense reason.", "error");
     if (!date) return notify("Choose the expense date first.", "error");
+    if (!destinationUserId || !destinationOptions.some((option) => option.value === destinationUserId)) {
+      return notify("Select a destination user before adding an expense.", "error");
+    }
     setStep("expense");
   };
 
   const addDraft = async () => {
     if (!date || !form.fundsType) return notify("Date and funds type are required.", "error");
+    if (!destinationOptions.some((option) => option.value === destinationUserId)) {
+      return notify("A valid destination user is required.", "error");
+    }
     if (!isOwnCar && number(form.amount) <= 0) return notify("Cash out amount is required.", "error");
     if (isOwnCar && (!text(form.kilometer) || number(form.kilometer) <= 0 || ownCarCostForKilometers(form.kilometer, ownCarRate) <= 0)) {
       return notify("Enter a valid distance greater than zero.", "error");
@@ -611,6 +623,7 @@ function CashOutModal({ fundsTypes, orderOptions, ownCarRate = DEFAULT_OWN_CAR_R
         selectedOrderKeys: isManual ? [] : selectedOrders.map((item) => text(item.id)),
         selectedOrderLabel: currentOrderLabel,
         expenseDate: date,
+        destinationUserId,
         screenshots: shots,
       }]);
       setForm({ fundsType: "", from: "", to: "", amount: "", kilometer: "" });
@@ -639,6 +652,7 @@ function CashOutModal({ fundsTypes, orderOptions, ownCarRate = DEFAULT_OWN_CAR_R
           reason: draft.reason,
           fundsType: draft.fundsType,
           date: draft.expenseDate,
+          destinationUserId: draft.destinationUserId,
           from: draft.from,
           to: draft.to,
           ...(typeKey(draft.fundsType) === "owncar" ? { kilometer: draft.kilometer } : { amount: draft.amount }),
@@ -726,6 +740,15 @@ function CashOutModal({ fundsTypes, orderOptions, ownCarRate = DEFAULT_OWN_CAR_R
 
       <ClassicFieldLabel icon="calendar">Date <span className="req-star">*</span></ClassicFieldLabel>
       <input type="date" className="ex-input" value={date} onChange={(event) => setDate(event.target.value)}/>
+
+      <ClassicFieldLabel icon="user">Destination <span className="req-star">*</span></ClassicFieldLabel>
+      <ClassicSelect
+        value={destinationUserId}
+        onChange={setDestinationUserId}
+        options={destinationOptions}
+        placeholder="Select destination..."
+        ariaLabel="Destination user"
+      />
 
       <button type="button" className="ex-btn ex-dark ex-btn--block ex-add-money" onClick={openExpenseStep} disabled={busy}><ClassicExpenseIcon name="money-add" size={23}/><span>Add Expense</span></button>
 
@@ -882,13 +905,13 @@ function ScreenshotModal({ transaction, onClose }) {
 
 
 export default function ExpensesDialogs({
-  modal = "", account, items = [], cashInPeople = [], fundsTypes = [], ownCarRate = DEFAULT_OWN_CAR_RATE_EGP_PER_KM, orderOptions = [],
+  modal = "", account, items = [], cashInPeople = [], destinationPeople = [], fundsTypes = [], ownCarRate = DEFAULT_OWN_CAR_RATE_EGP_PER_KM, orderOptions = [],
   screenshotTransaction = null, onClose, onSaved, notify, onCloseScreenshot,
 }) {
   return (
     <>
       {modal === "cash-in" ? <CashInModal options={cashInPeople} onClose={onClose} onSaved={onSaved} notify={notify} /> : null}
-      {modal === "cash-out" ? <CashOutModal fundsTypes={fundsTypes} orderOptions={orderOptions} ownCarRate={ownCarRate} onClose={onClose} onSaved={onSaved} notify={notify} /> : null}
+      {modal === "cash-out" ? <CashOutModal fundsTypes={fundsTypes} orderOptions={orderOptions} destinationPeople={destinationPeople} ownCarRate={ownCarRate} onClose={onClose} onSaved={onSaved} notify={notify} /> : null}
       {modal === "settle" ? <SettleModal onClose={onClose} onSaved={onSaved} notify={notify} /> : null}
       {modal === "export" ? <ExportModal account={account} items={items} onClose={onClose} notify={notify} /> : null}
       {screenshotTransaction ? <ScreenshotModal transaction={screenshotTransaction} onClose={onCloseScreenshot} /> : null}

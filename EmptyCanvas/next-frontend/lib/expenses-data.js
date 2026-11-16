@@ -177,6 +177,8 @@ function serializeExpense(row = {}) {
     date: dateValue(valueFor(row, ["expense_date", "Date", "date"])),
     reason: text(valueFor(row, ["reason", "Reason"])),
     fundsType: text(valueFor(row, ["funds_type", "Funds Type"])),
+    destinationUserId: text(valueFor(row, ["destination_user_id"])),
+    destinationUserName: text(valueFor(row, ["destination_user_name"])),
     from: text(valueFor(row, ["from_location", "From", "cash_in_from"])),
     to: text(valueFor(row, ["to_location", "To"])),
     kilometer: number(valueFor(row, ["kilometer", "Kilometer"]), 0),
@@ -247,6 +249,8 @@ const EXPENSE_ROW_SELECT = [
   "notion_created_time",
   "reason",
   "funds_type",
+  "destination_user_id",
+  "destination_user_name",
   "from_location",
   "to_location",
   "kilometer",
@@ -589,6 +593,15 @@ export async function expenseTypeOptions({ fresh = false } = {}) {
   } finally {
     if (!fresh && expenseTypeOptionsInflight === pending) expenseTypeOptionsInflight = null;
   }
+}
+
+export async function expenseDestinationOptions({ fresh = false } = {}) {
+  const rows = await listTeamMembersLite({ fresh });
+  return (Array.isArray(rows) ? rows : []).map((row) => ({
+    id: text(row?.id),
+    name: text(row?.name),
+    department: text(row?.department),
+  })).filter((member) => member.id && member.name);
 }
 
 export async function cashInFromOptions({ fresh = false } = {}) {
@@ -993,6 +1006,10 @@ export async function createExpenseCashOut(account = {}, payload = {}) {
   const fundsType = text(payload.fundsType);
   const date = text(payload.date);
   if (!fundsType || !date) throw expenseError("Missing required fields.", 400);
+  const destinationUserId = text(payload.destinationUserId);
+  if (!destinationUserId) throw expenseError("Destination is required.", 400);
+  const destination = (await expenseDestinationOptions()).find((member) => member.id === destinationUserId);
+  if (!destination) throw expenseError("Select a valid destination user.", 400);
   const fundsTypeKey = expenseFundsTypeKey(fundsType);
   const screenshotRequired = new Set(["owncar", "swvl", "gobus", "bybus", "train", "indrive", "uber", "uper", "didi"]);
   const hasScreenshot = (Array.isArray(payload.screenshots) && payload.screenshots.some((shot) => text(shot?.dataUrl || shot?.screenshotDataUrl))) || !!text(payload.screenshotDataUrl);
@@ -1028,6 +1045,8 @@ export async function createExpenseCashOut(account = {}, payload = {}) {
     reason,
     expense_date: date,
     funds_type: fundsType,
+    destination_user_id: destination.id,
+    destination_user_name: destination.name,
     from_location: text(payload.from),
     to_location: text(payload.to),
     cash_out: cashOutAmount,
