@@ -56,7 +56,7 @@ test('the picker uses the shared Operations Orders wrench, separate manual butto
   assert.match(jsx, /expense-orders-picker__chip-remove/);
   assert.match(jsx, /<ClassicExpenseIcon name="x" size=\{13\}/);
   assert.match(css, /\.expense-orders-picker__chip \.expense-orders-picker__chip-remove\{/);
-  assert.match(css, /\.expense-orders-menu__manual\{[^}]+background:#0c1222;color:#fff/);
+  assert.match(css, /\.expense-orders-menu__manual\{[^}]+background:#28354a;color:#fff/);
 });
 
 test('the export dynamically inserts distinct per-order links without changing totals', () => {

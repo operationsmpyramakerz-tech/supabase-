@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import ClassicOrderIcon from "../orders/ClassicOrderIcon";
 import { DEFAULT_OWN_CAR_RATE_EGP_PER_KM, ownCarCostForKilometers } from "../../lib/own-car-expense.mjs";
+import { expenseOrderMenuPosition } from "../../lib/expense-order-menu-position.mjs";
 
 const CASH_IN_TYPES = ["Cash Payment", "Online Transfer"];
 const SCREENSHOT_REQUIRED_KEYS = new Set(["owncar", "swvl", "gobus", "bybus", "train", "indrive", "uber", "uper", "didi"]);
@@ -310,15 +311,17 @@ function ExpenseOrderMultiSelect({ value = [], onChange, options = [] }) {
     const position = () => {
       const rect = rootRef.current?.getBoundingClientRect();
       if (!rect) return;
-      const margin = 12;
-      const width = Math.min(Math.max(rect.width, 290), window.innerWidth - margin * 2);
-      const left = Math.min(Math.max(margin, rect.left), window.innerWidth - width - margin);
-      const below = window.innerHeight - rect.bottom - margin;
-      const above = rect.top - margin;
-      const placeAbove = below < 270 && above > below;
-      const maxHeight = Math.max(170, Math.min(390, placeAbove ? above - 8 : below - 8));
-      const top = placeAbove ? Math.max(margin, rect.top - maxHeight - 8) : Math.min(window.innerHeight - maxHeight - margin, rect.bottom + 8);
-      setMenuStyle({ width, left, top, maxHeight, zIndex: 100500 });
+      const visualViewport = window.visualViewport;
+      // The Choose Order sheet sits at the bottom of phones: its menu must
+      // open UP so it is not hidden by the nav dock or the on-screen keyboard.
+      const viewport = {
+        top: visualViewport?.offsetTop ?? 0,
+        left: visualViewport?.offsetLeft ?? 0,
+        width: visualViewport?.width ?? window.innerWidth,
+        height: visualViewport?.height ?? window.innerHeight,
+      };
+      const preferAbove = window.matchMedia("(max-width: 768px)").matches;
+      setMenuStyle({ ...expenseOrderMenuPosition(rect, viewport, { preferAbove }), zIndex: 100500 });
     };
     const outside = (event) => {
       if (rootRef.current?.contains(event.target) || menuRef.current?.contains(event.target)) return;
@@ -328,11 +331,17 @@ function ExpenseOrderMultiSelect({ value = [], onChange, options = [] }) {
     position();
     window.addEventListener("resize", position);
     window.addEventListener("scroll", position, true);
+    // Android keyboard changes the visual viewport without always firing a
+    // window resize; recalculate the floating menu while typing.
+    window.visualViewport?.addEventListener("resize", position);
+    window.visualViewport?.addEventListener("scroll", position);
     document.addEventListener("mousedown", outside);
     document.addEventListener("keydown", escape);
     return () => {
       window.removeEventListener("resize", position);
       window.removeEventListener("scroll", position, true);
+      window.visualViewport?.removeEventListener("resize", position);
+      window.visualViewport?.removeEventListener("scroll", position);
       document.removeEventListener("mousedown", outside);
       document.removeEventListener("keydown", escape);
     };
@@ -354,7 +363,6 @@ function ExpenseOrderMultiSelect({ value = [], onChange, options = [] }) {
       <button type="button" className={`expense-orders-menu__manual${isManual ? " is-selected" : ""}`} aria-pressed={isManual} onClick={() => toggle(OTHER_SCOPE_ID)}>
         <ClassicExpenseIcon name="edit-3" size={17}/>
         <span><strong>Other reason</strong><small>Write the reason manually</small></span>
-        <ClassicExpenseIcon name="arrow-right" size={16}/>
       </button>
       <div className="expense-orders-menu__list">
         {filtered.length ? filtered.map((option) => {
