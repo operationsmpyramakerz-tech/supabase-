@@ -155,9 +155,9 @@ async function requestJson(url, options = {}) {
   return body;
 }
 
-function Modal({ title, subtitle, onClose, children, wide = false, footer = null }) {
+function Modal({ title, subtitle, onClose, children, wide = false, footer = null, variant = "" }) {
   return (
-    <div className="next-history-modal" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <div className={`next-history-modal ${variant}`} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <section className={`next-history-modal__card ${wide ? "is-wide" : ""}`} role="dialog" aria-modal="true" aria-label={title}>
         <header>
           <span>HI</span>
@@ -242,41 +242,48 @@ export function HistoryProfilePopover({ state, onClose }) {
   );
 }
 
+function HistoryDetailRow({ label, value }) {
+  return <div className="history-design-detail-row"><dt>{label}</dt><dd>{text(value) || "—"}</dd></div>;
+}
+
 export function HistoryDetailsModal({ row, onClose, onProfile, loadingDetails = false, detailsError = "" }) {
   const status = Number(row?.statusCode || 0);
+  const isError = status >= 400;
+  const fields = [
+    ["User", row?.actorName],
+    ["Page", row?.pageName],
+    ["Department", row?.actorDepartment],
+    ["Position", row?.actorPosition],
+    ["Action", row?.actionLabel],
+    ["Entity type", row?.entityType],
+    ["Entity ID", row?.entityId],
+    ["Entity label", row?.entityLabel],
+    ["Method", row?.method],
+    ["Status code", status || "—"],
+    ["Duration", formatDuration(row?.durationMs)],
+    ["IP address", row?.ipAddress],
+    ["Path", row?.path],
+    ["User agent", row?.userAgent],
+  ];
   return (
-    <Modal title={text(row?.actionLabel) || "History details"} subtitle={formatDateTime(row?.createdAt)} onClose={onClose} wide>
-      <div className="next-history-details">
-        <section className="next-history-details__headline">
-          <span className={`next-history-action-mark is-${actionTone(row)}`}>{actionMark(row)}</span>
-          <div><small>{text(row?.pageName) || "System"}</small><h3>{entityLabel(row)}</h3><p>{text(row?.actorName) || "System"}</p></div>
-          <span className={`next-history-status-code ${status >= 400 ? "is-error" : ""}`}>{status || "—"}</span>
-        </section>
-        <section className="next-history-detail-grid">
-          <DetailItem label="User" value={row?.actorName} />
-          <DetailItem label="Page" value={row?.pageName} />
-          <DetailItem label="Department" value={row?.actorDepartment} />
-          <DetailItem label="Position" value={row?.actorPosition} />
-          <DetailItem label="Action" value={row?.actionLabel} />
-          <DetailItem label="Entity type" value={row?.entityType} />
-          <DetailItem label="Entity ID" value={row?.entityId} />
-          <DetailItem label="Entity label" value={row?.entityLabel} />
-          <DetailItem label="Method" value={row?.method} />
-          <DetailItem label="Status code" value={row?.statusCode} />
-          <DetailItem label="Duration" value={formatDuration(row?.durationMs)} />
-          <DetailItem label="IP address" value={row?.ipAddress} />
-          <DetailItem label="Path" value={row?.path} wide />
-          <DetailItem label="User agent" value={row?.userAgent} wide />
-        </section>
-        {text(row?.actorId) ? <button type="button" className="next-history-profile-button" onClick={onProfile}>Open team member profile</button> : null}
-        {loadingDetails ? <div className="next-history-inline-error" style={{ borderColor: "#dbeafe", background: "#eff6ff", color: "#1d4ed8" }}>Loading full request details…</div> : null}
-        {detailsError ? <div className="next-history-inline-error">{detailsError}</div> : null}
-        <section className="next-history-json-grid">
-          <details><summary>Request query</summary><pre>{safeJson(row?.requestQuery)}</pre></details>
-          <details><summary>Request body</summary><pre>{safeJson(row?.requestBody)}</pre></details>
-          <details><summary>Extra details</summary><pre>{safeJson(row?.details)}</pre></details>
-        </section>
-      </div>
+    <Modal title={text(row?.actionLabel) || "History details"} subtitle={formatDateTime(row?.createdAt)} onClose={onClose} wide variant="history-design-modal">
+      <section className="history-design-detail-identity">
+        <span className="history-design-detail-avatar">{initials(row?.actorName)}</span>
+        <div className="history-design-detail-name"><small>{text(row?.pageName || "System").toUpperCase()}</small><strong>{text(row?.actorName) || "System"}</strong><span>{text(row?.pageName) || "System activity"}</span></div>
+        {status ? <span className={`history-design-detail-result ${isError ? "is-error" : ""}`}>{isError ? "Failed" : "Success"}</span> : null}
+      </section>
+      <section className="history-design-detail-panel">
+        <h3 className="history-design-detail-title">Activity details</h3>
+        <dl className="history-design-detail-list">{fields.map(([label, value]) => <HistoryDetailRow key={label} label={label} value={value}/>)}</dl>
+      </section>
+      {text(row?.actorId) ? <button type="button" className="next-history-profile-button" onClick={onProfile}>Open team member profile</button> : null}
+      {loadingDetails ? <div className="next-history-inline-error">Loading full event details…</div> : null}
+      {detailsError ? <div className="next-history-inline-error">{detailsError}</div> : null}
+      <section className="next-history-json-grid history-design-extra">
+        <details><summary>Request query</summary><pre>{safeJson(row?.requestQuery)}</pre></details>
+        <details><summary>Request body</summary><pre>{safeJson(row?.requestBody)}</pre></details>
+        <details><summary>Extra details</summary><pre>{safeJson(row?.details)}</pre></details>
+      </section>
     </Modal>
   );
 }

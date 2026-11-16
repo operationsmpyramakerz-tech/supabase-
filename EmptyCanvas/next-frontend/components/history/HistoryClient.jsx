@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 30;
+const FETCH_SIZE = 250;
+const CATEGORY_FILTERS = ["All", "Login", "Orders", "Projects", "System"];
 
 const HistoryFilterModal = dynamic(
   () => import("./HistoryDialogs").then((module) => module.HistoryFilterModal),
@@ -107,6 +109,24 @@ function formatCardDateTime(value) {
   return `${datePart} - ${timePart}`;
 }
 
+function activityCategory(row) {
+  const value = lower(`${row?.pageName || ""} ${row?.actionLabel || ""} ${row?.entityType || ""}`);
+  if (/sign(ed)?[ -]?(in|out)|login|logout|account|auth/.test(value)) return "Login";
+  if (/orders?|shopping|maintenance|stock|product|kit|proposal|requisition/.test(value)) return "Orders";
+  if (/projects?|preparing|stage|cartons|testing|box distribution/.test(value)) return "Projects";
+  return "System";
+}
+
+function relativeTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Unknown time";
+  const delta = Date.now() - date.getTime();
+  if (delta >= 0 && delta < 60000) return "Just now";
+  if (delta >= 0 && delta < 3600000) return `${Math.floor(delta / 60000)}m ago`;
+  if (delta >= 0 && delta < 86400000) return `${Math.floor(delta / 3600000)}h ago`;
+  return formatCardDateTime(value);
+}
+
 function HistoryIcon({ name }) {
   const common = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true };
   const paths = {
@@ -114,6 +134,15 @@ function HistoryIcon({ name }) {
     trash: <><path d="M3 6h18"/><path d="M8 6V4.5A1.5 1.5 0 0 1 9.5 3h5A1.5 1.5 0 0 1 16 4.5V6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></>,
     user: <><path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/></>,
     search: <><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></>,
+    refresh: <><path d="M20 11a8 8 0 0 0-14-5L4 8"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14 5l2-2"/><path d="M20 20v-4h-4"/></>,
+    calendar: <><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18"/></>,
+    clock: <><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></>,
+    eye: <><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="3"/></>,
+    login: <><rect x="11" y="3" width="10" height="18" rx="2"/><path d="M3 12h13m-4-4 4 4-4 4"/></>,
+    order: <><circle cx="9" cy="20" r="1"/><circle cx="19" cy="20" r="1"/><path d="M2 3h2l3 13h13l2-9H6"/></>,
+    edit: <><path d="M12 4H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2v-7"/><path d="m10 14 2-.4 9-9a2 2 0 0 0-3-3l-9 9L9 13Z"/></>,
+    database: <><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 4 18 4 18 0V5M3 12c0 4 18 4 18 0"/></>,
+    chevron: <path d="m9 18 6-6-6-6"/>,
   };
   return <svg {...common}>{paths[name] || paths.filter}</svg>;
 }
@@ -151,9 +180,16 @@ function Toast({ toast, onClose }) {
   );
 }
 
-export default function HistoryClient({ initialRows, bootstrapWarnings = [], canClear = true }) {
+export default function HistoryClient({ initialRows, bootstrapWarnings = [], canClear = true, initialHasMore = false, initialNextOffset = 0 }) {
   const [rows, setRows] = useState(Array.isArray(initialRows) ? initialRows : []);
   const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("All");
+  const [hasMore, setHasMore] = useState(initialHasMore);
+  const [nextOffset, setNextOffset] = useState(initialNextOffset);
+  const [fetchingMore, setFetchingMore] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [lastChecked, setLastChecked] = useState(null);
   const [page, setPage] = useState("");
   const [actor, setActor] = useState("");
   const [action, setAction] = useState("");
@@ -171,7 +207,7 @@ export default function HistoryClient({ initialRows, bootstrapWarnings = [], can
 
   useEffect(() => {
     setVisibleLimit(PAGE_SIZE);
-  }, [search, page, actor, action, date, status, sort]);
+  }, [search, category, page, actor, action, date, status, sort]);
 
   useEffect(() => {
     const modalOpen = !!selected || showClear || showFilters;
@@ -221,6 +257,63 @@ export default function HistoryClient({ initialRows, bootstrapWarnings = [], can
     return () => window.clearTimeout(timer);
   }, [toast]);
 
+  async function loadRecent({ silent = false } = {}) {
+    if (!silent) setRefreshing(true);
+    try {
+      const payload = await requestJson(`/next/api/history?limit=${FETCH_SIZE}&offset=0&_fresh=1`);
+      const incoming = Array.isArray(payload?.rows) ? payload.rows : [];
+      setRows((current) => {
+        const map = new Map();
+        for (const entry of [...incoming, ...current]) map.set(text(entry?.id) || `${entry?.createdAt}:${entry?.actionLabel}`, entry);
+        return [...map.values()].sort((a, b) => dateValue(b?.createdAt) - dateValue(a?.createdAt));
+      });
+      setLastChecked(new Date().toISOString());
+      setLoadError("");
+    } catch (error) {
+      setLoadError(error?.message || "Could not refresh activity.");
+    } finally {
+      if (!silent) setRefreshing(false);
+    }
+  }
+
+  async function loadMore() {
+    if (!hasMore || fetchingMore) return;
+    setFetchingMore(true);
+    try {
+      const payload = await requestJson(`/next/api/history?limit=${FETCH_SIZE}&offset=${nextOffset}&_fresh=1`);
+      const incoming = Array.isArray(payload?.rows) ? payload.rows : [];
+      setRows((current) => {
+        const map = new Map();
+        for (const entry of [...current, ...incoming]) map.set(text(entry?.id) || `${entry?.createdAt}:${entry?.actionLabel}`, entry);
+        return [...map.values()].sort((a, b) => dateValue(b?.createdAt) - dateValue(a?.createdAt));
+      });
+      setNextOffset(Number(payload?.nextOffset || nextOffset + FETCH_SIZE));
+      setHasMore(Boolean(payload?.hasMore));
+      setLoadError("");
+    } catch (error) {
+      setLoadError(error?.message || "Could not load older records.");
+    } finally { setFetchingMore(false); }
+  }
+
+  useEffect(() => {
+    // Refresh on visible-tab focus and while History stays open; no fake client-side audit events.
+    const onFocus = () => { if (document.visibilityState === "visible") void loadRecent({ silent: true }); };
+    document.addEventListener("visibilitychange", onFocus);
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") void loadRecent({ silent: true });
+    }, 60000);
+    return () => { document.removeEventListener("visibilitychange", onFocus); window.clearInterval(interval); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const overview = useMemo(() => {
+    const today = dateKey(new Date());
+    const actors = new Set(rows.map((entry) => text(entry?.actorId) || text(entry?.actorName)).filter(Boolean));
+    const latest = rows.reduce((best, entry) => dateValue(entry?.createdAt) > dateValue(best) ? entry?.createdAt : best, null);
+    return { todayCount: rows.filter((entry) => dateKey(entry?.createdAt) === today).length, users: actors.size, latest };
+  }, [rows]);
+  const isStale = overview.latest && (Date.now() - dateValue(overview.latest)) > 7 * 24 * 60 * 60 * 1000;
+
   const pages = useMemo(() => Array.from(new Set(rows.map((row) => text(row?.pageName)).filter(Boolean))).sort((a, b) => a.localeCompare(b)), [rows]);
   const actors = useMemo(() => Array.from(new Set(rows.map((row) => text(row?.actorName)).filter(Boolean))).sort((a, b) => a.localeCompare(b)), [rows]);
   const actions = useMemo(() => Array.from(new Set(rows.map((row) => text(row?.actionLabel)).filter(Boolean))).sort((a, b) => a.localeCompare(b)), [rows]);
@@ -228,6 +321,7 @@ export default function HistoryClient({ initialRows, bootstrapWarnings = [], can
   const filtered = useMemo(() => {
     const needle = lower(search);
     const result = rows.filter((row) => {
+      if (category !== "All" && activityCategory(row) !== category) return false;
       if (page && text(row?.pageName) !== page) return false;
       if (actor && text(row?.actorName) !== actor) return false;
       if (action && text(row?.actionLabel) !== action) return false;
@@ -252,10 +346,11 @@ export default function HistoryClient({ initialRows, bootstrapWarnings = [], can
     });
     result.sort((a, b) => sort === "oldest" ? dateValue(a?.createdAt) - dateValue(b?.createdAt) : dateValue(b?.createdAt) - dateValue(a?.createdAt));
     return result;
-  }, [rows, search, page, actor, action, date, status, sort]);
+  }, [rows, search, category, page, actor, action, date, status, sort]);
 
   function clearFilters() {
     setSearch("");
+    setCategory("All");
     setPage("");
     setActor("");
     setAction("");
@@ -318,9 +413,10 @@ export default function HistoryClient({ initialRows, bootstrapWarnings = [], can
   }
 
   const currentFilters = { search, page, actor, action, date, status, sort };
-  const hasFilters = !!(search || page || actor || action || date || status !== "all" || sort !== "newest");
+  const hasFilters = !!(search || category !== "All" || page || actor || action || date || status !== "all" || sort !== "newest");
   const activeFilterText = useMemo(() => {
     const parts = [];
+    if (category !== "All") parts.push(`Category: ${category}`);
     if (page) parts.push(`Page: ${page}`);
     if (actor) parts.push(`User: ${actor}`);
     if (date) parts.push(`Date: ${formatShortDate(date)}`);
@@ -329,61 +425,49 @@ export default function HistoryClient({ initialRows, bootstrapWarnings = [], can
     if (sort !== "newest") parts.push("Oldest first");
     if (search) parts.push(`Search: ${search}`);
     return parts.length ? parts.join(" • ") : "No filters applied";
-  }, [search, page, actor, action, date, status, sort]);
+  }, [search, category, page, actor, action, date, status, sort]);
   const visibleRows = filtered.slice(0, visibleLimit);
 
   return (
     <main className="next-history-page">
       <Toast toast={toast} onClose={() => setToast(null)} />
 
-      <section className="next-history-list-card next-history-list-card--parity">
-        <header className="next-history-list-head--parity">
-          <div className="next-history-list-heading">
-            <span className="next-history-kicker">RECENT ACTIVITY</span>
-            <h3>System actions</h3>
-            <p title={activeFilterText}>{activeFilterText}</p>
-          </div>
-          <div className="next-history-list-actions--parity">
-            <button type="button" className={`next-history-filter-button ${hasFilters ? "is-active" : ""}`} onMouseEnter={preloadHistoryDialogs} onFocus={preloadHistoryDialogs} onClick={() => { preloadHistoryDialogs(); setShowFilters(true); }}>
-              <HistoryIcon name="filter"/><span>Filter by</span>{hasFilters ? <b aria-label="Filters active">•</b> : null}
-            </button>
-            <strong className="next-history-count-badge">{filtered.length} record{filtered.length === 1 ? "" : "s"}</strong>
-            {canClear ? <button type="button" className="next-history-delete-button" onMouseEnter={preloadHistoryDialogs} onFocus={preloadHistoryDialogs} onClick={() => { preloadHistoryDialogs(); setShowClear(true); }} aria-label="Delete all history" title="Delete all history">
-              <HistoryIcon name="trash"/>
-            </button> : null}
-          </div>
-          {bootstrapWarnings.length ? <div className="next-history-bootstrap-warning">{bootstrapWarnings.length} bootstrap warning{bootstrapWarnings.length === 1 ? "" : "s"}</div> : null}
-        </header>
-
-        <div className="next-history-list">
-          {visibleRows.length ? visibleRows.map((row, index) => {
-            const statusCode = Number(row?.statusCode || 0);
-            return (
-              <article className="next-history-row" key={text(row?.id) || `${row?.createdAt}-${index}`}>
-                <button type="button" className={`next-history-action-mark is-${actionTone(row)}`} onMouseEnter={preloadHistoryDialogs} onFocus={preloadHistoryDialogs} onClick={() => openDetails(row)} aria-label={`Open ${text(row?.actionLabel) || "history"} details`}>{actionMark(row)}</button>
-                <button type="button" className="next-history-row-main" onMouseEnter={preloadHistoryDialogs} onFocus={preloadHistoryDialogs} onClick={() => openDetails(row)}>
-                  <strong>{text(row?.actionLabel) || "System action"}</strong>
-                  <span>{entityLabel(row)}</span>
-                </button>
-                <div className="next-history-row-context">
-                  <span>{text(row?.pageName) || "System"}</span>
-                  <small>{text(row?.method) || "—"} {statusCode ? `• ${statusCode}` : ""}</small>
-                </div>
-                <button type="button" className="next-history-actor co-right-ico co-creator-btn" onMouseEnter={preloadHistoryDialogs} onFocus={preloadHistoryDialogs} onClick={(event) => openProfilePopover(event.currentTarget, row)} aria-label={`Created by ${text(row?.actorName) || "System"}`} title={`Created by ${text(row?.actorName) || "System"}`}>
-                  <span className="next-history-actor-initials">{initials(row?.actorName)}</span>
-                  <span className="next-history-actor-icon"><HistoryIcon name="user"/></span>
-                  <div><strong>{text(row?.actorName) || "System"}</strong><small>{text(row?.actorDepartment || row?.actorPosition) || "System activity"}</small></div>
-                </button>
-                <time>{formatCardDateTime(row?.createdAt)}</time>
-                <button type="button" className="next-history-open" onMouseEnter={preloadHistoryDialogs} onFocus={preloadHistoryDialogs} onClick={() => openDetails(row)}>View</button>
-              </article>
-            );
-          }) : (
-            <div className="next-history-empty"><span>0</span><strong>No history records found</strong><p>Change the filters to find the records you need.</p>{hasFilters ? <button type="button" onClick={clearFilters}>Clear filters</button> : null}</div>
-          )}
+      <div className="history-design-heading">
+        <div><span className="history-design-overline">ACTIVITY TRACKING</span><h1>History</h1><p>System actions across your ERP</p></div>
+        <button type="button" className="history-design-refresh" disabled={refreshing} onClick={() => loadRecent()} title="Refresh history"><HistoryIcon name="refresh"/><span>{refreshing ? "Refreshing..." : "Refresh"}</span></button>
+      </div>
+      <section className="history-design-stats" aria-label="History overview">
+        <div className="history-design-stat history-design-stat--accent"><span className="history-design-stat-icon"><HistoryIcon name="calendar"/></span><small>Today</small><strong>{overview.todayCount}</strong><em>In loaded history</em></div>
+        <div className="history-design-stat"><span className="history-design-stat-icon"><HistoryIcon name="user"/></span><small>All users</small><strong>{overview.users}</strong><em>In loaded history</em></div>
+        <div className="history-design-stat"><span className="history-design-stat-icon"><HistoryIcon name="clock"/></span><small>Last activity</small><strong className="history-design-stat-date">{overview.latest ? relativeTime(overview.latest) : "None"}</strong><em>{overview.latest ? formatShortDate(overview.latest) : "No records"}</em></div>
+      </section>
+      {isStale ? <div className="history-design-alert" role="status"><strong>Activity log may be inactive.</strong> The newest saved event is {formatCardDateTime(overview.latest)}. Refreshing can only show records that have been saved to Supabase.</div> : null}
+      {loadError ? <div className="history-design-alert is-error" role="alert">{loadError} <button type="button" onClick={() => loadRecent()}>Try again</button></div> : null}
+      <section className="history-design-workspace" aria-label="System activity history">
+        <div className="history-design-toolbar">
+          <label className="history-design-search"><HistoryIcon name="search"/><input aria-label="Search history" placeholder="Search activities, users, pages..." value={search} onChange={(event) => setSearch(event.target.value)} /></label>
+          <button type="button" className={`history-design-filter ${hasFilters ? "is-active" : ""}`} onClick={() => { preloadHistoryDialogs(); setShowFilters(true); }}><HistoryIcon name="filter"/><span>Filter</span>{hasFilters ? <b>•</b> : null}</button>
+          {canClear ? <button type="button" className="history-design-clear" onClick={() => { preloadHistoryDialogs(); setShowClear(true); }} title="Delete all history" aria-label="Delete all history"><HistoryIcon name="trash"/></button> : null}
         </div>
-
-        {visibleLimit < filtered.length ? <button type="button" className="next-history-show-more" onClick={() => setVisibleLimit((current) => current + PAGE_SIZE)}>Show {Math.min(PAGE_SIZE, filtered.length - visibleLimit)} more records</button> : null}
+        <div className="history-design-categories" role="group" aria-label="Activity category">
+          {CATEGORY_FILTERS.map((item) => <button type="button" className={category === item ? "is-selected" : ""} onClick={() => setCategory(item)} key={item}>{item}</button>)}
+        </div>
+        <div className="history-design-results"><div><strong>Recent activity</strong><span>{filtered.length} matching / {rows.length} loaded{hasMore ? " · Older records available" : ""}</span></div>{hasFilters ? <button type="button" onClick={clearFilters}>Clear filters</button> : null}</div>
+        {bootstrapWarnings.length ? <div className="history-design-alert">{bootstrapWarnings.length} data loading warning(s).</div> : null}
+        <div className="history-design-feed">
+          {visibleRows.length ? visibleRows.map((row, index) => {
+            const categoryName = activityCategory(row);
+            const iconName = categoryName === "Login" ? "login" : categoryName === "Orders" ? "order" : categoryName === "Projects" ? "edit" : "database";
+            return <article className="history-design-event" key={text(row?.id) || `${row?.createdAt}-${index}`}>
+              <button type="button" className={`history-design-event-icon is-${actionTone(row)}`} onClick={() => openDetails(row)} aria-label="View activity details"><HistoryIcon name={iconName}/></button>
+              <button type="button" className="history-design-event-main" onClick={() => openDetails(row)}><strong>{text(row?.actionLabel) || "System action"}</strong><span><HistoryIcon name="user"/>{text(row?.actorName) || "System"}</span><small><HistoryIcon name="clock"/>{relativeTime(row?.createdAt)}</small></button>
+              <div className="history-design-event-side"><span title={text(row?.pageName)}>{text(row?.pageName) || "System"}</span><button type="button" onClick={() => openDetails(row)} aria-label={`View ${text(row?.actionLabel)} details`}><HistoryIcon name="eye"/></button></div>
+            </article>;
+          }) : <div className="history-design-empty"><HistoryIcon name="search"/><strong>No activities found</strong><p>{hasFilters ? "Try removing some filters." : "No history events have been recorded yet."}</p>{hasFilters ? <button type="button" onClick={clearFilters}>Clear filters</button> : null}</div>}
+        </div>
+        {visibleLimit < filtered.length ? <button type="button" className="history-design-more" onClick={() => setVisibleLimit((current) => current + PAGE_SIZE)}>Show more results</button> : null}
+        {hasMore ? <button type="button" className="history-design-more history-design-more--secondary" disabled={fetchingMore} onClick={loadMore}>{fetchingMore ? "Loading older activity..." : "Load older records"}</button> : null}
+        {lastChecked ? <p className="history-design-last-check">Last checked: {formatCardDateTime(lastChecked)} · Automatically refreshes every minute</p> : null}
       </section>
 
       {showFilters ? <HistoryFilterModal
@@ -412,6 +496,8 @@ export default function HistoryClient({ initialRows, bootstrapWarnings = [], can
       {profilePopover ? <HistoryProfilePopover state={profilePopover} onClose={() => setProfilePopover(null)} /> : null}
       {showClear ? <HistoryClearModal onClose={() => setShowClear(false)} onCleared={() => {
         setRows([]);
+        setHasMore(false);
+        setNextOffset(0);
         clearFilters();
         setToast({ type: "success", title: "History deleted", message: "All system-history records were removed successfully." });
       }} /> : null}

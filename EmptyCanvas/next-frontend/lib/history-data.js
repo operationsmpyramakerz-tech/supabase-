@@ -2,7 +2,7 @@ import "server-only";
 
 import { isSupabaseConfigured, select } from "./supabase-rest";
 
-const DEFAULT_LIMIT = 1000;
+const DEFAULT_LIMIT = 250;
 const MAX_LIMIT = 1000;
 const CACHE_TTL_MS = 1_200;
 const SUMMARY_SELECT = [
@@ -39,6 +39,11 @@ function historyTable() {
 
 function ordersTable() {
   return text(process.env.SUPABASE_ORDERS_TABLE) || "orders";
+}
+
+function safeOffset(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(0, Math.min(1000000, Math.floor(parsed))) : 0;
 }
 
 function safeLimit(value) {
@@ -248,40 +253,49 @@ function serializeRow(row = {}, { orderMap = null, includeDetails = false } = {}
   return output;
 }
 
-async function rawHistoryRows(limit) {
+async function rawHistoryRows(limit, offset = 0) {
   const params = {
     select: SUMMARY_SELECT,
     order: "created_at.desc,id.desc",
     limit: String(limit),
+    offset: String(offset),
   };
   try {
     return await select(historyTable(), params, { profileName: "history.list" });
   } catch (projectionError) {
     // Compatibility with older history schemas while the rollout is gradual.
     try {
-      return await select(historyTable(), { select: "*", order: "created_at.desc,id.desc", limit: String(limit) }, { profileName: "history.list-fallback" });
+      return await select(historyTable(), { select: "*", order: "created_at.desc,id.desc", limit: String(limit), offset: String(offset) }, { profileName: "history.list-fallback" });
     } catch {
       throw projectionError;
     }
   }
 }
 
-export async function historyList({ limit = DEFAULT_LIMIT, fresh = false } = {}) {
+export async function historyList({ limit = DEFAULT_LIMIT, offset = 0, fresh = false } = {}) {
   if (!isSupabaseConfigured()) return null;
   const cleanLimit = safeLimit(limit);
-  const cacheKey = String(cleanLimit);
+  const cleanOffset = safeOffset(offset);
+  const cacheKey = `${cleanLimit}:${cleanOffset}`;
 
   if (!fresh && listCache?.key === cacheKey && listCache.expiresAt > Date.now()) return listCache.value;
   if (!fresh && listInflight?.key === cacheKey) return await listInflight.promise;
 
   const promise = (async () => {
-    const rawRows = await rawHistoryRows(cleanLimit);
-    const visibleRows = (Array.isArray(rawRows) ? rawRows : []).filter(visibleRow);
+    // Fetch one extra record to distinguish a full page from the end of the table.
+    const rawRows = await rawHistoryRows(cleanLimit + 1, cleanOffset);
+    const hasMore = Array.isArray(rawRows) && rawRows.length > cleanLimit;
+    const sourceRows = (Array.isArray(rawRows) ? rawRows : []).slice(0, cleanLimit);
+    const visibleRows = sourceRows.filter(visibleRow);
     const orderMap = await buildOrderMap(visibleRows);
     return {
       ok: true,
       source: "supabase-next",
       rows: visibleRows.map((row) => serializeRow(row, { orderMap, includeDetails: false })),
+      limit: cleanLimit,
+      offset: cleanOffset,
+      nextOffset: cleanOffset + sourceRows.length,
+      hasMore,
     };
   })();
 

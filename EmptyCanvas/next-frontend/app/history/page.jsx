@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
 import HistoryClient from "../../components/history/HistoryClient";
+import "./history.css";
 import { historyList } from "../../lib/history-data";
 import { getDirectAccountGate } from "../../lib/products-auth";
 import { featureGate } from "../../lib/feature-permissions-server";
@@ -38,7 +39,7 @@ export default async function HistoryPage() {
 
   let historyPayload = null;
   try {
-    historyPayload = await historyList({ limit: 1000, fresh: true });
+    historyPayload = await historyList({ limit: 250, offset: 0, fresh: true });
   } catch (directError) {
     return <UnavailableState message={directError?.message || "System History data is temporarily unavailable."} />;
   }
@@ -55,6 +56,8 @@ export default async function HistoryPage() {
       <HistoryClient
         initialRows={Array.isArray(historyPayload?.rows) ? historyPayload.rows : []}
         bootstrapWarnings={warnings}
+        initialHasMore={Boolean(historyPayload?.hasMore)}
+        initialNextOffset={Number(historyPayload?.nextOffset || 0)}
         canClear={featureAllowed(gate.account, "history.clear")}
       />
     </AppShell>

@@ -1,6 +1,7 @@
 import { exportAllBackupTables, exportBackupTable } from "../../../../lib/backup-direct";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
 import { featureGate } from "../../../../lib/feature-permissions-server";
+import { recordHistoryForAccount } from "../../../../lib/history-audit";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -23,6 +24,23 @@ export async function GET(request) {
     const scope = String(url.searchParams.get("scope") || "").trim().toLowerCase();
     const key = String(url.searchParams.get("key") || "").trim();
     const exported = scope === "all" ? await exportAllBackupTables() : await exportBackupTable(key);
+    try {
+      await recordHistoryForAccount({
+        account: gate.account,
+        memberId: gate.memberId,
+        pageName: "Backup",
+        pageKey: "backup",
+        actionLabel: "Exported backup",
+        actionKey: "backup.export",
+        entityType: "backup_table",
+        entityLabel: scope === "all" ? "All tables" : key,
+        method: "GET",
+        path: "/next/api/backup/export-direct",
+        statusCode: 200,
+      });
+    } catch (error) {
+      console.error("BACKUP_EXPORT_AUDIT_WRITE_FAILED", error);
+    }
     return new Response(exported.data, {
       status: 200,
       headers: {

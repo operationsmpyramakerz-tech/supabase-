@@ -25,11 +25,12 @@ export async function GET(request) {
   if (!permitted.ok) return response({ ok: false, error: permitted.error }, { status: permitted.status });
 
   const url = new URL(request.url);
-  const limit = url.searchParams.get("limit") || "1000";
+  const limit = url.searchParams.get("limit") || "250";
+  const offset = url.searchParams.get("offset") || "0";
   const fresh = url.searchParams.get("_fresh") === "1";
 
   try {
-    const payload = await historyList({ limit, fresh });
+    const payload = await historyList({ limit, offset, fresh });
     if (payload) return response(payload);
     return response({ ok: false, rows: [], error: "History data is not available." }, { status: 503 });
   } catch (error) {
@@ -55,6 +56,7 @@ export async function DELETE(request) {
     }
     const table = String(process.env.SUPABASE_HISTORY_TABLE || "operation_history").trim() || "operation_history";
     await supabaseRequest(`/${encodeURIComponent(table)}?id=not.is.null`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
+    // Invalidate any short-lived in-process list cache on subsequent reads.
     return response({ ok: true, source: "supabase-next" });
   } catch (error) {
     return response({ ok: false, error: error?.message || "Failed to clear history." }, { status: Number(error?.status) || 500 });
