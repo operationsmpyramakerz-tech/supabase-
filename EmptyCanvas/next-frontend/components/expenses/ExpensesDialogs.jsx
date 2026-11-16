@@ -359,10 +359,24 @@ function ExpenseOrderMultiSelect({ value = [], onChange, options = [] }) {
 
   const dropdown = open && menuStyle && typeof document !== "undefined" ? createPortal(
     <div className="expense-orders-menu" style={menuStyle} ref={menuRef} role="group" aria-label="Select expense orders">
-      <div className="expense-orders-menu__search"><ClassicExpenseIcon name="search" size={17}/><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search order number or user..." aria-label="Search orders"/><span className="expense-orders-menu__count">{selectedIds.length} selected</span></div>
+      <div className="expense-orders-menu__search"><ClassicExpenseIcon name="search" size={17}/><input
+        type="search"
+        name="expense-order-lookup"
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        placeholder="Search order number or user..."
+        aria-label="Search orders"
+        autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="none"
+        spellCheck={false}
+        enterKeyHint="search"
+        data-1p-ignore="true"
+        data-lpignore="true"
+      /><span className="expense-orders-menu__count">{selectedIds.length} selected</span></div>
       <button type="button" className={`expense-orders-menu__manual${isManual ? " is-selected" : ""}`} aria-pressed={isManual} onClick={() => toggle(OTHER_SCOPE_ID)}>
-        <ClassicExpenseIcon name="edit-3" size={17}/>
-        <span><strong>Other reason</strong><small>Write the reason manually</small></span>
+        <span className="expense-orders-menu__manual-icon" aria-hidden="true"><ClassicExpenseIcon name="edit-3" size={19}/></span>
+        <span className="expense-orders-menu__manual-copy"><strong>Other reason</strong><small>Write the reason manually</small></span>
       </button>
       <div className="expense-orders-menu__list">
         {filtered.length ? filtered.map((option) => {
