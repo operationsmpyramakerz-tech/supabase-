@@ -155,6 +155,7 @@ function ClassicExpenseIcon({ name, size = 18 }) {
     tag: <><path d="M20.6 13.4L11 3H4v7l9.6 9.6a2 2 0 0 0 2.8 0l4.2-4.2a2 2 0 0 0 0-2.8z"/><line x1="7" y1="7" x2="7.01" y2="7"/></>,
     "plus-circle": <><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></>,
     "money-add": <><rect x="2.5" y="4" width="15.5" height="12" rx="2"/><path d="M5.5 7h1M14 13h1"/><circle cx="10.2" cy="10" r="2.7"/><circle cx="18.2" cy="17.4" r="4.2" fill="#111111" stroke="currentColor"/><path d="M18.2 15.4v4M16.2 17.4h4"/></>,
+    "money-add-badge": <><rect x="2.5" y="4" width="15.5" height="12" rx="2"/><path d="M5.5 7h1M14 13h1"/><circle cx="10.2" cy="10" r="2.7"/><circle cx="18.2" cy="17.4" r="4.2"/><path d="M18.2 15.4v4M16.2 17.4h4"/></>,
     user: <><path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/></>,
     hash: <><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></>,
     upload: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></>,
@@ -208,7 +209,8 @@ function ClassicModal({ title, onClose, children, compact = false, bottomSheet =
     <div className={`ex-modal${bottomSheet ? " ex-modal--bottom-sheet" : ""}${flushBottom ? " ex-modal--flush-bottom" : ""}`} style={{ display: "flex" }} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <section className={`ex-modal-box${compact ? " ex-modal-box--compact" : ""}${bottomSheet ? " ex-modal-box--bottom-sheet" : ""}${flushBottom ? " ex-modal-box--flush-bottom" : ""}`} role="dialog" aria-modal="true" aria-label={title} onMouseDown={(event) => event.stopPropagation()}>
         {bottomSheet ? <span className="ex-modal-sheet-icon ex-modal-sheet-icon--cash-out" aria-hidden="true"><ClassicExpenseIcon name="arrow-up-right" size={28}/></span> : null}
-        {bottomSheet ? <div className="ex-modal-sheet-scroll">{modalContent}</div> : modalContent}
+        {flushBottom ? <span className="ex-modal-expense-icon" aria-hidden="true"><ClassicExpenseIcon name="money-add-badge" size={28}/></span> : null}
+        {bottomSheet ? <div className="ex-modal-sheet-scroll">{modalContent}</div> : flushBottom ? <div className="ex-modal-expense-scroll">{modalContent}</div> : modalContent}
       </section>
     </div>
   );
@@ -657,25 +659,6 @@ function CashOutModal({ fundsTypes, orderOptions, ownCarRate = DEFAULT_OWN_CAR_R
   if (step === "expense") {
     return <>
       <ClassicModal title="Add Expense" onClose={() => setStep("order")} flushBottom>
-        <div className="order-preview-card order-preview-card--inline order-preview-card--expense">
-          <div className="order-preview-label">Selected orders</div>
-          <div className="order-preview-entry">
-            <span className={`expense-orders-menu__icon expense-orders-menu__icon--${isManual ? "manual" : typeKey(selectedOrders[0]?.orderType).includes("maintenance") ? "maintenance" : typeKey(selectedOrders[0]?.orderType).includes("withdraw") ? "withdrawal" : "products"}`} aria-hidden="true">
-              {isManual ? <ClassicExpenseIcon name="edit-3" size={19}/> : <ExpensePickerTypeIcon name={typeKey(selectedOrders[0]?.orderType).includes("maintenance") ? "tool" : typeKey(selectedOrders[0]?.orderType).includes("withdraw") ? "log-out" : "shopping-cart"} size={19}/>}
-            </span>
-            <div className="order-preview-entry__details">
-              <div className="order-preview-entry__heading">
-                <strong>{isManual ? "Other reason" : selectedOrders[0]?.orderId || "Order"}</strong>
-                {!isManual && selectedOrders.length > 1 ? <span className="order-preview-entry__more" aria-label={`${selectedOrders.length - 1} additional selected orders`}>+{selectedOrders.length - 1}</span> : null}
-              </div>
-              <div className="order-preview-entry__meta" dir="auto">
-                {isManual ? text(manualReason) : [text(selectedOrders[0]?.createdByName), date ? formatDate(date) : ""].filter(Boolean).join(" · ")}
-              </div>
-            </div>
-            <button type="button" className="order-change-btn order-preview-entry__change" onClick={() => setStep("order")} disabled={busy}>Change</button>
-          </div>
-        </div>
-
         <ClassicFieldLabel icon="tag">Funds Type <span className="req-star">*</span></ClassicFieldLabel>
         <ClassicSelect
           value={form.fundsType}

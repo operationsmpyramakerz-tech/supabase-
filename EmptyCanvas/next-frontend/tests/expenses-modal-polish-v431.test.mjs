@@ -10,7 +10,7 @@ const page = read('../app/expenses/page.jsx');
 test('only the Cash out Add Expense modal gets the squared flush-to-bottom finish', () => {
   assert.match(dialogs, /function ClassicModal\(\{ title, onClose, children, compact = false, bottomSheet = false, flushBottom = false \}\)/);
   assert.match(dialogs, /<ClassicModal title="Add Expense" onClose=\{\(\) => setStep\("order"\)\} flushBottom>/);
-  assert.match(styles, /\.ex-modal-box--flush-bottom\s*\{[^}]*border-radius:\s*25px 25px 0 0/s);
+  assert.match(styles, /\.ex-modal-box--flush-bottom\s*\{[^}]*border-radius:\s*28px 28px 0 0/s);
 });
 
 test('Choose Order fills the bottom edge and has a centered floating cash-out icon', () => {
@@ -26,20 +26,19 @@ test('Choose Order fills the bottom edge and has a centered floating cash-out ic
   assert.match(styles, /\.ex-modal-box--bottom-sheet \.ex-modal-sheet-scroll\s*\{[^}]*overflow-y:\s*auto;/s);
 });
 
-test('expense card matches picker item presentation, shows date and +N for other orders', () => {
-  assert.match(dialogs, /className="order-preview-card order-preview-card--inline order-preview-card--expense"/);
-  assert.match(dialogs, /<ExpensePickerTypeIcon name=/);
-  assert.match(dialogs, /selectedOrders\[0\]\?\.orderId/);
-  assert.match(dialogs, /selectedOrders\.length > 1/);
-  assert.match(dialogs, /\+\{selectedOrders\.length - 1\}/);
-  assert.match(dialogs, /date \? formatDate\(date\) : ""/);
-  assert.match(dialogs, /className="order-change-btn order-preview-entry__change"/);
-  assert.match(styles, /\.order-preview-entry__more\s*\{/);
+test('Add Expense uses a full-width bottom sheet with floating Add Money, without an order preview', () => {
+  assert.doesNotMatch(dialogs, /className="order-preview-card order-preview-card--inline order-preview-card--expense"/);
+  assert.match(dialogs, /<span className="ex-modal-expense-icon" aria-hidden="true"><ClassicExpenseIcon name="money-add-badge" size=\{28\}\/><\/span>/);
+  assert.match(dialogs, /<div className="ex-modal-expense-scroll">\{modalContent\}<\/div>/);
+  assert.match(styles, /\.ex-modal--flush-bottom\s*\{[^}]*width:\s*100vw;[^}]*padding:\s*12px 0 0;/s);
+  assert.match(styles, /\.ex-modal-box--flush-bottom\s*\{[^}]*width:\s*100%;[^}]*max-width:\s*none;/s);
+  assert.match(styles, /\.ex-modal-box--flush-bottom \.ex-modal-expense-icon\s*\{[^}]*top:\s*-28px;[^}]*left:\s*50%;[^}]*width:\s*56px;[^}]*height:\s*56px;[^}]*transform:\s*translateX\(-50%\);[^}]*animation:\s*none !important;/s);
+  assert.match(styles, /\.ex-modal-box--flush-bottom \.ex-modal-expense-scroll\s*\{[^}]*overflow-y:\s*auto;/s);
 });
 
 test('backend order linking still receives every selected order (visual summary only)', () => {
   assert.match(dialogs, /selectedOrderIds: isManual \? \[\] : selectedOrders\.flatMap/);
   assert.match(dialogs, /selectedOrderKeys: isManual \? \[\] : selectedOrders\.map/);
   assert.match(dialogs, /orderKeys: draft\.selectedOrderKeys/);
-  assert.match(page, /expenses-classic-inline\.css\?v=v435-cash-out-centered/);
+  assert.match(page, /expenses-classic-inline\.css\?v=v436-add-expense-full-width/);
 });

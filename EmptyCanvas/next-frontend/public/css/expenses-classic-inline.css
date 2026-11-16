@@ -3016,3 +3016,72 @@ html[data-theme="dark"] body.expenses-page .order-preview-entry__change {
     padding-inline: 15px;
   }
 }
+
+
+/* V436 — Full-bleed Add Expense sheet with an independent, centered add-money badge.
+   The selected-order preview is intentionally absent from the expense step;
+   draft and persistence relations continue to use the original selection state. */
+body.expenses-page .ex-modal-box--flush-bottom .ex-modal-expense-icon {
+  display: none;
+}
+@media (max-width: 768px) {
+  body.expenses-page .ex-modal--flush-bottom {
+    box-sizing: border-box;
+    align-items: flex-end;
+    justify-content: center;
+    width: 100vw;
+    height: 100dvh;
+    inset: 0;
+    padding: 12px 0 0;
+    overflow: hidden;
+  }
+  body.expenses-page .ex-modal-box--flush-bottom {
+    position: relative;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    flex: 0 1 auto;
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    max-height: calc(100dvh - 44px);
+    margin: 0;
+    padding: 0;
+    border-radius: 28px 28px 0 0;
+    overflow: visible;
+    box-shadow: 0 -14px 42px rgba(15, 23, 42, .18);
+  }
+  body.expenses-page .ex-modal-box--flush-bottom .ex-modal-expense-icon {
+    display: grid;
+    place-items: center;
+    position: absolute;
+    z-index: 3;
+    top: -28px;
+    left: 50%;
+    width: 56px;
+    height: 56px;
+    margin: 0;
+    border-radius: 18px;
+    background: #111111;
+    color: #ffffff;
+    box-shadow: 0 16px 36px rgba(15, 23, 42, .20), 0 2px 8px rgba(15, 23, 42, .12);
+    transform: translateX(-50%);
+    animation: none !important;
+    pointer-events: none;
+  }
+  body.expenses-page .ex-modal-box--flush-bottom .ex-modal-expense-scroll {
+    box-sizing: border-box;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding: 68px 20px max(24px, env(safe-area-inset-bottom, 0px));
+    border-radius: inherit;
+  }
+}
+@media (max-width: 380px) {
+  body.expenses-page .ex-modal-box--flush-bottom .ex-modal-expense-scroll {
+    padding-inline: 15px;
+  }
+}
