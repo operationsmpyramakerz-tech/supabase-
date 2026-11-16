@@ -153,6 +153,7 @@ function ClassicExpenseIcon({ name, size = 18 }) {
     car: <><path d="M5 17h14"/><path d="M6 17l1-6h10l1 6"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></>,
     tag: <><path d="M20.6 13.4L11 3H4v7l9.6 9.6a2 2 0 0 0 2.8 0l4.2-4.2a2 2 0 0 0 0-2.8z"/><line x1="7" y1="7" x2="7.01" y2="7"/></>,
     "plus-circle": <><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></>,
+    "money-add": <><rect x="2.5" y="4" width="15.5" height="12" rx="2"/><path d="M5.5 7h1M14 13h1"/><circle cx="10.2" cy="10" r="2.7"/><circle cx="18.2" cy="17.4" r="4.2" fill="#111111" stroke="currentColor"/><path d="M18.2 15.4v4M16.2 17.4h4"/></>,
     user: <><path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/></>,
     hash: <><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></>,
     upload: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></>,
@@ -197,10 +198,11 @@ function Modal({ title, subtitle, onClose, children, footer, wide = false }) {
   );
 }
 
-function ClassicModal({ title, onClose, children, compact = false }) {
+function ClassicModal({ title, onClose, children, compact = false, bottomSheet = false }) {
   return (
-    <div className="ex-modal" style={{ display: "flex" }} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <section className={`ex-modal-box${compact ? " ex-modal-box--compact" : ""}`} role="dialog" aria-modal="true" aria-label={title} onMouseDown={(event) => event.stopPropagation()}>
+    <div className={`ex-modal${bottomSheet ? " ex-modal--bottom-sheet" : ""}`} style={{ display: "flex" }} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <section className={`ex-modal-box${compact ? " ex-modal-box--compact" : ""}${bottomSheet ? " ex-modal-box--bottom-sheet" : ""}`} role="dialog" aria-modal="true" aria-label={title} onMouseDown={(event) => event.stopPropagation()}>
+        {bottomSheet ? <span className="ex-modal-sheet-handle" aria-hidden="true"/> : null}
         <h3 className="ex-modal-title">{title}</h3>
         {children}
       </section>
@@ -371,7 +373,7 @@ function ExpenseOrderMultiSelect({ value = [], onChange, options = [] }) {
 
   return <div className="expense-orders-picker" ref={rootRef}>
     <button type="button" className={`expense-orders-picker__trigger${open ? " is-open" : ""}`} onClick={() => setOpen((current) => !current)} aria-haspopup="dialog" aria-expanded={open}>
-      <span className="expense-orders-picker__summary">{isManual ? <strong>Other reason</strong> : selected.length ? <><strong>{selected.length} {selected.length === 1 ? "selection" : "orders selected"}</strong><span>{selected.map((item) => item.label).join(", ")}</span></> : <span className="expense-orders-picker__placeholder">Select orders...</span>}</span>
+      <span className="expense-orders-picker__summary">{isManual ? <strong>Other reason</strong> : selected.length ? <strong>{selected.length} {selected.length === 1 ? "selection" : "selections"}</strong> : <span className="expense-orders-picker__placeholder">Select orders...</span>}</span>
       <ClassicExpenseIcon name="chevron-down" size={18}/>
     </button>
     {selected.length ? <div className="expense-orders-picker__chips" aria-label="Selected orders">{selected.map((option) => <span className="expense-orders-picker__chip" key={option.value}><span className={`expense-orders-picker__chip-icon expense-orders-picker__chip-icon--${option.tone || "products"}`}><ExpensePickerTypeIcon name={option.icon || "shopping-cart"} size={15}/></span><span className="expense-orders-picker__chip-label">{option.label}</span><button type="button" className="expense-orders-picker__chip-remove" onClick={() => onChange(selectedIds.filter((id) => id !== option.value))} aria-label={`Remove ${option.label}`}><ClassicExpenseIcon name="x" size={13}/></button></span>)}</div> : null}
@@ -696,8 +698,7 @@ function CashOutModal({ fundsTypes, orderOptions, ownCarRate = DEFAULT_OWN_CAR_R
   }
 
   return (
-    <ClassicModal title="Choose Order" onClose={onClose} compact>
-      <p className="order-picker-hint">Select one or more orders and a date, then add expenses before confirming.</p>
+    <ClassicModal title="Choose Order" onClose={onClose} compact bottomSheet>
 
       <ClassicFieldLabel icon="file-text">Orders <span className="req-star">*</span></ClassicFieldLabel>
       <ExpenseOrderMultiSelect value={scopeIds} onChange={setScopeIds} options={scopeOptions}/>
@@ -710,7 +711,7 @@ function CashOutModal({ fundsTypes, orderOptions, ownCarRate = DEFAULT_OWN_CAR_R
       <ClassicFieldLabel icon="calendar">Date <span className="req-star">*</span></ClassicFieldLabel>
       <input type="date" className="ex-input" value={date} onChange={(event) => setDate(event.target.value)}/>
 
-      <button type="button" className="ex-btn ex-dark ex-btn--block" onClick={openExpenseStep} disabled={busy}>Add Expense</button>
+      <button type="button" className="ex-btn ex-dark ex-btn--block ex-add-money" onClick={openExpenseStep} disabled={busy}><ClassicExpenseIcon name="money-add" size={23}/><span>Add Expense</span></button>
 
       {drafts.length ? <div className="expense-drafts">
         <div className="expense-drafts__header"><span className="expense-drafts__title">Added expenses</span><span className="expense-drafts__count">{drafts.length}</span></div>
@@ -722,8 +723,8 @@ function CashOutModal({ fundsTypes, orderOptions, ownCarRate = DEFAULT_OWN_CAR_R
       </div> : null}
 
       <div className="ex-modal-actions">
-        <button type="button" className="ex-btn ex-primary" onClick={confirm} disabled={busy || !drafts.length}>{busy ? "Saving..." : drafts.length ? `Confirm (${drafts.length})` : "Confirm"}</button>
-        <button type="button" className="ex-btn ex-danger" onClick={onClose} disabled={busy}>Close</button>
+        <button type="button" className="ex-btn ex-confirm" onClick={confirm} disabled={busy || !drafts.length}>{busy ? "Saving..." : drafts.length ? `Confirm (${drafts.length})` : "Confirm"}</button>
+        <button type="button" className="ex-btn ex-danger" onClick={onClose} disabled={busy}>Cancel</button>
       </div>
     </ClassicModal>
   );
