@@ -14,6 +14,7 @@ function formatDateTime(date) {
       year: "numeric",
       hour: "2-digit",
       minute: "2-digit",
+      timeZone: "Africa/Cairo",
     });
   } catch {
     return String(date || "-");
@@ -207,7 +208,7 @@ function buildComponentLogs(params = {}) {
       : [],
     logIndex: 0,
     logLabel: "Log One",
-    loggedAt: params.reportDate || null,
+    loggedAt: params.logDate || null,
     technicianName: ensureText(params.technicianName, "—"),
   }));
 }
@@ -320,7 +321,7 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
     const heights = [
       drawMetaCard(mL, y, colW, "Team Member", params.teamMember || params.requestedBy),
       drawMetaCard(mL + (colW + gap), y, colW, "Order ID", params.orderId),
-      drawMetaCard(mL + (colW + gap) * 2, y, colW, "Date", formatDateTime(params.reportDate || params.createdAt || new Date())),
+      drawMetaCard(mL + (colW + gap) * 2, y, colW, "Request Date", params.createdAt ? formatDateTime(params.createdAt) : "—"),
     ];
     doc.y = y + Math.max(...heights) + 14;
   };
@@ -676,7 +677,7 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
     const gap = 8;
     const fieldW = (w - gap) / 2;
     const techH = measureSmallField(fieldW, item?.technicianName || "—");
-    const when = item?.loggedAt ? formatDateTime(item.loggedAt) : formatDateTime(params.reportDate || new Date());
+    const when = item?.loggedAt ? formatDateTime(item.loggedAt) : "—";
     const dateH = measureSmallField(fieldW, when);
     return Math.max(techH, dateH);
   };
@@ -684,9 +685,9 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
   const drawLogMeta = (x, y, w, item) => {
     const gap = 8;
     const fieldW = (w - gap) / 2;
-    const when = item?.loggedAt ? formatDateTime(item.loggedAt) : formatDateTime(params.reportDate || new Date());
+    const when = item?.loggedAt ? formatDateTime(item.loggedAt) : "—";
     const techH = drawSmallField(x, y, fieldW, "Technician Name", item?.technicianName || "—");
-    const dateH = drawSmallField(x + fieldW + gap, y, fieldW, "Date", when);
+    const dateH = drawSmallField(x + fieldW + gap, y, fieldW, "Log Date", when);
     return Math.max(techH, dateH);
   };
 

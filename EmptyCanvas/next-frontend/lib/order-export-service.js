@@ -756,19 +756,11 @@ async function renderMaintenancePdf({ payload, template = false, sparePartColumn
       sparePartsNeededEntries: item?.sparePartsNeededEntries || [],
       sparePartsReplacedEntries: item?.sparePartsReplacedEntries || [],
       maintenanceChecklist: item?.maintenanceChecklist || [],
-      loggedAt: item?.maintenanceLoggedAt || item?.updatedTime || null,
+      loggedAt: item?.maintenanceLoggedAt || null,
       technicianName: item?.maintenanceTechnicianName || null,
     }] : [];
   };
   const allLogs = maintenanceItems.flatMap(historyForItem);
-  const explicitLogDates = allLogs
-    .map((entry) => entry?.loggedAt)
-    .filter(Boolean)
-    .map((value) => new Date(value))
-    .filter((value) => !Number.isNaN(value.getTime()));
-  const reportDate = template
-    ? new Date()
-    : (explicitLogDates.length ? new Date(Math.max(...explicitLogDates.map((value) => value.getTime()))) : new Date());
   const latestLog = [...allLogs]
     .filter((entry) => entry?.loggedAt)
     .sort((a, b) => new Date(b.loggedAt).getTime() - new Date(a.loggedAt).getTime())[0] || allLogs[allLogs.length - 1] || null;
@@ -813,7 +805,6 @@ async function renderMaintenancePdf({ payload, template = false, sparePartColumn
     template,
     orderId: payload.orderIdRange,
     createdAt: payload.createdAt,
-    reportDate,
     technicianName: latestLog?.technicianName || "—",
     requestedBy: payload.teamMember,
     teamMember: payload.teamMember,
