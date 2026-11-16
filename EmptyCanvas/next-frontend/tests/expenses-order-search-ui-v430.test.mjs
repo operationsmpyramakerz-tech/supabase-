@@ -44,5 +44,5 @@ test('multi-select and upward opening remain intact and stylesheet cache is upda
   assert.match(dialogs, /const filtered = options.filter/);
   assert.match(dialogs, /onChange\(existing.includes\(id\)/);
   assert.match(dialogs, /expenseOrderMenuPosition\(rect, viewport, \{ preferAbove \}\)/);
-  assert.match(page, /expenses-classic-inline\.css\?v=v439-destination-button-spacing/);
+  assert.match(page, /expenses-classic-inline\.css\?v=v440-titles-funds-cards/);
 });

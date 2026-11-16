@@ -32,7 +32,7 @@ test('the Add Expense action shows an add-money icon and confirmation uses green
   assert.match(dialogs, /className="ex-btn ex-confirm" onClick=\{confirm\}/);
   assert.match(dialogs, /className="ex-btn ex-danger" onClick=\{onClose\} disabled=\{busy\}>Cancel<\/button>/);
   assert.match(styles, /\.ex-modal-box--bottom-sheet \.ex-confirm \{\s*background: #12ad49/);
-  assert.match(page, /expenses-classic-inline\.css\?v=v439-destination-button-spacing/);
+  assert.match(page, /expenses-classic-inline\.css\?v=v440-titles-funds-cards/);
 });
 
 test('multi-order selection and expense drafting remain intact', () => {

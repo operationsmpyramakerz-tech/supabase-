@@ -3212,3 +3212,144 @@ html[data-theme="dark"] body.expenses-page .expense-destination-menu__card.is-se
 body.expenses-page .ex-modal-box--bottom-sheet .expense-destination-picker + .ex-add-money {
   margin-top: 16px;
 }
+
+
+/* V440 — Center only the two Cash Out sheet headings; keep badges anchored. */
+body.expenses-page .ex-modal-box--bottom-sheet .ex-modal-title,
+body.expenses-page .ex-modal-box--flush-bottom .ex-modal-title {
+  width: 100%;
+  text-align: center;
+  margin-left: auto;
+  margin-right: auto;
+  line-height: 1.24;
+}
+/* The Funds Type dropdown is portalled into document.body. */
+body.expenses-page .funds-select__menu {
+  padding: 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 20px 42px rgba(15, 23, 42, .18);
+}
+body.expenses-page .funds-select__cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+body.expenses-page .funds-select__card {
+  box-sizing: border-box;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 11px;
+  min-height: 72px;
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  background: #fff;
+  color: #111827;
+  box-shadow: none;
+  text-align: left;
+  transform: none;
+}
+body.expenses-page .funds-select__card:hover,
+body.expenses-page .funds-select__card:focus-visible {
+  background: #fafafa;
+  border-color: #fbbf77;
+  box-shadow: none;
+  transform: none;
+}
+body.expenses-page .funds-select__card:focus-visible {
+  outline: 2px solid #f97316;
+  outline-offset: -2px;
+}
+body.expenses-page .funds-select__card.is-selected {
+  background: #fff7ed;
+  border-color: #fb923c;
+  box-shadow: inset 0 0 0 1px rgba(249, 115, 22, .12);
+}
+body.expenses-page .funds-select__card-icon {
+  box-sizing: border-box;
+  flex: 0 0 40px;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: #fff1e6;
+  color: #c2410c;
+}
+body.expenses-page .funds-select__option-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 3px;
+}
+body.expenses-page .funds-select__option-main .order-select__option-id {
+  max-width: 100%;
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.3;
+  font-weight: 800;
+}
+body.expenses-page .funds-select__option-note {
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.35;
+  font-weight: 600;
+  white-space: normal;
+}
+body.expenses-page .funds-select__badge {
+  flex: 0 0 auto;
+  max-width: 100px;
+  padding: 5px 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 10px;
+  font-weight: 800;
+  text-align: center;
+  white-space: nowrap;
+}
+body.expenses-page .funds-select__badge--orange {
+  background: #fff7ed;
+  color: #c2410c;
+  border-color: #fed7aa;
+}
+body.expenses-page .funds-select__badge--violet {
+  background: #f5f3ff;
+  color: #6d28d9;
+  border-color: #ddd6fe;
+}
+@media (max-width: 390px) {
+  body.expenses-page .funds-select__card { gap: 8px; padding: 9px 10px; }
+  body.expenses-page .funds-select__card-icon { flex-basis: 36px; width: 36px; height: 36px; }
+  body.expenses-page .funds-select__badge { padding: 5px 6px; font-size: 9px; }
+}
+html[data-theme="dark"] body.expenses-page .funds-select__menu,
+html[data-theme="dark"] body.expenses-page .funds-select__card {
+  background: #151d29;
+  color: #f8fafc;
+  border-color: #354254;
+}
+html[data-theme="dark"] body.expenses-page .funds-select__card:hover,
+html[data-theme="dark"] body.expenses-page .funds-select__card:focus-visible {
+  background: #202c3b;
+  border-color: #fb923c;
+}
+html[data-theme="dark"] body.expenses-page .funds-select__card.is-selected {
+  background: #3b2b20;
+  border-color: #fb923c;
+}
+html[data-theme="dark"] body.expenses-page .funds-select__option-main .order-select__option-id { color: #f8fafc; }
+html[data-theme="dark"] body.expenses-page .funds-select__option-note { color: #b2bfd0; }
+html[data-theme="dark"] body.expenses-page .funds-select__badge--neutral {
+  color: #cbd5e1;
+  background: #273447;
+  border-color: #39495c;
+}

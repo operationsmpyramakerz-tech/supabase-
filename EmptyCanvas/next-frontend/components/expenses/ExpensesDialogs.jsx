@@ -70,6 +70,15 @@ function fundsTypeOption(value) {
   };
 }
 
+// UI-only classification: never changes the chosen funds type or receipt checks.
+function fundsTypeIcon(value) {
+  const key = typeKey(value);
+  if (key === "owncar" || ["uber", "uper", "indrive", "didi"].includes(key)) return "car";
+  if (["swvl", "gobus", "bybus", "train"].includes(key)) return "navigation";
+  if (["onlinetransfer", "cashpayment"].includes(key)) return "credit-card";
+  return "tag";
+}
+
 function responseFileName(response, fallback) {
   const disposition = response.headers.get("content-disposition") || "";
   const match = disposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
@@ -238,15 +247,20 @@ function ClassicSelect({ value, onChange, options = [], placeholder = "Select…
       const trigger = rootRef.current?.querySelector(".order-select__trigger");
       if (!trigger) return;
       const rect = trigger.getBoundingClientRect();
-      const viewportPad = 16;
+      const viewportPad = 12;
+      const gap = 6;
       const width = Math.min(rect.width, window.innerWidth - viewportPad * 2);
       const left = Math.min(Math.max(viewportPad, rect.left), window.innerWidth - viewportPad - width);
-      const spaceBelow = Math.max(120, window.innerHeight - rect.bottom - viewportPad);
-      const spaceAbove = Math.max(120, rect.top - viewportPad);
-      const placeAbove = spaceBelow < 220 && spaceAbove > spaceBelow;
-      const availableSpace = placeAbove ? spaceAbove : spaceBelow;
-      const maxHeight = Math.min(360, availableSpace);
-      const top = placeAbove ? Math.max(viewportPad, rect.top - maxHeight - 8) : Math.min(window.innerHeight - viewportPad - maxHeight, rect.bottom + 8);
+      const spaceBelow = Math.max(0, window.innerHeight - rect.bottom - gap - viewportPad);
+      const spaceAbove = Math.max(0, rect.top - gap - viewportPad);
+      // Base placement on the actual number of cards, not an empty fixed box.
+      const idealHeight = Math.min(344, normalized.length * 78 + Math.max(0, normalized.length - 1) * 8 + 16);
+      const placeAbove = spaceBelow < Math.min(idealHeight, 230) && spaceAbove > spaceBelow;
+      const available = placeAbove ? spaceAbove : spaceBelow;
+      const maxHeight = Math.min(idealHeight, Math.max(100, available));
+      const top = placeAbove
+        ? Math.max(viewportPad, rect.top - gap - maxHeight)
+        : Math.min(window.innerHeight - viewportPad - maxHeight, rect.bottom + gap);
       setMenuStyle({ left, top, width, maxHeight, zIndex: 100500 });
     };
     const closeOutside = (event) => {
@@ -265,19 +279,20 @@ function ClassicSelect({ value, onChange, options = [], placeholder = "Select…
       document.removeEventListener("mousedown", closeOutside);
       document.removeEventListener("keydown", closeEscape);
     };
-  }, [open]);
+  }, [open, normalized.length]);
 
   const dropdown = open && menuStyle && typeof document !== "undefined" ? createPortal(
-    <div ref={menuRef} className="order-select__dropdown" style={menuStyle} role="listbox" aria-label={ariaLabel}>
-      <div className="order-select__options" style={{ maxHeight: Math.max(120, Math.min(260, menuStyle.maxHeight - 24)) }}>
+    <div ref={menuRef} className="order-select__dropdown funds-select__menu" style={menuStyle} role="listbox" aria-label={ariaLabel}>
+      <div className="order-select__options funds-select__cards" style={{ maxHeight: Math.max(80, menuStyle.maxHeight - 16) }}>
         {normalized.length ? normalized.map((option) => {
           const active = option.value === text(value);
-          return <button type="button" className={`order-select__option${active ? " is-selected" : ""}`} role="option" aria-selected={active} key={option.value} onClick={() => { onChange(option.value); setOpen(false); }}>
-            <span className={option.note ? "funds-select__option-main" : "order-select__option-main"}>
+          return <button type="button" className={`order-select__option funds-select__card${active ? " is-selected" : ""}`} role="option" aria-selected={active} key={option.value} onClick={() => { onChange(option.value); setOpen(false); }}>
+            <span className="funds-select__card-icon" aria-hidden="true"><ClassicExpenseIcon name={fundsTypeIcon(option.value)} size={20}/></span>
+            <span className="funds-select__option-main">
               <span className="order-select__option-id">{option.label}</span>
               {option.note ? <span className="funds-select__option-note">{option.note}</span> : null}
             </span>
-            {option.badge ? <span className="order-select__chip" style={option.tone === "orange" ? { "--order-chip-bg": "#fff7ed", "--order-chip-fg": "#c2410c", "--order-chip-border": "#fed7aa" } : undefined}>{option.badge}</span> : null}
+            {option.badge ? <span className={`funds-select__badge funds-select__badge--${option.tone || "neutral"}`}>{option.badge}</span> : null}
           </button>;
         }) : <div className="order-select__status">No options available right now.</div>}
       </div>
