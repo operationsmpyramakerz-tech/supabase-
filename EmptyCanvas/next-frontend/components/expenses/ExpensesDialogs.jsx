@@ -199,11 +199,12 @@ function Modal({ title, subtitle, onClose, children, footer, wide = false }) {
   );
 }
 
-function ClassicModal({ title, onClose, children, compact = false, bottomSheet = false }) {
+function ClassicModal({ title, onClose, children, compact = false, bottomSheet = false, flushBottom = false }) {
   return (
-    <div className={`ex-modal${bottomSheet ? " ex-modal--bottom-sheet" : ""}`} style={{ display: "flex" }} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <section className={`ex-modal-box${compact ? " ex-modal-box--compact" : ""}${bottomSheet ? " ex-modal-box--bottom-sheet" : ""}`} role="dialog" aria-modal="true" aria-label={title} onMouseDown={(event) => event.stopPropagation()}>
+    <div className={`ex-modal${bottomSheet ? " ex-modal--bottom-sheet" : ""}${flushBottom ? " ex-modal--flush-bottom" : ""}`} style={{ display: "flex" }} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <section className={`ex-modal-box${compact ? " ex-modal-box--compact" : ""}${bottomSheet ? " ex-modal-box--bottom-sheet" : ""}${flushBottom ? " ex-modal-box--flush-bottom" : ""}`} role="dialog" aria-modal="true" aria-label={title} onMouseDown={(event) => event.stopPropagation()}>
         {bottomSheet ? <span className="ex-modal-sheet-handle" aria-hidden="true"/> : null}
+        {bottomSheet ? <span className="ex-modal-sheet-icon" aria-hidden="true"><ClassicExpenseIcon name="money-add" size={27}/></span> : null}
         <h3 className="ex-modal-title">{title}</h3>
         {children}
       </section>
@@ -653,15 +654,23 @@ function CashOutModal({ fundsTypes, orderOptions, ownCarRate = DEFAULT_OWN_CAR_R
 
   if (step === "expense") {
     return <>
-      <ClassicModal title="Add Expense" onClose={() => setStep("order")}>
-        <div className="order-preview-card order-preview-card--inline">
-          <div className="order-preview-row">
-            <div>
-              <div className="order-preview-label">Selected orders</div>
-              <div className="order-preview-text">{currentOrderLabel || "Order"}</div>
-              <div className="order-preview-meta">{isManual ? text(manualReason) : [selectedOrders.map((item) => text(item.createdByName)).filter(Boolean).join(", "), formatDate(date, date)].filter(Boolean).join(" · ")}</div>
+      <ClassicModal title="Add Expense" onClose={() => setStep("order")} flushBottom>
+        <div className="order-preview-card order-preview-card--inline order-preview-card--expense">
+          <div className="order-preview-label">Selected orders</div>
+          <div className="order-preview-entry">
+            <span className={`expense-orders-menu__icon expense-orders-menu__icon--${isManual ? "manual" : typeKey(selectedOrders[0]?.orderType).includes("maintenance") ? "maintenance" : typeKey(selectedOrders[0]?.orderType).includes("withdraw") ? "withdrawal" : "products"}`} aria-hidden="true">
+              {isManual ? <ClassicExpenseIcon name="edit-3" size={19}/> : <ExpensePickerTypeIcon name={typeKey(selectedOrders[0]?.orderType).includes("maintenance") ? "tool" : typeKey(selectedOrders[0]?.orderType).includes("withdraw") ? "log-out" : "shopping-cart"} size={19}/>}
+            </span>
+            <div className="order-preview-entry__details">
+              <div className="order-preview-entry__heading">
+                <strong>{isManual ? "Other reason" : selectedOrders[0]?.orderId || "Order"}</strong>
+                {!isManual && selectedOrders.length > 1 ? <span className="order-preview-entry__more" aria-label={`${selectedOrders.length - 1} additional selected orders`}>+{selectedOrders.length - 1}</span> : null}
+              </div>
+              <div className="order-preview-entry__meta" dir="auto">
+                {isManual ? text(manualReason) : [text(selectedOrders[0]?.createdByName), date ? formatDate(date) : ""].filter(Boolean).join(" · ")}
+              </div>
             </div>
-            <button type="button" className="order-change-btn" onClick={() => setStep("order")} disabled={busy}>Change</button>
+            <button type="button" className="order-change-btn order-preview-entry__change" onClick={() => setStep("order")} disabled={busy}>Change</button>
           </div>
         </div>
 

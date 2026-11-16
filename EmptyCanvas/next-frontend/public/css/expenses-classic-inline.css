@@ -2817,3 +2817,149 @@ html[data-theme="dark"] body.expenses-page .ex-modal-box--bottom-sheet .expense-
 @media (max-width: 540px) {
   .expense-orders-menu__manual { min-height: 58px; padding: 7px; }
 }
+
+
+/* V431 — Expense step and Choose Order mobile finish. */
+body.expenses-page .order-preview-card--expense {
+  margin: 0 0 19px;
+  padding: 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 17px;
+}
+body.expenses-page .order-preview-card--expense .order-preview-label {
+  margin: 0 0 10px;
+  font-size: 11px;
+  letter-spacing: .04em;
+  color: #64748b;
+}
+body.expenses-page .order-preview-entry {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 13px;
+}
+body.expenses-page .order-preview-entry > .expense-orders-menu__icon {
+  flex: 0 0 37px;
+}
+body.expenses-page .order-preview-entry__details {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+body.expenses-page .order-preview-entry__heading {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-size: 13px;
+  color: #0f172a;
+}
+body.expenses-page .order-preview-entry__heading strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 850;
+}
+body.expenses-page .order-preview-entry__more {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  border-radius: 7px;
+  color: #334155;
+  background: #e2e8f0;
+  font-size: 11px;
+  font-weight: 850;
+}
+body.expenses-page .order-preview-entry__meta {
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 600;
+}
+body.expenses-page .order-preview-entry__change {
+  flex: 0 0 auto;
+  width: auto;
+  padding: 8px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  background: #f8fafc;
+  color: #0f172a;
+  font-size: 11px;
+  font-weight: 800;
+}
+body.expenses-page .ex-modal-box--bottom-sheet .ex-modal-sheet-icon {
+  display: none;
+}
+@media (max-width: 768px) {
+  /* The expense form reaches the native navigation area, avoiding dim/transparent
+     bottom corners. Only Cash out > Add Expense gets this treatment. */
+  body.expenses-page .ex-modal--flush-bottom {
+    box-sizing: border-box;
+    align-items: flex-end;
+    padding: 12px 16px 0;
+  }
+  body.expenses-page .ex-modal-box--flush-bottom {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 640px;
+    max-height: calc(100dvh - 12px);
+    margin: 0;
+    border-radius: 25px 25px 0 0;
+    padding-bottom: max(24px, env(safe-area-inset-bottom, 0px));
+    overscroll-behavior: contain;
+  }
+  /* Bottom sheet starts at the phone navigation edge, not 110px above it. */
+  body.expenses-page .ex-modal--bottom-sheet {
+    padding: 12px 0 0;
+  }
+  body.expenses-page .ex-modal-box--bottom-sheet {
+    max-height: calc(100dvh - 12px);
+    border-radius: 28px 28px 0 0;
+    padding-bottom: max(24px, env(safe-area-inset-bottom, 0px));
+  }
+  body.expenses-page .ex-modal-box--bottom-sheet .ex-modal-sheet-icon {
+    display: grid;
+    place-items: center;
+    width: 56px;
+    height: 56px;
+    margin: -5px auto 16px;
+    border-radius: 17px;
+    background: #111111;
+    color: white;
+  }
+  body.expenses-page .ex-modal-box--bottom-sheet .ex-modal-title {
+    margin-bottom: 20px;
+  }
+  body.expenses-page .order-preview-entry {
+    gap: 8px;
+    padding: 9px;
+  }
+  body.expenses-page .order-preview-entry__change {
+    width: auto;
+  }
+}
+@media (max-width: 380px) {
+  body.expenses-page .order-preview-card--expense { padding: 10px; }
+  body.expenses-page .order-preview-entry__change { padding: 7px; }
+  body.expenses-page .order-preview-entry__meta { font-size: 10px; }
+}
+html[data-theme="dark"] body.expenses-page .order-preview-card--expense {
+  background: #19212d;
+  border-color: #39485c;
+}
+html[data-theme="dark"] body.expenses-page .order-preview-entry {
+  background: #151b25;
+  border-color: #39485c;
+}
+html[data-theme="dark"] body.expenses-page .order-preview-entry__heading { color: #f8fafc; }
+html[data-theme="dark"] body.expenses-page .order-preview-entry__change {
+  background: #222d3a;
+  color: #f8fafc;
+  border-color: #39485c;
+}
