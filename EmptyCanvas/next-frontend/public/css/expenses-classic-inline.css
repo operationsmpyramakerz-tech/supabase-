@@ -3353,3 +3353,121 @@ html[data-theme="dark"] body.expenses-page .funds-select__badge--neutral {
   background: #273447;
   border-color: #39495c;
 }
+
+
+/* V441 — Approved compact Funds Type cards for Cash Out > Add Expense. */
+body.expenses-page .funds-select__menu--compact {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 19px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 20px 45px rgba(15, 23, 42, .18);
+}
+body.expenses-page .funds-select__menu--compact .funds-select__search {
+  flex: 0 0 44px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  padding: 0 13px;
+  border: 1px solid #e2e8f0;
+  border-radius: 13px;
+  background: #f8fafc;
+  color: #475569;
+}
+body.expenses-page .funds-select__menu--compact .funds-select__search input {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: none;
+  box-shadow: none;
+  background: transparent;
+  color: #0f172a;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+}
+body.expenses-page .funds-select__menu--compact .funds-select__search input::placeholder { color: #8591a2; opacity: 1; }
+body.expenses-page .funds-select__menu--compact .funds-select__cards {
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: 6px;
+  padding: 0 1px 1px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+body.expenses-page .funds-select__menu--compact .funds-select__card--compact {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 55px;
+  padding: 6px 10px;
+  border: 1px solid #dfe5ef;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: none;
+  transform: none;
+}
+body.expenses-page .funds-select__menu--compact .funds-select__card--compact .funds-select__card-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 43px;
+  width: 43px;
+  height: 43px;
+  border-radius: 11px;
+  overflow: hidden;
+  color: #b45309;
+  background: #fff1e6;
+}
+body.expenses-page .funds-select__menu--compact .funds-select__card-icon--image { background: transparent; }
+body.expenses-page .funds-select__menu--compact .funds-select__card-icon img {
+  width: 43px;
+  height: 43px;
+  object-fit: contain;
+  border-radius: 11px;
+  display: block;
+}
+body.expenses-page .funds-select__menu--compact .funds-select__card--compact .funds-select__option-main { gap: 0; }
+body.expenses-page .funds-select__menu--compact .funds-select__card--compact .order-select__option-id {
+  font-size: 14px;
+  font-weight: 800;
+  color: #111827;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+body.expenses-page .funds-select__menu--compact .funds-select__radio {
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  border: 1.5px solid #abb5c4;
+  border-radius: 50%;
+  background: #fff;
+  display: grid;
+  place-items: center;
+  color: #fff;
+}
+body.expenses-page .funds-select__menu--compact .funds-select__radio.is-selected {
+  background: #ee6514;
+  border-color: #ee6514;
+}
+body.expenses-page .funds-select__menu--compact .funds-select__radio svg { width: 13px; height: 13px; color: #fff; }
+body.expenses-page .funds-select__menu--compact .funds-select__card--compact.is-selected {
+  border-color: #f97316;
+  background: #fff8f2;
+}
+@media (max-width: 390px) {
+  body.expenses-page .funds-select__menu--compact .funds-select__card--compact { gap: 9px; padding: 6px 8px; }
+}
+html[data-theme="dark"] body.expenses-page .funds-select__menu--compact,
+html[data-theme="dark"] body.expenses-page .funds-select__menu--compact .funds-select__card--compact { background: #151d29; border-color: #38475c; }
+html[data-theme="dark"] body.expenses-page .funds-select__menu--compact .funds-select__search { background: #202c3b; border-color: #38475c; }
+html[data-theme="dark"] body.expenses-page .funds-select__menu--compact .funds-select__search input,
+html[data-theme="dark"] body.expenses-page .funds-select__menu--compact .order-select__option-id { color: #f8fafc; }
+html[data-theme="dark"] body.expenses-page .funds-select__menu--compact .funds-select__card--compact.is-selected { background: #3b2b20; border-color: #f97316; }

@@ -70,12 +70,42 @@ function fundsTypeOption(value) {
   };
 }
 
+// Visual assets follow the approved Funds Type mockup. They are local ERP
+// images (no third-party requests, no changes to stored funds type values).
+const FUNDS_TYPE_ICON_FILES = Object.freeze({
+  onlinetransfer: "online-transfer.png",
+  swvl: "swvl.png",
+  uber: "uber.png",
+  uper: "uber.png", // Legacy spelling uses Uber branding.
+  gobus: "go-bus.png",
+  fuel: "fuel.png",
+  taxi: "taxi.png",
+  indrive: "indrive.png",
+  didi: "didi.png",
+  bybus: "by-bus.png",
+});
+
+function FundsCardVisual({ value }) {
+  const key = typeKey(value);
+  const asset = FUNDS_TYPE_ICON_FILES[key];
+  return (
+    <span className={`funds-select__card-icon funds-select__card-icon--${asset ? "image" : "generic"}`} aria-hidden="true">
+      {asset ? <img src={`/next/expense-fund-icons/${asset}`} width="44" height="44" alt="" loading="lazy"/> : <ClassicExpenseIcon name={fundsTypeIcon(value)} size={22}/>}
+    </span>
+  );
+}
+
 // UI-only classification: never changes the chosen funds type or receipt checks.
 function fundsTypeIcon(value) {
   const key = typeKey(value);
-  if (key === "owncar" || ["uber", "uper", "indrive", "didi"].includes(key)) return "car";
-  if (["swvl", "gobus", "bybus", "train"].includes(key)) return "navigation";
-  if (["onlinetransfer", "cashpayment"].includes(key)) return "credit-card";
+  if (key === "owncar" || ["uber", "uper", "indrive", "didi", "taxi"].includes(key)) return "car";
+  if (["swvl", "gobus", "bybus", "publictransportation", "bus"].includes(key)) return "bus";
+  if (["train", "metro", "tram", "ترام"].includes(key)) return "train";
+  if (["توكتوك", "tuktuk", "toktok"].includes(key)) return "car";
+  if (["نقل", "transport", "delivery"].includes(key)) return "truck";
+  if (["fuel", "petrol", "gasoline", "بنزين"].includes(key)) return "fuel";
+  if (key === "cashpayment") return "credit-card";
+  if (key === "onlinetransfer") return "bank";
   return "tag";
 }
 
@@ -156,6 +186,7 @@ function ClassicExpenseIcon({ name, size = 18 }) {
     "chevron-down": <polyline points="6 9 12 15 18 9"/>,
     clock: <><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></>,
     "check-circle": <><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><polyline points="22 4 12 14.01 9 11.01"/></>,
+    check: <polyline points="5 12 10 17 19 7"/>,
     "external-link": <><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></>,
     image: <><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></>,
     search: <><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></>,
@@ -179,6 +210,10 @@ function ClassicExpenseIcon({ name, size = 18 }) {
     truck: <><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></>,
     coffee: <><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></>,
     monitor: <><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></>,
+    bank: <><path d="M3 10h18M5 10v9M10 10v9M14 10v9M19 10v9M2 21h20M12 3 2 8h20z"/></>,
+    bus: <><rect x="5" y="3" width="14" height="16" rx="3"/><path d="M5 9h14M5 15h14M9 19v2M15 19v2"/><circle cx="8" cy="16.5" r="0.7" fill="currentColor" stroke="none"/><circle cx="16" cy="16.5" r="0.7" fill="currentColor" stroke="none"/></>,
+    train: <><rect x="6" y="2" width="12" height="17" rx="3"/><path d="M6 8h12M6 15h12M8 22l3-3M16 22l-3-3"/></>,
+    fuel: <><path d="M4 21V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v17M3 21h14M7 6h6v5H7zM16 8l3 3v7a2 2 0 0 0 4 0v-7l-2-3"/></>,
     "shopping-cart": <><circle cx="9" cy="20" r="1"/><circle cx="20" cy="20" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 2-1.6L21 6H6"/></>,
     tool: <><path d="M14.7 6.3a4 4 0 0 0-5-5L7 4 4 1 1 4l3 3-2.7 2.7a4 4 0 0 0 5 5L16 5z"/><path d="M12 12l8.5 8.5"/></>,
     package: <><path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.3 7 12 12 20.7 7"/><line x1="12" y1="22" x2="12" y2="12"/></>,
@@ -230,8 +265,9 @@ function ClassicFieldLabel({ icon, children, compact = false }) {
   return <span className={`field-label${compact ? " field-label--compact" : ""}`}><ClassicExpenseIcon name={icon} size={compact ? 14 : 16}/>{children}</span>;
 }
 
-function ClassicSelect({ value, onChange, options = [], placeholder = "Select…", ariaLabel = "Options" }) {
+function ClassicSelect({ value, onChange, options = [], placeholder = "Select…", ariaLabel = "Options", compactFundsCards = false }) {
   const [open, setOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
   const [menuStyle, setMenuStyle] = useState(null);
   const rootRef = useRef(null);
   const menuRef = useRef(null);
@@ -240,6 +276,9 @@ function ClassicSelect({ value, onChange, options = [], placeholder = "Select…
     return { ...option, value: text(option?.value), label: text(option?.label || option?.value) };
   }).filter((option) => option.value), [options]);
   const selected = normalized.find((option) => option.value === text(value)) || null;
+  const visibleOptions = useMemo(() => compactFundsCards && text(searchTerm)
+    ? normalized.filter((option) => lower(option.label).includes(lower(searchTerm)))
+    : normalized, [normalized, compactFundsCards, searchTerm]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -254,7 +293,9 @@ function ClassicSelect({ value, onChange, options = [], placeholder = "Select…
       const spaceBelow = Math.max(0, window.innerHeight - rect.bottom - gap - viewportPad);
       const spaceAbove = Math.max(0, rect.top - gap - viewportPad);
       // Base placement on the actual number of cards, not an empty fixed box.
-      const idealHeight = Math.min(344, normalized.length * 78 + Math.max(0, normalized.length - 1) * 8 + 16);
+      const idealHeight = compactFundsCards
+        ? Math.min(418, 72 + normalized.length * 61 + Math.max(0, normalized.length - 1) * 6)
+        : Math.min(344, normalized.length * 78 + Math.max(0, normalized.length - 1) * 8 + 16);
       const placeAbove = spaceBelow < Math.min(idealHeight, 230) && spaceAbove > spaceBelow;
       const available = placeAbove ? spaceAbove : spaceBelow;
       const maxHeight = Math.min(idealHeight, Math.max(100, available));
@@ -279,22 +320,27 @@ function ClassicSelect({ value, onChange, options = [], placeholder = "Select…
       document.removeEventListener("mousedown", closeOutside);
       document.removeEventListener("keydown", closeEscape);
     };
-  }, [open, normalized.length]);
+  }, [open, normalized.length, compactFundsCards]);
 
   const dropdown = open && menuStyle && typeof document !== "undefined" ? createPortal(
-    <div ref={menuRef} className="order-select__dropdown funds-select__menu" style={menuStyle} role="listbox" aria-label={ariaLabel}>
-      <div className="order-select__options funds-select__cards" style={{ maxHeight: Math.max(80, menuStyle.maxHeight - 16) }}>
-        {normalized.length ? normalized.map((option) => {
+    <div ref={menuRef} className={`order-select__dropdown funds-select__menu${compactFundsCards ? " funds-select__menu--compact" : ""}`} style={menuStyle} role="listbox" aria-label={ariaLabel}>
+      {compactFundsCards ? <div className="funds-select__search">
+        <ClassicExpenseIcon name="search" size={19}/>
+        <input type="search" value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search funds type..." aria-label="Search funds type" autoComplete="off"/>
+      </div> : null}
+      <div className="order-select__options funds-select__cards" style={{ maxHeight: Math.max(80, menuStyle.maxHeight - (compactFundsCards ? 74 : 16)) }}>
+        {visibleOptions.length ? visibleOptions.map((option) => {
           const active = option.value === text(value);
-          return <button type="button" className={`order-select__option funds-select__card${active ? " is-selected" : ""}`} role="option" aria-selected={active} key={option.value} onClick={() => { onChange(option.value); setOpen(false); }}>
-            <span className="funds-select__card-icon" aria-hidden="true"><ClassicExpenseIcon name={fundsTypeIcon(option.value)} size={20}/></span>
+          return <button type="button" className={`order-select__option funds-select__card${active ? " is-selected" : ""}${compactFundsCards ? " funds-select__card--compact" : ""}`} role="option" aria-selected={active} key={option.value} onClick={() => { onChange(option.value); setOpen(false); setSearchTerm(""); }}>
+            {compactFundsCards ? <FundsCardVisual value={option.value}/> : <span className="funds-select__card-icon" aria-hidden="true"><ClassicExpenseIcon name={fundsTypeIcon(option.value)} size={20}/></span>}
             <span className="funds-select__option-main">
               <span className="order-select__option-id">{option.label}</span>
-              {option.note ? <span className="funds-select__option-note">{option.note}</span> : null}
+              {!compactFundsCards && option.note ? <span className="funds-select__option-note">{option.note}</span> : null}
             </span>
-            {option.badge ? <span className={`funds-select__badge funds-select__badge--${option.tone || "neutral"}`}>{option.badge}</span> : null}
+            {compactFundsCards ? <span className={`funds-select__radio${active ? " is-selected" : ""}`} aria-hidden="true">{active ? <ClassicExpenseIcon name="check" size={14}/> : null}</span>
+              : option.badge ? <span className={`funds-select__badge funds-select__badge--${option.tone || "neutral"}`}>{option.badge}</span> : null}
           </button>;
-        }) : <div className="order-select__status">No options available right now.</div>}
+        }) : <div className="order-select__status">{normalized.length ? "No matching funds types." : "No options available right now."}</div>}
       </div>
     </div>,
     document.body,
@@ -302,7 +348,7 @@ function ClassicSelect({ value, onChange, options = [], placeholder = "Select…
 
   return (
     <div className="order-select funds-select" ref={rootRef}>
-      <button type="button" className={`order-select__trigger${selected ? " is-selected" : " is-placeholder"}${open ? " is-open" : ""}`} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
+      <button type="button" className={`order-select__trigger${selected ? " is-selected" : " is-placeholder"}${open ? " is-open" : ""}`} aria-haspopup="listbox" aria-expanded={open} onClick={() => { if (open) setSearchTerm(""); setOpen((current) => !current); }}>
         <span className="order-select__trigger-label">
           {selected ? <span className="funds-type-summary"><span className="funds-type-summary__name">{selected.label}</span></span> : placeholder}
         </span>
@@ -818,6 +864,7 @@ function CashOutModal({ fundsTypes, orderOptions, destinationPeople = [], ownCar
           options={fundsTypeOptions}
           placeholder="Select funds type..."
           ariaLabel="Funds types"
+          compactFundsCards
         />
 
         <ClassicFieldLabel icon="log-out" compact>From <span className="opt-tag">(Optional)</span></ClassicFieldLabel>
