@@ -3205,3 +3205,10 @@ html[data-theme="dark"] body.expenses-page .expense-destination-menu__search inp
 html[data-theme="dark"] body.expenses-page .expense-destination-menu__copy strong,
 html[data-theme="dark"] body.expenses-page .expense-destination-picker__name { color: #f8fafc; }
 html[data-theme="dark"] body.expenses-page .expense-destination-menu__card.is-selected { background: #3b2b20; border-color: #fb923c; }
+
+/* V439 — Keep Destination and Add Expense visually separated.
+   Scope the spacing to the destination immediately before this button so
+   other fields and action buttons remain unchanged. */
+body.expenses-page .ex-modal-box--bottom-sheet .expense-destination-picker + .ex-add-money {
+  margin-top: 16px;
+}
