@@ -3085,3 +3085,123 @@ body.expenses-page .ex-modal-box--flush-bottom .ex-modal-expense-icon {
     padding-inline: 15px;
   }
 }
+
+/* V438 — Searchable Destination picker, card-based like the Reason dropdown.
+   The portal is flush with the field edge, even when opening upward. */
+body.expenses-page .expense-destination-picker { position: relative; min-width: 0; }
+body.expenses-page .expense-destination-picker__trigger {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  width: 100%; min-height: 62px; padding: 12px 16px;
+  border: 1px solid #dce2e9; border-radius: 18px;
+  background: #fff; color: #0f172a;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, .055);
+  text-align: left; cursor: pointer; font: inherit; font-weight: 700;
+}
+body.expenses-page .expense-destination-picker__trigger.is-open {
+  border-color: #fb923c; box-shadow: 0 0 0 3px rgba(249, 115, 22, .12);
+}
+body.expenses-page .expense-destination-picker__trigger:focus-visible {
+  outline: 2px solid #fb923c; outline-offset: 2px;
+}
+body.expenses-page .expense-destination-picker__trigger > svg {
+  flex: 0 0 auto; color: #667085; transition: transform .16s ease;
+}
+body.expenses-page .expense-destination-picker__trigger.is-open > svg { transform: rotate(180deg); }
+body.expenses-page .expense-destination-picker__value {
+  display: flex; flex: 1 1 auto; align-items: center; gap: 9px; min-width: 0;
+}
+body.expenses-page .expense-destination-picker__name {
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 14px;
+}
+body.expenses-page .expense-destination-picker__placeholder {
+  color: #667085; font-size: 15px; font-weight: 600;
+}
+body.expenses-page .expense-destination-picker__person {
+  display: grid; place-items: center; flex: 0 0 30px;
+  width: 30px; height: 30px; border-radius: 10px;
+  background: #fff1e6; color: #c2410c;
+}
+body.expenses-page .expense-destination-menu {
+  box-sizing: border-box; display: flex; flex-direction: column;
+  overflow: hidden; padding: 8px;
+  border: 1px solid #e3e8ef; border-radius: 17px;
+  background: #fff; box-shadow: 0 18px 40px rgba(15, 23, 42, .20);
+}
+body.expenses-page .expense-destination-menu__search {
+  box-sizing: border-box; display: flex; flex: 0 0 auto;
+  align-items: center; gap: 9px; min-height: 46px; padding: 9px 11px;
+  border: 1px solid #e5eaf1; border-radius: 12px;
+  background: #f8fafc; color: #64748b;
+}
+body.expenses-page .expense-destination-menu__search:focus-within { border-color: #fb923c; }
+body.expenses-page .expense-destination-menu__search input {
+  flex: 1 1 auto; width: 100%; min-width: 0; padding: 0;
+  border: 0 !important; outline: none !important; box-shadow: none !important;
+  background: transparent !important; color: #111827 !important;
+  font: inherit; font-size: 13px; font-weight: 500;
+  -webkit-appearance: none; appearance: none;
+}
+body.expenses-page .expense-destination-menu__search input::placeholder { color: #94a3b8; }
+body.expenses-page .expense-destination-menu__search input::-webkit-search-cancel-button,
+body.expenses-page .expense-destination-menu__search input::-webkit-search-decoration { display: none; }
+body.expenses-page .expense-destination-menu__count {
+  flex: 0 0 auto; white-space: nowrap; font-size: 10px; font-weight: 750; color: #667085;
+}
+body.expenses-page .expense-destination-menu__list {
+  display: flex; flex: 1 1 auto; flex-direction: column;
+  gap: 7px; min-height: 0; margin-top: 7px;
+  overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+}
+body.expenses-page .expense-destination-menu__card {
+  box-sizing: border-box; display: flex; flex: 0 0 auto;
+  align-items: center; gap: 10px; width: 100%; min-height: 64px;
+  padding: 9px 11px; border: 1px solid #e5e7eb;
+  border-radius: 14px; background: #fff; color: #111827;
+  text-align: left; cursor: pointer; font: inherit;
+}
+body.expenses-page .expense-destination-menu__card:hover { background: #f8fafc; border-color: #fdba74; }
+body.expenses-page .expense-destination-menu__card.is-selected { background: #fff7ed; border-color: #fb923c; }
+body.expenses-page .expense-destination-menu__person {
+  display: grid; place-items: center; flex: 0 0 42px;
+  width: 42px; height: 42px; border-radius: 12px;
+  background: #fff1e6; color: #c2410c;
+}
+body.expenses-page .expense-destination-menu__copy {
+  display: flex; flex: 1 1 auto; flex-direction: column; gap: 3px; min-width: 0;
+}
+body.expenses-page .expense-destination-menu__copy strong {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: #101828; font-size: 14px; font-weight: 800;
+}
+body.expenses-page .expense-destination-menu__copy small {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: #667085; font-size: 12px; font-weight: 600;
+}
+body.expenses-page .expense-destination-menu__selected {
+  display: grid; place-items: center; flex: 0 0 24px;
+  width: 24px; height: 24px; border-radius: 8px;
+  background: #ea580c; color: #fff; font-size: 15px; font-weight: 800;
+}
+body.expenses-page .expense-destination-menu__empty {
+  padding: 18px 12px; border-radius: 12px;
+  background: #f8fafc; color: #64748b; text-align: center; font-size: 13px;
+}
+@media (max-width: 540px) {
+  body.expenses-page .expense-destination-menu__card { min-height: 60px; padding: 7px 9px; }
+  body.expenses-page .expense-destination-menu__person {
+    flex-basis: 38px; width: 38px; height: 38px;
+  }
+}
+html[data-theme="dark"] body.expenses-page .expense-destination-picker__trigger,
+html[data-theme="dark"] body.expenses-page .expense-destination-menu,
+html[data-theme="dark"] body.expenses-page .expense-destination-menu__card {
+  background: #151d29; color: #f8fafc; border-color: #354254;
+}
+html[data-theme="dark"] body.expenses-page .expense-destination-menu__search,
+html[data-theme="dark"] body.expenses-page .expense-destination-menu__empty {
+  background: #202c3b; border-color: #3b4a5e; color: #cbd5e1;
+}
+html[data-theme="dark"] body.expenses-page .expense-destination-menu__search input { color: #f8fafc !important; }
+html[data-theme="dark"] body.expenses-page .expense-destination-menu__copy strong,
+html[data-theme="dark"] body.expenses-page .expense-destination-picker__name { color: #f8fafc; }
+html[data-theme="dark"] body.expenses-page .expense-destination-menu__card.is-selected { background: #3b2b20; border-color: #fb923c; }

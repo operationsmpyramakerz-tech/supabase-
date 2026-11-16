@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import ClassicOrderIcon from "../orders/ClassicOrderIcon";
 import { DEFAULT_OWN_CAR_RATE_EGP_PER_KM, ownCarCostForKilometers } from "../../lib/own-car-expense.mjs";
 import { expenseOrderMenuPosition } from "../../lib/expense-order-menu-position.mjs";
+import { expenseDestinationMenuPosition } from "../../lib/expense-destination-menu-position.mjs";
 
 const CASH_IN_TYPES = ["Cash Payment", "Online Transfer"];
 const SCREENSHOT_REQUIRED_KEYS = new Set(["owncar", "swvl", "gobus", "bybus", "train", "indrive", "uber", "uper", "didi"]);
@@ -295,6 +296,125 @@ function ClassicSelect({ value, onChange, options = [], placeholder = "Select…
       {dropdown}
     </div>
   );
+}
+
+// A dedicated searchable Destination picker. Its portal stays attached to the
+// Destination field, rather than using ClassicSelect's offset/height heuristic.
+// The search field is intentionally NOT auto-focused (no keyboard on open).
+function ExpenseDestinationSelect({ value, onChange, options = [] }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [menuStyle, setMenuStyle] = useState(null);
+  const rootRef = useRef(null);
+  const menuRef = useRef(null);
+  const selected = options.find((option) => option.value === value) || null;
+  const filtered = useMemo(() => options.filter((option) =>
+    [option.label, option.note].some((part) => lower(part).includes(lower(query)))
+  ), [options, query]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const position = () => {
+      const rect = rootRef.current?.querySelector(".expense-destination-picker__trigger")?.getBoundingClientRect();
+      if (!rect) return;
+      const vv = window.visualViewport;
+      setMenuStyle(expenseDestinationMenuPosition(rect, {
+        top: vv?.offsetTop ?? 0,
+        left: vv?.offsetLeft ?? 0,
+        width: vv?.width ?? window.innerWidth,
+        height: vv?.height ?? window.innerHeight,
+      }, options.length));
+    };
+    const outside = (event) => {
+      if (rootRef.current?.contains(event.target) || menuRef.current?.contains(event.target)) return;
+      setOpen(false);
+    };
+    const escape = (event) => { if (event.key === "Escape") setOpen(false); };
+    position();
+    window.addEventListener("resize", position);
+    window.addEventListener("scroll", position, true);
+    window.visualViewport?.addEventListener("resize", position);
+    window.visualViewport?.addEventListener("scroll", position);
+    document.addEventListener("mousedown", outside);
+    document.addEventListener("keydown", escape);
+    return () => {
+      window.removeEventListener("resize", position);
+      window.removeEventListener("scroll", position, true);
+      window.visualViewport?.removeEventListener("resize", position);
+      window.visualViewport?.removeEventListener("scroll", position);
+      document.removeEventListener("mousedown", outside);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [open, options.length]);
+
+  const toggle = () => {
+    setMenuStyle(null);
+    setQuery("");
+    setOpen((current) => !current);
+  };
+  const choose = (id) => {
+    onChange(id);
+    setOpen(false);
+    setQuery("");
+  };
+  const menu = open && menuStyle && typeof document !== "undefined" ? createPortal(
+    <div ref={menuRef} className="expense-destination-menu" style={menuStyle} role="dialog" aria-label="Select destination user">
+      <div className="expense-destination-menu__search">
+        <ClassicExpenseIcon name="search" size={18}/>
+        <input
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search by name or department..."
+          aria-label="Search destination users"
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="none"
+          spellCheck={false}
+          enterKeyHint="search"
+          data-1p-ignore="true"
+          data-lpignore="true"
+        />
+        <span className="expense-destination-menu__count">{filtered.length} users</span>
+      </div>
+      <div className="expense-destination-menu__list" role="listbox" aria-label="Destination users">
+        {filtered.length ? filtered.map((option) => {
+          const active = option.value === value;
+          return <button
+            type="button"
+            key={option.value}
+            className={`expense-destination-menu__card${active ? " is-selected" : ""}`}
+            role="option"
+            aria-selected={active}
+            onClick={() => choose(option.value)}
+          >
+            <span className="expense-destination-menu__person" aria-hidden="true"><ClassicExpenseIcon name="user" size={19}/></span>
+            <span className="expense-destination-menu__copy">
+              <strong dir="auto">{option.label}</strong>
+              {option.note ? <small dir="auto">{option.note}</small> : null}
+            </span>
+            {active ? <span className="expense-destination-menu__selected" aria-hidden="true">✓</span> : null}
+          </button>;
+        }) : <div className="expense-destination-menu__empty">No matching users.</div>}
+      </div>
+    </div>, document.body,
+  ) : null;
+
+  return <div className="expense-destination-picker" ref={rootRef}>
+    <button
+      type="button"
+      className={`expense-destination-picker__trigger${open ? " is-open" : ""}${selected ? " is-selected" : ""}`}
+      aria-haspopup="dialog"
+      aria-expanded={open}
+      onClick={toggle}
+    >
+      <span className="expense-destination-picker__value">
+        {selected ? <><span className="expense-destination-picker__person" aria-hidden="true"><ClassicExpenseIcon name="user" size={17}/></span><span className="expense-destination-picker__name" dir="auto">{selected.label}</span></> : <span className="expense-destination-picker__placeholder">Select destination...</span>}
+      </span>
+      <ClassicExpenseIcon name="chevron-down" size={18}/>
+    </button>
+    {menu}
+  </div>;
 }
 
 // Multi-order picker is intentionally independent from ClassicSelect: the latter is
@@ -742,12 +862,10 @@ function CashOutModal({ fundsTypes, orderOptions, destinationPeople = [], ownCar
       <input type="date" className="ex-input" value={date} onChange={(event) => setDate(event.target.value)}/>
 
       <ClassicFieldLabel icon="user">Destination <span className="req-star">*</span></ClassicFieldLabel>
-      <ClassicSelect
+      <ExpenseDestinationSelect
         value={destinationUserId}
         onChange={setDestinationUserId}
         options={destinationOptions}
-        placeholder="Select destination..."
-        ariaLabel="Destination user"
       />
 
       <button type="button" className="ex-btn ex-dark ex-btn--block ex-add-money" onClick={openExpenseStep} disabled={busy}><ClassicExpenseIcon name="money-add" size={23}/><span>Add Expense</span></button>

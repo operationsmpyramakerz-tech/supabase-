@@ -40,5 +40,5 @@ test('backend order linking still receives every selected order (visual summary 
   assert.match(dialogs, /selectedOrderIds: isManual \? \[\] : selectedOrders\.flatMap/);
   assert.match(dialogs, /selectedOrderKeys: isManual \? \[\] : selectedOrders\.map/);
   assert.match(dialogs, /orderKeys: draft\.selectedOrderKeys/);
-  assert.match(page, /expenses-classic-inline\.css\?v=v437-destination-field/);
+  assert.match(page, /expenses-classic-inline\.css\?v=v438-destination-search-cards/);
 });
