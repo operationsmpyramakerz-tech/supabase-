@@ -397,9 +397,10 @@ function groupMeta(items = [], forCardFilter = false) {
     return Math.abs(stored) > 1e-9 || (!edited && Math.abs(base) > 1e-9 && Math.abs(received) < 1e-9);
   });
   const hasReceived = items.some((item) => Math.abs(Number(item?.quantityReceived ?? item?.quantity_received_by_operations ?? 0) || 0) > 1e-9);
+  const hasShipping = items.some((item) => statusIndex(item?.status) === 3 && Math.abs(Number(item?.quantityReceived ?? item?.quantity_received_by_operations ?? 0) || 0) > 1e-9);
   const rawType = text(items?.[0]?.orderType ?? items?.[0]?.order_type);
   const maintenance = orderTypeKey(rawType) === "requestmaintenance";
-  return { stage, hasRemaining, hasReceived, maintenance, hasApproved: items.some(item => decision(item) === "approved"), hasRejected: items.some(item => decision(item) === "rejected") };
+  return { stage, hasRemaining, hasReceived, hasShipping, maintenance, hasApproved: items.some(item => decision(item) === "approved"), hasRejected: items.some(item => decision(item) === "rejected") };
 }
 
 function groupMatchesTab(items = [], tab = "all") {
@@ -501,7 +502,7 @@ function logicalParams({ query = "", tab = "all", type = "all", searchMode = "fa
 
 async function candidateNumbers({ cursor = null, scanGroups = 90, filters = {}, searchMode = "", rpcOptions = null, signal = null } = {}) {
   const suffix = searchMode ? `.search-${searchMode}` : "";
-  if (rpcOptions && !["remaining", "delivered"].includes(rpcOptions.tab) && canUseOrderCandidateRpc()) {
+  if (rpcOptions && !["remaining", "delivered"].includes(rpcOptions.tab) && rpcOptions.tab !== "received" && canUseOrderCandidateRpc()) {
     try {
       return await loadOrderCandidateNumbersRpc({
         ...rpcOptions,
@@ -583,7 +584,7 @@ function operationsCardSummaryItem(row = {}, tab = "all") {
 async function rowsByNumbers(numbers = [], signal = null, includeLocalSearchFields = false, { tab = "all", scoped = false, forceRows = false } = {}) {
   // Card-summary RPC may aggregate mixed owners into one card. Never trust it
   // for row-scoped lists: fetch component owners before filtering groups.
-  if (!["remaining", "delivered"].includes(tab) && !scoped && !includeLocalSearchFields && !forceRows && canUseOrderCardSummaryRpc()) {
+  if (!["remaining", "delivered"].includes(tab) && tab !== "received" && !scoped && !includeLocalSearchFields && !forceRows && canUseOrderCardSummaryRpc()) {
     try {
       const rows = await loadOrderCardSummariesRpc({
         numbers,
@@ -1356,6 +1357,75 @@ export async function updateOperationsApproval({ account, ids = [], decision = "
     failed,
     source: "supabase-direct",
   };
+}
+
+/**
+ * Receive an additional batch against outstanding Request Products quantities.
+ * The database RPC atomically splits any previously delivered component into
+ * an already-delivered row and a new Shipped row with the SAME order_number.
+ * It preserves the original row ID (and its existing Stocktaking source link),
+ * so the subsequent Mark as Delivered imports ONLY the new row/quantity.
+ */
+export async function receiveOperationsRemainingBatch({
+  account,
+  orderIds = [],
+  quantities = {},
+  receiptNumber = null,
+  issueDescription = "",
+} = {}) {
+  const access = ensureOperationsMutationAccess(account || {});
+  if (access === null) return null;
+  const loaded = await loadOperationRowsByIds(orderIds);
+  if (!loaded) throw directOperationsMutationError("Could not load the order components.", 503);
+  if (loaded.clean.some((id) => !loaded.byId.has(id))) {
+    throw directOperationsMutationError("One or more order components were not found. Refresh and retry.", 409);
+  }
+  const source = quantities && typeof quantities === "object" && !Array.isArray(quantities) ? quantities : {};
+  const knownIds = new Set(loaded.clean);
+  const receiveNow = {};
+  for (const [id, raw] of Object.entries(source)) {
+    if (!knownIds.has(id)) throw directOperationsMutationError("A quantity refers to a component outside the selected order.", 400);
+    if (raw === "" || raw === null || !Number.isFinite(Number(raw)) || Number(raw) < 0) {
+      throw directOperationsMutationError("Received quantities must be valid non-negative numbers.", 400);
+    }
+    if (Number(raw) > 1e-9) {
+      const row = loaded.byId.get(id);
+      if (opsOrderTypeKey(row?.order_type) !== "requestproducts" || ![3, 4].includes(statusIndex(row?.status))) {
+        throw directOperationsMutationError("Only outstanding Request Products components in Shipping or Delivered may be received again.", 409);
+      }
+      const serialized = serializeOperationsOrderDetail(row);
+      const remaining = Number(serialized?.quantityRemaining ?? 0);
+      if (Number(raw) > remaining + 1e-9 || remaining <= 1e-9) {
+        throw directOperationsMutationError("Received quantity exceeds the remaining balance. Refresh the order.", 409);
+      }
+      receiveNow[id] = roundQty(Number(raw));
+    }
+  }
+  if (!Object.keys(receiveNow).length) throw directOperationsMutationError("Enter at least one received quantity.", 400);
+  const orderNumbers = new Set(loaded.rows.map((row) => text(row?.order_number)));
+  if (orderNumbers.size !== 1) throw directOperationsMutationError("Receive remaining components from one order at a time.", 400);
+  let result;
+  try {
+    result = await supabaseRequest("/rpc/operations_receive_remaining_v421", {
+      method: "POST",
+      body: {
+        p_quantities: receiveNow,
+        p_received_by: text(account?.username || account?.name) || "Operations",
+        p_receipt_number: text(receiptNumber) || null,
+        p_issue_description: text(issueDescription) || null,
+      },
+      timeoutMs: 45_000,
+      profileName: "orders.operations.receive-remaining-atomic",
+    });
+  } catch (error) {
+    const message = text(error?.message);
+    if (/PGRST202|could not find the function|function .*does not exist|schema cache/i.test(message)) {
+      throw directOperationsMutationError("The additional-receipts database function is missing. Run 2026-11-16-operations-remaining-receipts-v421.sql in Supabase SQL Editor.", 503);
+    }
+    throw directOperationsMutationError(message || "The additional receipt could not be saved. Refresh the order.", Number(error?.status) || 409);
+  }
+  await invalidateLegacyOperationsCaches(account || {});
+  return { success: true, receivedCount: Number(result?.receivedCount || 0), source: "supabase-direct" };
 }
 
 export async function markOperationsShipped({

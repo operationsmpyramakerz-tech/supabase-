@@ -321,6 +321,7 @@ function buildGroups(rows) {
     const hasRejected = summaryItem ? Boolean(summaryItem._groupHasRejected) : decisions.includes("rejected");
     const hasRemaining = summaryItem ? Boolean(summaryItem._groupHasRemaining) : group.items.some((item) => Math.abs(remainingQuantity(item)) > 1e-9);
     const hasReceived = summaryItem ? Boolean(summaryItem._groupHasReceived) : group.items.some((item) => Math.abs(receivedQuantity(item)) > 1e-9);
+    const hasShipping = group.items.some((item) => statusIndex(item?.status) === 3 && Math.abs(receivedQuantity(item)) > 1e-9);
     const receiptEntries = [];
     const receiptSeen = new Set();
     group.items.flatMap(receiptEntriesFromItem).forEach((entry) => {
@@ -351,6 +352,7 @@ function buildGroups(rows) {
       hasRejected,
       hasRemaining,
       hasReceived,
+      hasShipping,
       orderIdLabel: orderIdLabel(group.items),
       orderIds: [...new Set(group.items.flatMap((item) => Array.isArray(item?.orderIds) && item.orderIds.length ? item.orderIds : [item?.id]).map(text).filter(Boolean))],
       total: group.items.reduce((sum, item) => sum + itemTotal(item), 0),
@@ -380,7 +382,7 @@ function groupsForTab(groups, orders, tab) {
 function itemsForOperationsTab(items, tab) {
   const source = Array.isArray(items) ? items : [];
   if (tab === "remaining") return source.filter((item) => Math.abs(remainingQuantity(item)) > 1e-9);
-  if (tab === "received") return source.filter((item) => Math.abs(receivedQuantity(item)) > 1e-9);
+  if (tab === "received") return source.filter((item) => statusIndex(item?.status) === 3 && (isMaintenance(item?.orderType) || Math.abs(receivedQuantity(item)) > 1e-9));
   if (tab === "delivered") return source.filter((item) => operationsArrivedItemVisible({
     stage: statusIndex(item?.status),
     received: receivedQuantity(item),
@@ -1137,19 +1139,24 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
         await completeAction(loadingSuccessMessage, group.actionScope === "component" ? "approved" : "rejected");
       } else if (action === "receive") {
         const quantities = {};
+        const receiveAnotherBatch = group.actionScope === "remaining-batch";
         let hasReceiveQuantity = false;
         group.items.forEach((item) => {
           const id = text(item?.id);
           const receiveNow = Math.min(Math.abs(remainingQuantity(item)), Math.max(0, finite(payload?.quantities?.[id])));
           if (receiveNow > 1e-9) hasReceiveQuantity = true;
-          const base = baseQuantity(item);
-          const sign = base < 0 ? -1 : 1;
-          const absolute = Math.min(Math.abs(base), Math.abs(receivedQuantity(item)) + receiveNow);
-          quantities[id] = roundQty(sign * absolute);
+          if (receiveAnotherBatch) {
+            quantities[id] = roundQty(receiveNow);
+          } else {
+            const base = baseQuantity(item);
+            const sign = base < 0 ? -1 : 1;
+            const absolute = Math.min(Math.abs(base), Math.abs(receivedQuantity(item)) + receiveNow);
+            quantities[id] = roundQty(sign * absolute);
+          }
         });
         if (!hasReceiveQuantity) throw new Error("Enter the quantity received for at least one component.");
         await postJson(`${DIRECT_API_BASE}/orders/operations/mutations-direct`, {
-          action: "mark-shipped",
+          action: receiveAnotherBatch ? "receive-remaining" : "mark-shipped",
           orderIds: group.orderIds,
           receiptNumber: text(payload?.receiptNumber) || null,
           issueDescription: text(payload?.issueDescription) || null,

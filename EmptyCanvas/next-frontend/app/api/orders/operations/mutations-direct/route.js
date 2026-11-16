@@ -8,6 +8,7 @@ import {
   createOperationsRepeatOrder,
   markOperationsArrived,
   markOperationsShipped,
+  receiveOperationsRemainingBatch,
   performOperationsProtectedAction,
   saveOperationsEditDetails,
   sendOperationsDeliveredToStock,
@@ -47,7 +48,7 @@ function directErrorResponse(error) {
 export async function POST(request) {
   const body = await request.json().catch(() => ({}));
   const action = actionKey(body?.action);
-  if (!["approval", "mark-shipped", "mark-arrived", "archive", "unarchive", "delete", "edit-init", "edit-save", "create-withdrawal", "create-delivery", "send-to-stock"].includes(action)) {
+  if (!["approval", "mark-shipped", "receive-remaining", "mark-arrived", "archive", "unarchive", "delete", "edit-init", "edit-save", "create-withdrawal", "create-delivery", "send-to-stock"].includes(action)) {
     return noStore({ error: "Unsupported Operations Orders action." }, { status: 400 });
   }
 
@@ -59,6 +60,7 @@ export async function POST(request) {
   const actionPermission = {
     approval: "orders.operations.approve",
     "mark-shipped": "orders.operations.ship",
+    "receive-remaining": "orders.operations.ship",
     "mark-arrived": "orders.operations.receive",
     "send-to-stock": "orders.operations.send_to_stock",
     "create-withdrawal": "orders.operations.withdrawal",
@@ -116,6 +118,14 @@ export async function POST(request) {
         issueDescription: body?.issueDescription,
         perItemIssues: body?.perItemIssues,
       });
+    } else if (action === "receive-remaining") {
+      result = await receiveOperationsRemainingBatch({
+        account: gate.account,
+        orderIds: body?.orderIds,
+        quantities: body?.quantities,
+        receiptNumber: body?.receiptNumber,
+        issueDescription: body?.issueDescription,
+      });
     } else if (action === "mark-arrived") {
       result = await markOperationsArrived({
         account: gate.account,
@@ -167,7 +177,7 @@ export async function POST(request) {
     }
 
     if (result) {
-      if (["approval", "mark-shipped", "mark-arrived"].includes(action) && result?.ok !== false && result?.success !== false) {
+      if (["approval", "mark-shipped", "receive-remaining", "mark-arrived"].includes(action) && result?.ok !== false && result?.success !== false) {
         after(() => dispatchQueuedNotifications({ limit: 6 }).catch((error) =>
           console.warn("[notifications] Order event delivery deferred:", error?.message)));
       }

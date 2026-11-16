@@ -20,7 +20,7 @@ export function operationsMatchesTab(group = {}, tab = "all") {
     // Delivered. The group status must not suppress the arrived portion.
     case "delivered": return step === 4;
     case "remaining": return outstanding;
-    case "received": return step === 3 && (Boolean(group.maintenance) || Boolean(group.hasReceived));
+    case "received": return step < 5 && (step === 3 || Boolean(group.hasShipping)) && (Boolean(group.maintenance) || Boolean(group.hasShipping) || Boolean(group.hasReceived));
     case "approved": return step === 2 && Boolean(group.hasApproved);
     case "rejected": return step === 2 && Boolean(group.hasRejected);
     default: return false;
