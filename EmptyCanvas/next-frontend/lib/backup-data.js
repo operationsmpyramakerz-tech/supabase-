@@ -2,6 +2,7 @@ import "server-only";
 import { isTrustedLegacyAdmin } from "./admin-identity-policy.mjs";
 
 import { supabaseRequest } from "./supabase-rest";
+import { parseBackupOrderNumberSearch } from "./backup-order-number-search.mjs";
 
 const SCHEMA_TTL_MS = 5 * 60_000;
 let schemaCache = null;
@@ -203,7 +204,7 @@ export function backupCanEdit(account = {}) {
   return backupAccessLevel(account) === "admin";
 }
 
-export async function loadBackupTableRows(key, { limit = 50, offset = 0, account = null } = {}) {
+export async function loadBackupTableRows(key, { limit = 50, offset = 0, account = null, orderNumber = "" } = {}) {
   const item = findBackupTable(key);
   if (!item) {
     const error = new Error("Backup table was not found.");
@@ -214,11 +215,23 @@ export async function loadBackupTableRows(key, { limit = 50, offset = 0, account
   const safeLimit = Math.max(10, Math.min(200, Number.parseInt(limit, 10) || 50));
   const safeOffset = Math.max(0, Number.parseInt(offset, 10) || 0);
   const query = new URLSearchParams({ select: "*", limit: String(safeLimit + 1), offset: String(safeOffset) });
-  const payload = await supabaseRequest(`/${encodeURIComponent(item.tableName)}?${query.toString()}`, { timeoutMs: 12_000 });
+  const orderSearch = item.key === "orders" ? parseBackupOrderNumberSearch(orderNumber) : { active: false, valid: true };
+  if (orderSearch.active && orderSearch.valid) {
+    query.set("order_number", `eq.${orderSearch.number}`);
+  }
+  // Deterministic pagination matters when one order contains more than 50 components.
+  if (item.key === "orders") query.set("order", "id.asc");
+  // An invalid order number must never be interpreted as a broad search, and
+  // it should not reach PostgREST as a malformed numeric filter.
+  const payload = orderSearch.active && !orderSearch.valid
+    ? []
+    : await supabaseRequest(`/${encodeURIComponent(item.tableName)}?${query.toString()}`, { timeoutMs: 12_000 });
   const list = Array.isArray(payload) ? payload : [];
   const hasMore = list.length > safeLimit;
   const rows = hasMore ? list.slice(0, safeLimit) : list;
-  const columns = await tableColumns(item.tableName, rows);
+  // The client already has the table columns. Avoid an expensive OpenAPI read
+  // for searches with zero matches (keep the previously loaded columns).
+  const columns = orderSearch.active && !rows.length ? [] : await tableColumns(item.tableName, rows);
   const accessLevel = backupAccessLevel(account || {});
 
   return {

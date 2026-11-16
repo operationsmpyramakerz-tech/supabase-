@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 function text(value) {
   return String(value ?? "").trim();
@@ -82,6 +82,10 @@ export default function BackupTableClient({ tableKey, initialTable, initialPaylo
   const [loading, setLoading] = useState(!hasInitialPayload);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
+  const [activeOrderSearch, setActiveOrderSearch] = useState("");
+  const isOrdersTable = tableKey === "orders";
+  const searchChangedRef = useRef(false);
+  const requestRef = useRef({ sequence: 0, controller: null });
   const [editRow, setEditRow] = useState(null);
   const [draft, setDraft] = useState({});
   const [saveError, setSaveError] = useState("");
@@ -92,32 +96,44 @@ export default function BackupTableClient({ tableKey, initialTable, initialPaylo
   const [creating, setCreating] = useState(false);
   const pageSize = 50;
 
-  async function loadRows(nextOffset = 0) {
+  async function loadRows(nextOffset = 0, orderSearch = activeOrderSearch) {
+    const sequence = ++requestRef.current.sequence;
+    requestRef.current.controller?.abort();
+    const controller = new AbortController();
+    requestRef.current.controller = controller;
+    const search = isOrdersTable ? text(orderSearch) : "";
     setLoading(true);
     setError("");
     try {
-      const query = `key=${encodeURIComponent(tableKey)}&limit=${pageSize}&offset=${Math.max(0, nextOffset)}`;
-      const response = await fetch(`/next/api/backup/rows-direct?${query}`, {
+      const params = new URLSearchParams({ key: tableKey, limit: String(pageSize), offset: String(Math.max(0, nextOffset)) });
+      if (search) params.set("orderNumber", search);
+      const response = await fetch(`/next/api/backup/rows-direct?${params.toString()}`, {
         credentials: "include",
         cache: "no-store",
+        signal: controller.signal,
       });
+      if (sequence !== requestRef.current.sequence) return;
       if (response.status === 401) {
         window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
         return;
       }
       if (!response.ok) throw new Error(await readError(response, "Failed to load table rows."));
       const body = await response.json();
+      if (sequence !== requestRef.current.sequence) return;
       setTable(body?.table || initialTable || null);
-      setColumns(Array.isArray(body?.columns) ? body.columns : []);
+      // Keep column headers when an order-number search has no results.
+      if (Array.isArray(body?.columns) && body.columns.length) setColumns(body.columns);
       setRows(Array.isArray(body?.rows) ? body.rows : []);
       setCanEdit(Boolean(body?.canEdit));
       setCanCreate(Boolean(body?.canCreate ?? body?.canEdit));
       setOffset(Number(body?.offset || 0));
       setHasMore(Boolean(body?.hasMore));
+      setActiveOrderSearch(search);
     } catch (err) {
+      if (sequence !== requestRef.current.sequence || err?.name === "AbortError") return;
       setError(err?.message || "Failed to load table rows.");
     } finally {
-      setLoading(false);
+      if (sequence === requestRef.current.sequence) setLoading(false);
     }
   }
 
@@ -130,12 +146,22 @@ export default function BackupTableClient({ tableKey, initialTable, initialPaylo
       setCanCreate(Boolean(initialPayload.canCreate ?? initialPayload.canEdit));
       setOffset(Number(initialPayload.offset || 0));
       setHasMore(Boolean(initialPayload.hasMore));
+      setActiveOrderSearch("");
       setError("");
       setLoading(false);
       return;
     }
     loadRows(0);
   }, [tableKey]);
+
+  useEffect(() => () => requestRef.current.controller?.abort(), []);
+
+  // Search the complete Orders table server-side, not just the visible 50 rows.
+  useEffect(() => {
+    if (!isOrdersTable || !searchChangedRef.current) return undefined;
+    const timeout = setTimeout(() => loadRows(0, query), 320);
+    return () => clearTimeout(timeout);
+  }, [isOrdersTable, query]);
 
   // The Classic shell owns the single page search field. Bind it to this
   // table instead of rendering a second search bar inside the workspace.
@@ -145,11 +171,22 @@ export default function BackupTableClient({ tableKey, initialTable, initialPaylo
 
     const previousPlaceholder = input.getAttribute("placeholder") || "Search";
     const previousValue = input.value || "";
-    input.setAttribute("placeholder", `Search ${table?.pageName || table?.tableName || "table"}`);
+    input.setAttribute("placeholder", isOrdersTable ? "Search order number (e.g. ORD-117)" : `Search ${table?.pageName || table?.tableName || "table"}`);
     input.value = "";
     setQuery("");
 
-    const onInput = () => setQuery(input.value || "");
+    const onInput = () => {
+      const nextValue = input.value || "";
+      if (nextValue === query) return;
+      searchChangedRef.current = true;
+      if (isOrdersTable) {
+        // Invalidate any older page/search request before the debounce fires.
+        requestRef.current.controller?.abort();
+        requestRef.current.sequence += 1;
+        setLoading(true);
+      }
+      setQuery(nextValue);
+    };
     input.addEventListener("input", onInput);
     input.addEventListener("search", onInput);
 
@@ -159,7 +196,7 @@ export default function BackupTableClient({ tableKey, initialTable, initialPaylo
       input.setAttribute("placeholder", previousPlaceholder);
       input.value = previousValue;
     };
-  }, [tableKey, table?.pageName, table?.tableName]);
+  }, [tableKey, table?.pageName, table?.tableName, isOrdersTable]);
 
   const visibleColumns = useMemo(() => {
     const names = columns.map((column) => text(column?.name)).filter(Boolean);
@@ -173,10 +210,11 @@ export default function BackupTableClient({ tableKey, initialTable, initialPaylo
   }, [columns, rows]);
 
   const filteredRows = useMemo(() => {
+    if (isOrdersTable) return rows; // Already filtered by order_number on the server.
     const needle = lower(query);
     if (!needle) return rows;
     return rows.filter((row) => visibleColumns.some((column) => lower(displayValue(row?.[column.name])).includes(needle)));
-  }, [rows, visibleColumns, query]);
+  }, [rows, visibleColumns, query, isOrdersTable]);
 
   function openEdit(row) {
     if (!canEdit || newRowOpen) return;
@@ -377,16 +415,17 @@ export default function BackupTableClient({ tableKey, initialTable, initialPaylo
                 </tfoot>
               ) : null}
             </table>
-            {!filteredRows.length && rows.length ? <div className="backup-table-no-search">No rows on this page match your search.</div> : null}
+            {!filteredRows.length && isOrdersTable && activeOrderSearch ? <div className="backup-table-no-search">No records found for order number {activeOrderSearch}.</div> : null}
+            {!filteredRows.length && !isOrdersTable && rows.length ? <div className="backup-table-no-search">No rows on this page match your search.</div> : null}
           </div>
         ) : null}
         {saveError ? <p className="backup-inline-save-error">{saveError}</p> : null}
         {createError ? <p className="backup-inline-save-error">{createError}</p> : null}
 
         <div className="backup-table-pagination">
-          <button type="button" onClick={() => loadRows(Math.max(0, offset - pageSize))} disabled={loading || offset <= 0}><Icon name="chevronLeft" /><span>Previous</span></button>
+          <button type="button" onClick={() => loadRows(Math.max(0, offset - pageSize), activeOrderSearch)} disabled={loading || offset <= 0}><Icon name="chevronLeft" /><span>Previous</span></button>
           <span>Page {Math.floor(offset / pageSize) + 1}</span>
-          <button type="button" onClick={() => loadRows(offset + pageSize)} disabled={loading || !hasMore}><span>Next</span><Icon name="chevronRight" /></button>
+          <button type="button" onClick={() => loadRows(offset + pageSize, activeOrderSearch)} disabled={loading || !hasMore}><span>Next</span><Icon name="chevronRight" /></button>
         </div>
       </section>
 

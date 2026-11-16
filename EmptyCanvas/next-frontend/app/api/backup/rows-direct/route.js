@@ -53,7 +53,8 @@ export async function GET(request) {
     const key = String(url.searchParams.get("key") || "").trim();
     const limit = url.searchParams.get("limit") || "50";
     const offset = url.searchParams.get("offset") || "0";
-    const payload = await loadBackupTableRows(key, { limit, offset, account: ctx.account });
+    const orderNumber = key === "orders" ? url.searchParams.get("orderNumber") || "" : "";
+    const payload = await loadBackupTableRows(key, { limit, offset, orderNumber, account: ctx.account });
     return json({ ...payload, canEdit: Boolean(payload.canEdit) && featureAllowed(ctx.account, "backup.row_edit"), canCreate: Boolean(payload.canEdit) && featureAllowed(ctx.account, "backup.row_create") });
   } catch (error) {
     console.error("GET /next/api/backup/rows-direct error:", error?.details || error);
