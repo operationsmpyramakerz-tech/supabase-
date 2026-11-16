@@ -6,6 +6,7 @@ import { historyList } from "../../lib/history-data";
 import { getDirectAccountGate } from "../../lib/products-auth";
 import { featureGate } from "../../lib/feature-permissions-server";
 import { featureAllowed } from "../../lib/feature-permissions-registry";
+import { directPageAccessLevel } from "../../lib/order-action-auth";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -59,6 +60,7 @@ export default async function HistoryPage() {
         initialHasMore={Boolean(historyPayload?.hasMore)}
         initialNextOffset={Number(historyPayload?.nextOffset || 0)}
         canClear={featureAllowed(gate.account, "history.clear")}
+        canProbe={featureAllowed(gate.account, "history.clear") && directPageAccessLevel(gate.account, ["History"]) === "admin"}
       />
     </AppShell>
   );

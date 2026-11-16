@@ -66,3 +66,39 @@ try {
 - Confirm unauthorized clients cannot spoof audit actors.
 - Confirm failures are reported, no sensitive request fields are stored, and older pages can be loaded.
 - Verify login and logout from separate accounts, which must be coordinated with Chat 01.
+
+## Chat 09 UI / diagnostic update — 16 November 2026
+
+The History page has a **Test audit write** action for a verified History page administrator (`history.clear` plus page-level `admin`). This explicitly calls:
+
+`POST /next/api/history/diagnostics`
+
+- The endpoint derives the actor from the verified session and writes **one real, clearly labeled diagnostic event** (`history.diagnostic.verified`) to `operation_history`.
+- Successful response includes the persisted row ID; History refreshes to display the new record.
+- Failure returns a meaningful diagnostic code and a sanitized error for the authorized administrator; the server also logs `HISTORY_AUDIT_DIAGNOSTIC_FAILED`.
+- The diagnostic does **not** enable or simulate logging from other modules. Audit collection for Login, Orders, Projects, etc. must be wired at their successful server-side mutation/login endpoints by their respective owners.
+
+### Recommended troubleshooting order
+
+1. Deploy the Chat 09 files; open History as an administrator; press **Test audit write**.
+2. If the test fails, inspect the returned error and server logs. Typical causes: wrong Supabase environment, missing column(s), row ID defaults, RLS/service key, invalid column type. Do not run a blind destructive schema migration.
+3. In Supabase SQL Editor, inspect the actual table **read-only**:
+
+   ```sql
+   select column_name, data_type, is_nullable, column_default
+   from information_schema.columns
+   where table_schema = 'public' and table_name = 'operation_history'
+   order by ordinal_position;
+
+   select count(*) as saved_events, max(created_at) as latest_event
+   from public.operation_history;
+   ```
+
+4. If the test succeeds, the database can accept this writer's payload. Missing events for other pages are therefore an **integration/coverage issue**, not a History refresh issue. Ask Chat 01 to integrate server-side sign-in/sign-out first, then the other owners for their mutation endpoints.
+5. After integration, validate operations with **two different user accounts** and compare actor IDs, actions, page names, timestamps. A test event cannot reconstruct old operations that were not persisted.
+
+### Owner handoff — precise task
+
+> Wire `recordHistoryForAccount` from `lib/history-audit.js` into successful authenticated server-side operations in your own group. Derive `account` and `memberId` from `getDirectAccountGate` (or the existing verified session gate), never from the request body. Save action/page/entity metadata only **after success**, do not include passwords, session tokens, raw request bodies, or private files, and log audit failures visibly to server logs. Do not modify Chat 09 files or central Core files unless they belong to your group. Coordinate shared DB/API contracts before deployment.
+
+**Scope note:** Chat 09 owns the History reader/writer/diagnostics and Backup events. It cannot provide reliable attribution for other groups' backend activity without instrumentation at their real endpoints. Database triggers alone generally cannot recover the current ERP user identity when the backend writes via a service-role key.

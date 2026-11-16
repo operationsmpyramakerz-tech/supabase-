@@ -180,7 +180,7 @@ function Toast({ toast, onClose }) {
   );
 }
 
-export default function HistoryClient({ initialRows, bootstrapWarnings = [], canClear = true, initialHasMore = false, initialNextOffset = 0 }) {
+export default function HistoryClient({ initialRows, bootstrapWarnings = [], canClear = true, canProbe = false, initialHasMore = false, initialNextOffset = 0 }) {
   const [rows, setRows] = useState(Array.isArray(initialRows) ? initialRows : []);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All");
@@ -188,6 +188,8 @@ export default function HistoryClient({ initialRows, bootstrapWarnings = [], can
   const [nextOffset, setNextOffset] = useState(initialNextOffset);
   const [fetchingMore, setFetchingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [checkingAudit, setCheckingAudit] = useState(false);
+  const [auditWriteError, setAuditWriteError] = useState("");
   const [loadError, setLoadError] = useState("");
   const [lastChecked, setLastChecked] = useState(null);
   const [page, setPage] = useState("");
@@ -273,6 +275,30 @@ export default function HistoryClient({ initialRows, bootstrapWarnings = [], can
       setLoadError(error?.message || "Could not refresh activity.");
     } finally {
       if (!silent) setRefreshing(false);
+    }
+  }
+
+  async function verifyAuditWriter() {
+    if (checkingAudit) return;
+    setCheckingAudit(true);
+    setAuditWriteError("");
+    try {
+      const result = await requestJson("/next/api/history/diagnostics", { method: "POST" });
+      setToast({
+        type: "success",
+        title: "Database write verified",
+        message: `A test event was saved${result?.rowId ? ` (ID: ${result.rowId})` : ""}. Other modules still need their own audit integrations.`,
+      });
+      await loadRecent({ silent: true });
+    } catch (error) {
+      setAuditWriteError(error?.message || "Supabase refused the audit event. Check the server logs.");
+      setToast({
+        type: "error",
+        title: "History write failed",
+        message: error?.message || "Supabase refused the audit event. Check the server logs.",
+      });
+    } finally {
+      setCheckingAudit(false);
     }
   }
 
@@ -441,12 +467,16 @@ export default function HistoryClient({ initialRows, bootstrapWarnings = [], can
         <div className="history-design-stat"><span className="history-design-stat-icon"><HistoryIcon name="user"/></span><small>All users</small><strong>{overview.users}</strong><em>In loaded history</em></div>
         <div className="history-design-stat"><span className="history-design-stat-icon"><HistoryIcon name="clock"/></span><small>Last activity</small><strong className="history-design-stat-date">{overview.latest ? relativeTime(overview.latest) : "None"}</strong><em>{overview.latest ? formatShortDate(overview.latest) : "No records"}</em></div>
       </section>
-      {isStale ? <div className="history-design-alert" role="status"><strong>Activity log may be inactive.</strong> The newest saved event is {formatCardDateTime(overview.latest)}. Refreshing can only show records that have been saved to Supabase.</div> : null}
+      {(isStale || (!overview.latest && canProbe)) ? <div className="history-design-alert" role="status">
+        <div className="history-design-alert-copy"><strong>No recent activity has been recorded.</strong> The latest saved event is {overview.latest ? formatCardDateTime(overview.latest) : "not available"}. The History page cannot recover events that were never recorded.</div>
+        {canProbe ? <button type="button" className="history-design-audit-check" disabled={checkingAudit} onClick={verifyAuditWriter} title="Save a real test record to check the Supabase history writer"><HistoryIcon name="refresh"/><span>{checkingAudit ? "Testing write..." : "Test audit write"}</span></button> : null}
+        {auditWriteError ? <div className="history-design-audit-error" role="alert">Audit write error: {auditWriteError}</div> : null}
+      </div> : null}
       {loadError ? <div className="history-design-alert is-error" role="alert">{loadError} <button type="button" onClick={() => loadRecent()}>Try again</button></div> : null}
       <section className="history-design-workspace" aria-label="System activity history">
         <div className="history-design-toolbar">
           <label className="history-design-search"><HistoryIcon name="search"/><input aria-label="Search history" placeholder="Search activities, users, pages..." value={search} onChange={(event) => setSearch(event.target.value)} /></label>
-          <button type="button" className={`history-design-filter ${hasFilters ? "is-active" : ""}`} onClick={() => { preloadHistoryDialogs(); setShowFilters(true); }}><HistoryIcon name="filter"/><span>Filter</span>{hasFilters ? <b>•</b> : null}</button>
+          <button type="button" className={`history-design-filter ${hasFilters ? "is-active" : ""}`} aria-label="Filter history" title="Filter history" onClick={() => { preloadHistoryDialogs(); setShowFilters(true); }}><HistoryIcon name="filter"/><span>Filter</span>{hasFilters ? <b>•</b> : null}</button>
           {canClear ? <button type="button" className="history-design-clear" onClick={() => { preloadHistoryDialogs(); setShowClear(true); }} title="Delete all history" aria-label="Delete all history"><HistoryIcon name="trash"/></button> : null}
         </div>
         <div className="history-design-categories" role="group" aria-label="Activity category">
@@ -461,7 +491,7 @@ export default function HistoryClient({ initialRows, bootstrapWarnings = [], can
             return <article className="history-design-event" key={text(row?.id) || `${row?.createdAt}-${index}`}>
               <button type="button" className={`history-design-event-icon is-${actionTone(row)}`} onClick={() => openDetails(row)} aria-label="View activity details"><HistoryIcon name={iconName}/></button>
               <button type="button" className="history-design-event-main" onClick={() => openDetails(row)}><strong>{text(row?.actionLabel) || "System action"}</strong><span><HistoryIcon name="user"/>{text(row?.actorName) || "System"}</span><small><HistoryIcon name="clock"/>{relativeTime(row?.createdAt)}</small></button>
-              <div className="history-design-event-side"><span title={text(row?.pageName)}>{text(row?.pageName) || "System"}</span><button type="button" onClick={() => openDetails(row)} aria-label={`View ${text(row?.actionLabel)} details`}><HistoryIcon name="eye"/></button></div>
+              <div className="history-design-event-side"><span title={text(row?.pageName)}>{text(row?.pageName) || "System"}</span><button type="button" onClick={() => openDetails(row)} title="View details" aria-label={`View ${text(row?.actionLabel)} details`}><HistoryIcon name="eye"/></button></div>
             </article>;
           }) : <div className="history-design-empty"><HistoryIcon name="search"/><strong>No activities found</strong><p>{hasFilters ? "Try removing some filters." : "No history events have been recorded yet."}</p>{hasFilters ? <button type="button" onClick={clearFilters}>Clear filters</button> : null}</div>}
         </div>
