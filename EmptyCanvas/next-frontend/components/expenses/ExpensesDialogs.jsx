@@ -331,7 +331,7 @@ function ClassicSelect({ value, onChange, options = [], placeholder = "Select…
       <div className="order-select__options funds-select__cards" style={{ maxHeight: Math.max(80, menuStyle.maxHeight - (compactFundsCards ? 74 : 16)) }}>
         {visibleOptions.length ? visibleOptions.map((option) => {
           const active = option.value === text(value);
-          return <button type="button" className={`order-select__option funds-select__card${active ? " is-selected" : ""}${compactFundsCards ? " funds-select__card--compact" : ""}`} role="option" aria-selected={active} key={option.value} onClick={() => { onChange(option.value); setOpen(false); setSearchTerm(""); }}>
+          return <button type="button" className={`${compactFundsCards ? "funds-select__card funds-select__card--compact" : "order-select__option funds-select__card"}${active ? " is-selected" : ""}`} role="option" aria-selected={active} key={option.value} onClick={() => { onChange(option.value); setOpen(false); setSearchTerm(""); }}>
             {compactFundsCards ? <FundsCardVisual value={option.value}/> : <span className="funds-select__card-icon" aria-hidden="true"><ClassicExpenseIcon name={fundsTypeIcon(option.value)} size={20}/></span>}
             <span className="funds-select__option-main">
               <span className="order-select__option-id">{option.label}</span>
@@ -495,19 +495,30 @@ function ExpenseOrderMultiSelect({ value = [], onChange, options = [] }) {
   useEffect(() => {
     if (!open) return undefined;
     const position = () => {
-      const rect = rootRef.current?.getBoundingClientRect();
+      let rect = rootRef.current?.getBoundingClientRect();
       if (!rect) return;
       const visualViewport = window.visualViewport;
-      // The Choose Order sheet sits at the bottom of phones: its menu must
-      // open UP so it is not hidden by the nav dock or the on-screen keyboard.
+      // Always anchor the Orders/Other reason dropdown BELOW its field.
+      // The menu itself scrolls inside the available visual viewport height.
       const viewport = {
         top: visualViewport?.offsetTop ?? 0,
         left: visualViewport?.offsetLeft ?? 0,
         width: visualViewport?.width ?? window.innerWidth,
         height: visualViewport?.height ?? window.innerHeight,
       };
-      const preferAbove = window.matchMedia("(max-width: 768px)").matches;
-      setMenuStyle({ ...expenseOrderMenuPosition(rect, viewport, { preferAbove }), zIndex: 100500 });
+      // When Android's keyboard reduces the visible area, bring the trigger
+      // higher in its own sheet before measuring the downward menu. Never
+      // focus the search automatically (the keyboard stays closed on open).
+      if (window.matchMedia("(max-width: 768px)").matches) {
+        const below = viewport.top + viewport.height - rect.bottom - 20;
+        const sheet = rootRef.current?.closest(".ex-modal-sheet-scroll");
+        if (sheet && below < 230) {
+          const previousScroll = sheet.scrollTop;
+          sheet.scrollTop += 230 - below;
+          if (sheet.scrollTop !== previousScroll) rect = rootRef.current.getBoundingClientRect();
+        }
+      }
+      setMenuStyle({ ...expenseOrderMenuPosition(rect, viewport, { preferBelow: true }), zIndex: 100500 });
     };
     const outside = (event) => {
       if (rootRef.current?.contains(event.target) || menuRef.current?.contains(event.target)) return;

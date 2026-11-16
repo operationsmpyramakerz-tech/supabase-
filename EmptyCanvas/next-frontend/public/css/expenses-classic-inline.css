@@ -3471,3 +3471,163 @@ html[data-theme="dark"] body.expenses-page .funds-select__menu--compact .funds-s
 html[data-theme="dark"] body.expenses-page .funds-select__menu--compact .funds-select__search input,
 html[data-theme="dark"] body.expenses-page .funds-select__menu--compact .order-select__option-id { color: #f8fafc; }
 html[data-theme="dark"] body.expenses-page .funds-select__menu--compact .funds-select__card--compact.is-selected { background: #3b2b20; border-color: #f97316; }
+
+/* V442 — Funds picker is portalled directly under <body>. The compact-card
+   layout must not depend on the transient route body class or generic
+   order-select button styling (which previously stacked content vertically). */
+.funds-select__menu--compact {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 19px;
+  background: #fff;
+  box-shadow: 0 20px 45px rgba(15, 23, 42, .18);
+  overflow: hidden;
+}
+.funds-select__menu--compact .funds-select__search {
+  display: flex;
+  flex: 0 0 44px;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 13px;
+  background: #f8fafc;
+  color: #475569;
+}
+.funds-select__menu--compact .funds-select__search input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: #111827;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+}
+.funds-select__menu--compact .funds-select__cards {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  padding: 0 1px 1px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.funds-select__menu--compact .funds-select__card--compact {
+  box-sizing: border-box;
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  flex: 0 0 auto;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  width: 100%;
+  min-height: 57px;
+  margin: 0;
+  padding: 6px 10px;
+  gap: 12px;
+  border: 1px solid #dfe5ef;
+  border-radius: 14px;
+  background: #fff;
+  color: #111827;
+  text-align: left !important;
+  box-shadow: none;
+  transform: none;
+  cursor: pointer;
+}
+.funds-select__menu--compact .funds-select__card--compact .funds-select__card-icon {
+  box-sizing: border-box;
+  display: grid;
+  flex: 0 0 43px;
+  place-items: center;
+  width: 43px;
+  height: 43px;
+  margin: 0;
+  border-radius: 11px;
+  overflow: hidden;
+  background: #fff1e6;
+  color: #c2410c;
+}
+.funds-select__menu--compact .funds-select__card--compact .funds-select__card-icon--image {
+  background: transparent;
+}
+.funds-select__menu--compact .funds-select__card--compact .funds-select__card-icon img {
+  display: block;
+  width: 43px;
+  height: 43px;
+  object-fit: contain;
+  border-radius: 11px;
+}
+.funds-select__menu--compact .funds-select__card--compact .funds-select__option-main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  min-width: 0;
+  margin: 0;
+  text-align: left;
+}
+.funds-select__menu--compact .funds-select__card--compact .order-select__option-id {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.3;
+}
+.funds-select__menu--compact .funds-select__card--compact .funds-select__radio {
+  display: grid;
+  flex: 0 0 22px;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-left: auto;
+  border: 1.5px solid #abb5c4;
+  border-radius: 50%;
+  background: #fff;
+}
+.funds-select__menu--compact .funds-select__card--compact .funds-select__radio.is-selected {
+  border-color: #ea580c;
+  background: #ea580c;
+  color: #fff;
+}
+.funds-select__menu--compact .funds-select__card--compact.is-selected {
+  border-color: #fb923c;
+  background: #fff7ed;
+}
+.funds-select__menu--compact .funds-select__card--compact:focus-visible {
+  outline: 2px solid #ea580c;
+  outline-offset: -2px;
+}
+@media (max-width: 390px) {
+  .funds-select__menu--compact .funds-select__card--compact { gap: 9px; padding: 6px 8px; }
+}
+html[data-theme="dark"] .funds-select__menu--compact,
+html[data-theme="dark"] .funds-select__menu--compact .funds-select__card--compact {
+  background: #151d29;
+  border-color: #38475c;
+}
+html[data-theme="dark"] .funds-select__menu--compact .funds-select__search {
+  background: #202c3b;
+  border-color: #38475c;
+}
+html[data-theme="dark"] .funds-select__menu--compact .funds-select__card--compact .order-select__option-id,
+html[data-theme="dark"] .funds-select__menu--compact .funds-select__search input { color: #f8fafc; }
+html[data-theme="dark"] .funds-select__menu--compact .funds-select__card--compact.is-selected {
+  background: #3b2b20;
+  border-color: #fb923c;
+}

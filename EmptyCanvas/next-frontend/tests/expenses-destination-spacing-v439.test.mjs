@@ -13,5 +13,5 @@ test('Destination and Add Expense have a dedicated 16px vertical gap', () => {
 });
 
 test('The changed CSS URL is cache-busted for the latest spacing', () => {
-  assert.match(page, /expenses-classic-inline\.css\?v=v440-titles-funds-cards/);
+  assert.match(page, /expenses-classic-inline\.css\?v=v442-funds-horizontal-orders-down/);
 });

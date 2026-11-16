@@ -40,9 +40,9 @@ test('manual reason and order options use equal-size icons and aligned copy', ()
   assert.match(css, /\.expense-orders-menu__manual-copy small \{ font-size: 12px;/);
 });
 
-test('multi-select and upward opening remain intact and stylesheet cache is updated', () => {
+test('multi-select and downward opening remain intact and stylesheet cache is updated', () => {
   assert.match(dialogs, /const filtered = options.filter/);
   assert.match(dialogs, /onChange\(existing.includes\(id\)/);
-  assert.match(dialogs, /expenseOrderMenuPosition\(rect, viewport, \{ preferAbove \}\)/);
-  assert.match(page, /expenses-classic-inline\.css\?v=v440-titles-funds-cards/);
+  assert.match(dialogs, /expenseOrderMenuPosition\(rect, viewport, \{ preferBelow: true \}\)/);
+  assert.match(page, /expenses-classic-inline\.css\?v=v442-funds-horizontal-orders-down/);
 });
