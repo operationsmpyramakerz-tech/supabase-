@@ -2,6 +2,7 @@ import "server-only";
 
 import PDFDocument from "pdfkit";
 import ExcelJS from "exceljs";
+import { expenseOrderLinks, expenseReasonExportPayload } from "./expense-export-order-links.mjs";
 import pdfPageNumbersModule from "./pdfPageNumbers";
 import pdfHeaderModule from "./pdfHeader";
 import pdfArabicSupportModule from "./pdfArabicSupport";
@@ -61,39 +62,6 @@ function expenseScreenshotEntries(item = {}) {
     name: text(item?.screenshotName || item?.screenshot_name) || "Screenshot",
     url: fallbackUrl,
   }];
-}
-
-function absoluteAppUrl(baseUrl, value) {
-  const raw = text(value);
-  if (!raw) return "";
-  if (/^https?:\/\//i.test(raw)) return raw;
-  const root = text(baseUrl).replace(/\/+$/, "");
-  if (!root) return raw;
-  return `${root}/${raw.replace(/^\/+/, "")}`;
-}
-
-function expenseReasonExportPayload(item = {}, baseUrl = "") {
-  const orders = Array.isArray(item?.orders) ? item.orders.filter(Boolean) : [];
-  const fallbackText = text(item?.reason);
-  if (!orders.length) return { text: fallbackText, hyperlink: "" };
-
-  const orderIds = Array.from(new Set(orders.map((order) => text(order?.orderId)).filter(Boolean)));
-  const relationIds = Array.from(new Set(
-    orders.flatMap((order) => Array.isArray(order?.relationIds) ? order.relationIds.map(text).filter(Boolean) : []),
-  ));
-
-  let hyperlink = "";
-  if (relationIds.length) {
-    hyperlink = `${text(baseUrl).replace(/\/+$/, "")}/next/orders/receipt-viewer?ids=${encodeURIComponent(relationIds.join(","))}`;
-  } else {
-    const firstOrder = orders.find((order) => text(order?.receiptViewerUrl || order?.trackingUrl)) || null;
-    if (firstOrder) hyperlink = absoluteAppUrl(baseUrl, firstOrder.receiptViewerUrl || firstOrder.trackingUrl || "");
-  }
-
-  return {
-    text: orderIds.join(", ") || fallbackText || text(orders[0]?.label) || "Order",
-    hyperlink,
-  };
 }
 
 function collectPdfBuffer(doc) {
@@ -297,6 +265,10 @@ async function renderExpenseExcel({ userName, items, dateFrom, dateTo, baseUrl }
 
   const displayName = displayUserName(userName);
   const maxScreenshotCount = rows.reduce((maxCount, item) => Math.max(maxCount, expenseScreenshotEntries(item).length), 0);
+  const maxLinkedOrderCount = rows.reduce((maxCount, item) => Math.max(maxCount, expenseOrderLinks(item, baseUrl).length), 0);
+  const orderColumns = Array.from({ length: maxLinkedOrderCount }, (_, index) => ({ header: `Order ${index + 1}`, width: 18 }));
+  const cashColumnStart = 4 + maxLinkedOrderCount;
+  const screenshotStartColumn = 9 + maxLinkedOrderCount;
   const totalCashIn = rows.reduce((sum, item) => sum + number(item?.cashIn), 0);
   const totalCashOut = rows.reduce((sum, item) => sum + number(item?.cashOut), 0);
   const totalBalance = totalCashIn - totalCashOut;
@@ -330,6 +302,7 @@ async function renderExpenseExcel({ userName, items, dateFrom, dateTo, baseUrl }
     { header: "Date", width: 14 },
     { header: "Funds Type", width: 18 },
     { header: "Reason", width: 36 },
+    ...orderColumns,
     { header: "From", width: 18 },
     { header: "To", width: 18 },
     { header: "Kilometers", width: 14 },
@@ -405,6 +378,11 @@ async function renderExpenseExcel({ userName, items, dateFrom, dateTo, baseUrl }
     const date = item?.date ? new Date(item.date) : null;
     const dateValue = date && !Number.isNaN(date.getTime()) ? date : (item?.date || "");
     const reasonPayload = expenseReasonExportPayload(item, baseUrl);
+    const orderLinkValues = Array.from({ length: maxLinkedOrderCount }, (_, index) => {
+      const order = reasonPayload.links[index];
+      if (!order) return "";
+      return order.hyperlink ? { text: order.text, hyperlink: order.hyperlink } : order.text;
+    });
     const screenshots = expenseScreenshotEntries(item);
     const expenseId = text(item?.id);
     const screenshotValues = Array.from({ length: maxScreenshotCount }, (_, index) => {
@@ -422,6 +400,7 @@ async function renderExpenseExcel({ userName, items, dateFrom, dateTo, baseUrl }
       dateValue,
       text(item?.fundsType),
       reasonPayload.text || "",
+      ...orderLinkValues,
       text(item?.from),
       text(item?.to),
       number(item?.kilometer),
@@ -434,9 +413,16 @@ async function renderExpenseExcel({ userName, items, dateFrom, dateTo, baseUrl }
       cell.value = { text: reasonPayload.text, hyperlink: reasonPayload.hyperlink };
       cell.font = { color: { argb: "FF2563EB" }, underline: true };
     }
+    orderLinkValues.forEach((value, index) => {
+      if (!value || typeof value !== "object") return;
+      const cell = row.getCell(4 + index);
+      cell.value = value;
+      cell.font = { color: { argb: "FF2563EB" }, underline: true };
+      cell.alignment = { vertical: "middle", horizontal: "center" };
+    });
     screenshotValues.forEach((value, index) => {
       if (!value || typeof value !== "object") return;
-      const cell = row.getCell(9 + index);
+      const cell = row.getCell(screenshotStartColumn + index);
       cell.value = value;
       cell.font = { color: { argb: "FF2563EB" }, underline: true };
       cell.alignment = { vertical: "middle", horizontal: "center" };
@@ -461,19 +447,19 @@ async function renderExpenseExcel({ userName, items, dateFrom, dateTo, baseUrl }
           cell.font = { color: { argb: "FF111827" }, bold: true };
         }
       }
-      if (columnNumber === 6) {
+      if (columnNumber === cashColumnStart + 2) {
         cell.numFmt = numberFormat(cell.value);
         cell.font = { color: { argb: "FF475569" } };
       }
-      if (columnNumber === 7) {
+      if (columnNumber === cashColumnStart + 3) {
         cell.numFmt = numberFormat(cell.value);
         cell.font = { color: { argb: "FF16A34A" } };
       }
-      if (columnNumber === 8) {
+      if (columnNumber === cashColumnStart + 4) {
         cell.numFmt = numberFormat(cell.value);
         cell.font = { color: { argb: "FFDC2626" } };
       }
-      if (columnNumber >= 9) cell.alignment = { vertical: "middle", horizontal: "center", wrapText: false };
+      if (columnNumber >= screenshotStartColumn) cell.alignment = { vertical: "middle", horizontal: "center", wrapText: false };
     });
   }
 

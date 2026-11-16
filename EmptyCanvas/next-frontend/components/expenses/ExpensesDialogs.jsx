@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import ClassicOrderIcon from "../orders/ClassicOrderIcon";
 import { DEFAULT_OWN_CAR_RATE_EGP_PER_KM, ownCarCostForKilometers } from "../../lib/own-car-expense.mjs";
 
 const CASH_IN_TYPES = ["Cash Payment", "Online Transfer"];
@@ -157,6 +158,7 @@ function ClassicExpenseIcon({ name, size = 18 }) {
     upload: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></>,
     "file-text": <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></>,
     "edit-3": <><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></>,
+    x: <><path d="M18 6 6 18"/><path d="M6 6 18 18"/></>,
     "log-out": <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></>,
     "log-in": <><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></>,
     "minus-circle": <><circle cx="12" cy="12" r="9"/><line x1="8" y1="12" x2="16" y2="12"/></>,
@@ -169,6 +171,15 @@ function ClassicExpenseIcon({ name, size = 18 }) {
     package: <><path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.3 7 12 12 20.7 7"/><line x1="12" y1="22" x2="12" y2="12"/></>,
   };
   return <svg {...common}>{icons[name] || icons.tag}</svg>;
+}
+
+// Reuse the exact wrench path used by Operations Orders, rather than the
+// unrelated crossed-tools icon in the legacy Expenses icon set.
+function ExpensePickerTypeIcon({ name, size = 18 }) {
+  if (name === "tool") {
+    return <span className="expense-picker-type-icon" style={{ "--expense-picker-type-size": `${size}px` }}><ClassicOrderIcon name="tool" /></span>;
+  }
+  return <ClassicExpenseIcon name={name} size={size}/>;
 }
 
 function Modal({ title, subtitle, onClose, children, footer, wide = false }) {
@@ -287,6 +298,7 @@ function ExpenseOrderMultiSelect({ value = [], onChange, options = [] }) {
   const rootRef = useRef(null);
   const menuRef = useRef(null);
   const selectedIds = Array.isArray(value) ? value : [];
+  const isManual = selectedIds.includes(OTHER_SCOPE_ID);
   const selected = options.filter((option) => selectedIds.includes(option.value));
   const filtered = options.filter((option) => [option.label, option.note, option.searchText]
     .some((part) => lower(part).includes(lower(query))));
@@ -337,12 +349,17 @@ function ExpenseOrderMultiSelect({ value = [], onChange, options = [] }) {
   const dropdown = open && menuStyle && typeof document !== "undefined" ? createPortal(
     <div className="expense-orders-menu" style={menuStyle} ref={menuRef} role="group" aria-label="Select expense orders">
       <div className="expense-orders-menu__search"><ClassicExpenseIcon name="search" size={17}/><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search order number or user..." aria-label="Search orders"/><span className="expense-orders-menu__count">{selectedIds.length} selected</span></div>
+      <button type="button" className={`expense-orders-menu__manual${isManual ? " is-selected" : ""}`} aria-pressed={isManual} onClick={() => toggle(OTHER_SCOPE_ID)}>
+        <ClassicExpenseIcon name="edit-3" size={17}/>
+        <span><strong>Other reason</strong><small>Write the reason manually</small></span>
+        <ClassicExpenseIcon name="arrow-right" size={16}/>
+      </button>
       <div className="expense-orders-menu__list">
         {filtered.length ? filtered.map((option) => {
           const active = selectedIds.includes(option.value);
           return <button type="button" key={option.value} role="checkbox" aria-checked={active}
             className={`expense-orders-menu__card${active ? " is-selected" : ""}`} onClick={() => toggle(option.value)}>
-            <span className={`expense-orders-menu__icon expense-orders-menu__icon--${option.tone || "default"}`}><ClassicExpenseIcon name={option.icon || "shopping-cart"} size={19}/></span>
+            <span className={`expense-orders-menu__icon expense-orders-menu__icon--${option.tone || "default"}`}><ExpensePickerTypeIcon name={option.icon || "shopping-cart"} size={19}/></span>
             <span className="expense-orders-menu__copy"><strong>{option.label}</strong><small dir="auto">{option.note || "—"}</small></span>
             <span className={`expense-orders-menu__check${active ? " is-selected" : ""}`} aria-hidden="true">{active ? "✓" : ""}</span>
           </button>;
@@ -354,10 +371,10 @@ function ExpenseOrderMultiSelect({ value = [], onChange, options = [] }) {
 
   return <div className="expense-orders-picker" ref={rootRef}>
     <button type="button" className={`expense-orders-picker__trigger${open ? " is-open" : ""}`} onClick={() => setOpen((current) => !current)} aria-haspopup="dialog" aria-expanded={open}>
-      <span className="expense-orders-picker__summary">{selected.length ? <><strong>{selected.length} {selected.length === 1 ? "selection" : "orders selected"}</strong><span>{selected.map((item) => item.label).join(", ")}</span></> : <span className="expense-orders-picker__placeholder">Select orders...</span>}</span>
+      <span className="expense-orders-picker__summary">{isManual ? <strong>Other reason</strong> : selected.length ? <><strong>{selected.length} {selected.length === 1 ? "selection" : "orders selected"}</strong><span>{selected.map((item) => item.label).join(", ")}</span></> : <span className="expense-orders-picker__placeholder">Select orders...</span>}</span>
       <ClassicExpenseIcon name="chevron-down" size={18}/>
     </button>
-    {selected.length ? <div className="expense-orders-picker__chips">{selected.map((option) => <span className="expense-orders-picker__chip" key={option.value}><ClassicExpenseIcon name={option.icon || "shopping-cart"} size={14}/>{option.label}<button type="button" onClick={() => onChange(selectedIds.filter((id) => id !== option.value))} aria-label={`Remove ${option.label}`}>×</button></span>)}</div> : null}
+    {selected.length ? <div className="expense-orders-picker__chips" aria-label="Selected orders">{selected.map((option) => <span className="expense-orders-picker__chip" key={option.value}><span className={`expense-orders-picker__chip-icon expense-orders-picker__chip-icon--${option.tone || "products"}`}><ExpensePickerTypeIcon name={option.icon || "shopping-cart"} size={15}/></span><span className="expense-orders-picker__chip-label">{option.label}</span><button type="button" className="expense-orders-picker__chip-remove" onClick={() => onChange(selectedIds.filter((id) => id !== option.value))} aria-label={`Remove ${option.label}`}><ClassicExpenseIcon name="x" size={13}/></button></span>)}</div> : null}
     {dropdown}
   </div>;
 }
@@ -523,7 +540,6 @@ function CashOutModal({ fundsTypes, orderOptions, ownCarRate = DEFAULT_OWN_CAR_R
   const isOwnCar = typeKey(form.fundsType) === "owncar";
   const screenshotRequired = SCREENSHOT_REQUIRED_KEYS.has(typeKey(form.fundsType));
   const scopeOptions = useMemo(() => [
-    { value: OTHER_SCOPE_ID, label: "Other reason", note: "Write the reason manually", icon: "edit-3", tone: "manual" },
     ...(Array.isArray(orderOptions) ? orderOptions : []).map((item) => {
       const kind = typeKey(item?.orderType);
       return {
