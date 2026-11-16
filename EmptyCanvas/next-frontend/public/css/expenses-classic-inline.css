@@ -2933,6 +2933,11 @@ body.expenses-page .ex-modal-box--bottom-sheet .ex-modal-sheet-icon {
     background: #111111;
     color: white;
   }
+  body.expenses-page .ex-modal-box--bottom-sheet .ex-modal-sheet-icon--cash-out {
+    background: #ef4444;
+    color: #ffffff;
+    box-shadow: 0 16px 36px rgba(239, 68, 68, 0.24), 0 2px 8px rgba(15, 23, 42, 0.10);
+  }
   body.expenses-page .ex-modal-box--bottom-sheet .ex-modal-title {
     margin-bottom: 20px;
   }
@@ -2962,72 +2967,4 @@ html[data-theme="dark"] body.expenses-page .order-preview-entry__change {
   background: #222d3a;
   color: #f8fafc;
   border-color: #39485c;
-}
-
-
-/* V432 — Cash Out badge floats across the top edge of Choose Order, like the
-   Shopping Cart Add Component badge. The frame prevents scroll clipping. */
-body.expenses-page .ex-modal-sheet-frame {
-  box-sizing: border-box;
-  position: relative;
-  display: flex;
-  flex: 0 1 auto;
-  flex-direction: column;
-  width: min(90%, 460px);
-  max-height: calc(100dvh - 40px);
-  min-height: 0;
-  overflow: visible;
-}
-body.expenses-page .ex-modal-sheet-frame > .ex-modal-box--bottom-sheet {
-  box-sizing: border-box;
-  flex: 0 1 auto;
-  width: 100%;
-  max-width: none;
-  min-height: 0;
-  margin: 0;
-  padding-top: 62px;
-}
-body.expenses-page .ex-modal-sheet-frame > .ex-modal-sheet-icon {
-  position: absolute;
-  z-index: 4;
-  top: -28px;
-  left: 50%;
-  display: grid;
-  place-items: center;
-  width: 56px;
-  height: 56px;
-  margin: 0;
-  transform: translateX(-50%);
-  border: 1px solid #fecaca;
-  border-radius: 18px;
-  background: #fff1f2;
-  color: #dc2626;
-  box-shadow: 0 12px 28px -16px rgba(220,38,38,.5), 0 4px 14px -10px rgba(15,23,42,.24);
-  pointer-events: none;
-}
-body.expenses-page .ex-modal-sheet-frame > .ex-modal-box--bottom-sheet .ex-modal-sheet-handle {
-  display: none;
-}
-@media (max-width: 768px) {
-  body.expenses-page .ex-modal--bottom-sheet {
-    /* Keep a little room for the half of the badge above the white sheet. */
-    padding: 40px 0 0;
-  }
-  body.expenses-page .ex-modal-sheet-frame {
-    width: 100%;
-    max-width: 640px;
-    max-height: calc(100dvh - 40px);
-    animation: expenses-sheet-enter .35s cubic-bezier(.16, 1, .3, 1) both;
-  }
-  body.expenses-page .ex-modal-sheet-frame > .ex-modal-box--bottom-sheet {
-    max-height: calc(100dvh - 40px);
-    padding-top: 62px;
-    animation: none;
-  }
-}
-@media (max-width: 380px) {
-  body.expenses-page .ex-modal-sheet-frame > .ex-modal-box--bottom-sheet { padding-top: 60px; }
-}
-@media (prefers-reduced-motion: reduce) {
-  body.expenses-page .ex-modal-sheet-frame { animation: none !important; }
 }
