@@ -200,13 +200,15 @@ function Modal({ title, subtitle, onClose, children, footer, wide = false }) {
 }
 
 function ClassicModal({ title, onClose, children, compact = false, bottomSheet = false, flushBottom = false }) {
+  const modalContent = <>
+    <h3 className="ex-modal-title">{title}</h3>
+    {children}
+  </>;
   return (
     <div className={`ex-modal${bottomSheet ? " ex-modal--bottom-sheet" : ""}${flushBottom ? " ex-modal--flush-bottom" : ""}`} style={{ display: "flex" }} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <section className={`ex-modal-box${compact ? " ex-modal-box--compact" : ""}${bottomSheet ? " ex-modal-box--bottom-sheet" : ""}${flushBottom ? " ex-modal-box--flush-bottom" : ""}`} role="dialog" aria-modal="true" aria-label={title} onMouseDown={(event) => event.stopPropagation()}>
-        {bottomSheet ? <span className="ex-modal-sheet-handle" aria-hidden="true"/> : null}
         {bottomSheet ? <span className="ex-modal-sheet-icon ex-modal-sheet-icon--cash-out" aria-hidden="true"><ClassicExpenseIcon name="arrow-up-right" size={28}/></span> : null}
-        <h3 className="ex-modal-title">{title}</h3>
-        {children}
+        {bottomSheet ? <div className="ex-modal-sheet-scroll">{modalContent}</div> : modalContent}
       </section>
     </div>
   );

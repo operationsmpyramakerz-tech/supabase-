@@ -2968,3 +2968,47 @@ html[data-theme="dark"] body.expenses-page .order-preview-entry__change {
   color: #f8fafc;
   border-color: #39485c;
 }
+
+/* V434 — Match the Shopping Cart Add Component floating badge exactly.
+   The outer sheet must allow overflow so the badge can sit half outside;
+   only the inner content scrolls on smaller screens. */
+@media (max-width: 768px) {
+  body.expenses-page .ex-modal-box--bottom-sheet {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    overflow: visible;
+    padding: 0;
+    /* Leave room for the 28px projecting half even on very short displays. */
+    max-height: calc(100dvh - 44px);
+  }
+  body.expenses-page .ex-modal-box--bottom-sheet .ex-modal-sheet-icon--cash-out {
+    position: absolute;
+    z-index: 3;
+    top: -28px;
+    left: 50%;
+    width: 56px;
+    height: 56px;
+    margin: 0;
+    transform: translateX(-50%);
+    background: #ef4444;
+    color: #fff;
+    border: 0;
+    border-radius: 18px;
+    pointer-events: none;
+  }
+  body.expenses-page .ex-modal-box--bottom-sheet .ex-modal-sheet-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding: 68px 20px max(24px, env(safe-area-inset-bottom, 0px));
+    border-radius: inherit;
+  }
+}
+@media (max-width: 380px) {
+  body.expenses-page .ex-modal-box--bottom-sheet .ex-modal-sheet-scroll {
+    padding-inline: 15px;
+  }
+}
