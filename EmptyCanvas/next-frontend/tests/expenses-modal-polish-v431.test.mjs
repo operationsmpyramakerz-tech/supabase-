@@ -19,6 +19,9 @@ test('Choose Order fills the bottom edge and has a centered floating cash-out ic
   assert.match(dialogs, /<ClassicModal title="Choose Order" onClose=\{onClose\} compact bottomSheet>/);
   assert.match(styles, /\.ex-modal-box--bottom-sheet\s*\{[^}]*border-radius:\s*28px 28px 0 0;/s);
   assert.match(styles, /\.ex-modal-box--bottom-sheet \.ex-modal-sheet-icon--cash-out\s*\{[^}]*position:\s*absolute;[^}]*top:\s*-28px;[^}]*left:\s*50%;[^}]*width:\s*56px;[^}]*height:\s*56px;/s);
+  // The global animation on direct modal children must not override the badge's
+  // centering transform (otherwise it shifts right by half its width).
+  assert.match(styles, /\.ex-modal-box--bottom-sheet \.ex-modal-sheet-icon--cash-out\s*\{[^}]*transform:\s*translateX\(-50%\);\s*animation:\s*none !important;/s);
   assert.match(styles, /\.ex-modal-box--bottom-sheet\s*\{[^}]*overflow:\s*visible;/s);
   assert.match(styles, /\.ex-modal-box--bottom-sheet \.ex-modal-sheet-scroll\s*\{[^}]*overflow-y:\s*auto;/s);
 });
@@ -38,5 +41,5 @@ test('backend order linking still receives every selected order (visual summary 
   assert.match(dialogs, /selectedOrderIds: isManual \? \[\] : selectedOrders\.flatMap/);
   assert.match(dialogs, /selectedOrderKeys: isManual \? \[\] : selectedOrders\.map/);
   assert.match(dialogs, /orderKeys: draft\.selectedOrderKeys/);
-  assert.match(page, /expenses-classic-inline\.css\?v=v434-floating-cash-out-edge/);
+  assert.match(page, /expenses-classic-inline\.css\?v=v435-cash-out-centered/);
 });

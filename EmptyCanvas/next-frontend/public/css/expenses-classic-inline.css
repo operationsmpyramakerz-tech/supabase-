@@ -2990,7 +2990,11 @@ html[data-theme="dark"] body.expenses-page .order-preview-entry__change {
     width: 56px;
     height: 56px;
     margin: 0;
+    /* The global Expenses content-enter animation animates transform on
+       direct modal children, overriding translateX(-50%) after it ends.
+       Keep the fixed badge outside that animation so left: 50% is truly centered. */
     transform: translateX(-50%);
+    animation: none !important;
     background: #ef4444;
     color: #fff;
     border: 0;
