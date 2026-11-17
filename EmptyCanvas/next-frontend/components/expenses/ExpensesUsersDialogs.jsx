@@ -189,15 +189,23 @@ function groupUserExpenses(items, sortType = "newest") {
   for (const item of Array.isArray(items) ? items : []) {
     const reason = userDisplayReason(item);
     const date = text(item?.date);
-    const key = `${date}__${normalizeGroupText(reason)}`;
+    const destinationName = text(item?.destinationUserName);
+    const destinationId = text(item?.destinationUserId);
+    // A destination is part of the ticket identity, not a property of its first row.
+    const destinationKey = destinationId ? ["id", destinationId] : ["name", lower(destinationName)];
+    const key = JSON.stringify([date, normalizeGroupText(reason), destinationKey]);
     if (!grouped.has(key)) {
-      grouped.set(key, { key, date, reason: reason || "No reason", items: [], ordersMap: new Map(), totalCashIn: 0, totalCashOut: 0, totalKilometer: 0, createdSort: transactionTime(item) });
+      grouped.set(key, { key, date, reason: reason || "No reason", destinationName, destinationCreatedSort: transactionTime(item), items: [], ordersMap: new Map(), totalCashIn: 0, totalCashOut: 0, totalKilometer: 0, createdSort: transactionTime(item) });
     }
     const group = grouped.get(key);
     group.items.push(item);
     group.totalCashIn += number(item?.cashIn);
     group.totalCashOut += number(item?.cashOut);
     group.totalKilometer += number(item?.kilometer);
+    if (destinationName && (!group.destinationName || transactionTime(item) >= group.destinationCreatedSort)) {
+      group.destinationName = destinationName;
+      group.destinationCreatedSort = transactionTime(item);
+    }
     group.createdSort = Math.max(group.createdSort || 0, transactionTime(item));
     for (const order of ordersFor(item)) {
       const orderKey = text(order?.key || order?.orderId || order?.label);
@@ -321,6 +329,7 @@ function UserClassicIcon({ name, size = 18 }) {
     rotate: <><polyline points="1 4 1 10 7 10"/><path d="M3.5 15a9 9 0 1 0 2.1-9.4L1 10"/></>,
     sort: <><line x1="3" y1="6" x2="21" y2="6"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="10" y1="18" x2="14" y2="18"/></>,
     card: <><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></>,
+    user: <><path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/></>,
     image: <><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></>,
     arrow: <><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></>,
     edit: <><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></>,
@@ -445,7 +454,27 @@ function UserExpenseTicket({ group, onReceipt, onEdit, onDelete, canViewOrderRec
   const reasonText = text(group?.reason) || "No reason";
   const primary = rows[0] || null;
   const ids = rows.map((item) => text(item?.id)).filter(Boolean);
-  return <article className="expense-ticket"><div className="expense-ticket__top"><div className={`expense-ticket__header-row${hasOrders ? " expense-ticket__header-row--with-order" : ""}`}><div className="expense-ticket__meta"><span className="expense-ticket__date">{formatExpenseGroupDate(group?.date)}</span></div>{(ids.length || hasOrders || !hideReason) ? <div className="expense-ticket__header-side">{(ids.length && (onEdit || onDelete)) ? <div className={`expense-ticket__actions${menuKey === group.key ? " is-open" : ""}`}><button type="button" className="expense-ticket__more" onClick={() => setMenuKey(menuKey === group.key ? "" : group.key)} aria-label="Expense actions">⋯</button><div className="expense-ticket__menu">{onEdit ? <button type="button" className="expense-ticket__menu-item" onClick={() => { setMenuKey(""); onEdit(primary); }}><UserClassicIcon name="edit" size={15}/><span>Edit</span></button> : null}{onDelete ? <button type="button" className="expense-ticket__menu-item expense-ticket__menu-item--danger" onClick={() => { setMenuKey(""); onDelete(ids); }}><UserClassicIcon name="trash" size={15}/><span>Delete</span></button> : null}</div></div> : null}{hasOrders ? <UserExpenseOrderActions orders={group.orders} canViewOrderReceipts={canViewOrderReceipts}/> : !hideReason ? <div className="expense-ticket__reason">{reasonText}</div> : null}</div> : null}</div>{hasOrders && !hideReason ? <div className="expense-ticket__reason expense-ticket__reason--block">{reasonText}</div> : null}<div className="expense-ticket__header-divider" aria-hidden="true" /></div><div className="expense-ticket__legs">{rows.map((item, index) => { const route = userRoute(item); const amount = userAmount(item); const typeLabel = number(item?.cashIn) > 0 ? "Cash In" : text(item?.fundsType) || "Cash Out"; return <div className="expense-ticket__route" key={text(item?.id) || index}><div className="expense-ticket__route-frame"><div className="expense-ticket__route-shot"><UserExpenseShot item={item} onReceipt={onReceipt}/></div><div className="expense-ticket__route-body"><div className="expense-ticket__route-top"><div className="expense-ticket__route-title" dir="auto" title={typeLabel}>{typeLabel}</div><div className={`expense-ticket__route-amount ${amount.tone}`} title={amount.text}>{amount.text}</div></div><div className="expense-ticket__route-sub"><span className="expense-ticket__route-endpoint expense-ticket__route-endpoint--from" dir="auto" title={route.from}>{route.from}</span><span className="expense-ticket__route-arrow" aria-hidden="true"><UserClassicIcon name="arrow" size={16}/></span><span className="expense-ticket__route-endpoint expense-ticket__route-endpoint--to" dir="auto" title={route.to}>{route.to}</span></div></div></div></div>; })}</div><div className="expense-ticket__separator" aria-hidden="true" /><div className="expense-ticket__footer"><span className="expense-ticket__footer-label">Total</span><span className={`expense-ticket__footer-value ${total.tone}`}>{total.text}</span></div></article>;
+  const hasActions = Boolean(ids.length && (onEdit || onDelete));
+  return <article className="expense-ticket expense-ticket--user-destination">
+    <div className="expense-ticket__top">
+      <div className="expense-ticket__destination-date">
+        <div className="expense-ticket__destination" title={group.destinationName || "No destination recorded"}>
+          <span className="expense-ticket__destination-icon"><UserClassicIcon name="user" size={15}/></span>
+          <span className="expense-ticket__destination-copy"><span className="expense-ticket__destination-label">Destination</span><strong dir="auto">{group.destinationName || "—"}</strong></span>
+        </div>
+        <span className="expense-ticket__date">{formatExpenseGroupDate(group?.date)}</span>
+      </div>
+      <div className="expense-ticket__destination-divider" aria-hidden="true"/>
+      <div className={`expense-ticket__header-row expense-ticket__header-row--user-reason${hasActions ? " has-actions" : ""}`}>
+        <div className="expense-ticket__user-reason">
+          {hasOrders ? <UserExpenseOrderActions orders={group.orders} canViewOrderReceipts={canViewOrderReceipts}/> : !hideReason ? <div className="expense-ticket__reason">{reasonText}</div> : null}
+        </div>
+        {hasActions ? <div className={`expense-ticket__actions${menuKey === group.key ? " is-open" : ""}`}><button type="button" className="expense-ticket__more" onClick={() => setMenuKey(menuKey === group.key ? "" : group.key)} aria-label="Expense actions">⋯</button><div className="expense-ticket__menu">{onEdit ? <button type="button" className="expense-ticket__menu-item" onClick={() => { setMenuKey(""); onEdit(primary); }}><UserClassicIcon name="edit" size={15}/><span>Edit</span></button> : null}{onDelete ? <button type="button" className="expense-ticket__menu-item expense-ticket__menu-item--danger" onClick={() => { setMenuKey(""); onDelete(ids); }}><UserClassicIcon name="trash" size={15}/><span>Delete</span></button> : null}</div></div> : null}
+      </div>
+      {hasOrders && !hideReason ? <div className="expense-ticket__reason expense-ticket__reason--block">{reasonText}</div> : null}
+      <div className="expense-ticket__header-divider" aria-hidden="true" />
+    </div>
+    <div className="expense-ticket__legs">{rows.map((item, index) => { const route = userRoute(item); const amount = userAmount(item); const typeLabel = number(item?.cashIn) > 0 ? "Cash In" : text(item?.fundsType) || "Cash Out"; return <div className="expense-ticket__route" key={text(item?.id) || index}><div className="expense-ticket__route-frame"><div className="expense-ticket__route-shot"><UserExpenseShot item={item} onReceipt={onReceipt}/></div><div className="expense-ticket__route-body"><div className="expense-ticket__route-top"><div className="expense-ticket__route-title" dir="auto" title={typeLabel}>{typeLabel}</div><div className={`expense-ticket__route-amount ${amount.tone}`} title={amount.text}>{amount.text}</div></div><div className="expense-ticket__route-sub"><span className="expense-ticket__route-endpoint expense-ticket__route-endpoint--from" dir="auto" title={route.from}>{route.from}</span><span className="expense-ticket__route-arrow" aria-hidden="true"><UserClassicIcon name="arrow" size={16}/></span><span className="expense-ticket__route-endpoint expense-ticket__route-endpoint--to" dir="auto" title={route.to}>{route.to}</span></div></div></div></div>; })}</div><div className="expense-ticket__separator" aria-hidden="true" /><div className="expense-ticket__footer"><span className="expense-ticket__footer-label">Total</span><span className={`expense-ticket__footer-value ${total.tone}`}>{total.text}</span></div></article>;
 }
 
 export function UserExpensesModal({ user, ownCarRate = DEFAULT_OWN_CAR_RATE_EGP_PER_KM, permissions = {}, onClose, onUsersRefresh, notify }) {

@@ -252,7 +252,7 @@ function hashStr(value) {
   return Math.abs(hash);
 }
 
-async function renderExpenseExcel({ userName, items, dateFrom, dateTo, baseUrl }) {
+async function renderExpenseExcel({ userName, items, dateFrom, dateTo, baseUrl, includeDestination = false }) {
   const rows = safeItems(items);
   const normalizedDateFrom = text(dateFrom);
   const normalizedDateTo = text(dateTo);
@@ -267,8 +267,9 @@ async function renderExpenseExcel({ userName, items, dateFrom, dateTo, baseUrl }
   const maxScreenshotCount = rows.reduce((maxCount, item) => Math.max(maxCount, expenseScreenshotEntries(item).length), 0);
   const maxLinkedOrderCount = rows.reduce((maxCount, item) => Math.max(maxCount, expenseOrderLinks(item, baseUrl).length), 0);
   const orderColumns = Array.from({ length: maxLinkedOrderCount }, (_, index) => ({ header: `Order ${index + 1}`, width: 18 }));
-  const cashColumnStart = 4 + maxLinkedOrderCount;
-  const screenshotStartColumn = 9 + maxLinkedOrderCount;
+  const destinationColumnCount = includeDestination ? 1 : 0;
+  const cashColumnStart = 4 + maxLinkedOrderCount + destinationColumnCount;
+  const screenshotStartColumn = 9 + maxLinkedOrderCount + destinationColumnCount;
   const totalCashIn = rows.reduce((sum, item) => sum + number(item?.cashIn), 0);
   const totalCashOut = rows.reduce((sum, item) => sum + number(item?.cashOut), 0);
   const totalBalance = totalCashIn - totalCashOut;
@@ -303,6 +304,7 @@ async function renderExpenseExcel({ userName, items, dateFrom, dateTo, baseUrl }
     { header: "Funds Type", width: 18 },
     { header: "Reason", width: 36 },
     ...orderColumns,
+    ...(includeDestination ? [{ header: "Destination", width: 24 }] : []),
     { header: "From", width: 18 },
     { header: "To", width: 18 },
     { header: "Kilometers", width: 14 },
@@ -401,6 +403,7 @@ async function renderExpenseExcel({ userName, items, dateFrom, dateTo, baseUrl }
       text(item?.fundsType),
       reasonPayload.text || "",
       ...orderLinkValues,
+      ...(includeDestination ? [text(item?.destinationUserName)] : []),
       text(item?.from),
       text(item?.to),
       number(item?.kilometer),
@@ -494,10 +497,10 @@ async function renderExpenseExcel({ userName, items, dateFrom, dateTo, baseUrl }
   };
 }
 
-export async function renderExpenseExport({ kind, userName, userId, items, dateFrom, dateTo, baseUrl = "" } = {}) {
+export async function renderExpenseExport({ kind, userName, userId, items, dateFrom, dateTo, baseUrl = "", includeDestination = false } = {}) {
   const exportKind = text(kind).toLowerCase();
   if (exportKind === "pdf") return await renderExpensePdf({ userName, userId, items, dateFrom, dateTo });
-  if (exportKind === "excel" || exportKind === "xlsx") return await renderExpenseExcel({ userName, items, dateFrom, dateTo, baseUrl });
+  if (exportKind === "excel" || exportKind === "xlsx") return await renderExpenseExcel({ userName, items, dateFrom, dateTo, baseUrl, includeDestination });
   const error = new Error("Unsupported expense export type.");
   error.status = 400;
   throw error;

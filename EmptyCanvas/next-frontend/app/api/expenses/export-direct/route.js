@@ -80,6 +80,7 @@ export async function POST(request) {
       dateFrom: body?.dateFrom,
       dateTo: body?.dateTo,
       baseUrl: requestOrigin(request),
+      includeDestination: isUsersExport,
     });
     const fallback = kind === "pdf" ? "expenses.pdf" : "expenses.xlsx";
     const fileName = safeDownloadName(result?.fileName, fallback);

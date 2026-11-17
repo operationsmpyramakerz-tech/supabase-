@@ -56,7 +56,7 @@ export default async function ExpensesUsersPage() {
       eyebrow="Review expenses by team member"
       activePath="/next/expenses/users"
       bodyClass="expenses-users-page"
-      pageStyles={["/next/css/expenses-users-classic-inline.css?v=stage2f"]}
+      pageStyles={["/next/css/expenses-users-classic-inline.css?v=v452-destination"]}
     >
       <ExpensesUsersClient
         account={gate.account}

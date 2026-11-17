@@ -1730,3 +1730,93 @@ body.expense-shots-modal-open{
   }
 }
 
+
+/* V452 — destination/date ticket header, matching the All Expenses layout.
+   Scope the changes to the member expense tickets; other dialogs stay unchanged. */
+body.expenses-users-page .expense-ticket--user-destination .expense-ticket__destination-date {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  direction: ltr;
+  min-width: 0;
+}
+body.expenses-users-page .expense-ticket--user-destination .expense-ticket__destination {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  text-align: left;
+}
+body.expenses-users-page .expense-ticket--user-destination .expense-ticket__destination-icon {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: #fff1e6;
+  color: #c2410c;
+}
+body.expenses-users-page .expense-ticket--user-destination .expense-ticket__destination-icon svg { flex: none; }
+body.expenses-users-page .expense-ticket--user-destination .expense-ticket__destination-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+body.expenses-users-page .expense-ticket--user-destination .expense-ticket__destination-label {
+  color: #475569;
+  font-size: .66rem;
+  font-weight: 700;
+}
+body.expenses-users-page .expense-ticket--user-destination .expense-ticket__destination-copy strong {
+  color: #111827;
+  font-size: .8rem;
+  font-weight: 800;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+body.expenses-users-page .expense-ticket--user-destination .expense-ticket__destination-date .expense-ticket__date {
+  justify-self: end;
+  white-space: nowrap;
+  font-size: .74rem;
+  padding: .31rem .68rem;
+}
+body.expenses-users-page .expense-ticket--user-destination .expense-ticket__destination-divider {
+  width: 100%;
+  border-top: 1px dashed #c4ccd7;
+  margin: 3px 0;
+}
+body.expenses-users-page .expense-ticket--user-destination .expense-ticket__header-row--user-reason {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  direction: ltr;
+}
+body.expenses-users-page .expense-ticket--user-destination .expense-ticket__header-row--user-reason.has-actions {
+  grid-template-columns: 38px minmax(0, 1fr) 38px;
+}
+body.expenses-users-page .expense-ticket--user-destination .expense-ticket__user-reason { min-width: 0; }
+body.expenses-users-page .expense-ticket--user-destination .has-actions .expense-ticket__user-reason { grid-column: 2; }
+body.expenses-users-page .expense-ticket--user-destination .expense-ticket__actions { grid-column: 3; grid-row: 1; justify-self: end; }
+body.expenses-users-page .expense-ticket--user-destination .expense-ticket__more {
+  box-sizing: border-box;
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  min-height: 34px;
+  padding: 0;
+  flex: 0 0 34px;
+}
+body.expenses-users-page .expense-ticket--user-destination .expense-ticket__order-actions { justify-content: center; }
+body.expenses-users-page .expense-ticket--user-destination .expense-ticket__order-btn { max-width: 100%; min-width: 0; }
+body.expenses-users-page .expense-ticket--user-destination .expense-ticket__order-btn span { min-width: 0; overflow-wrap: anywhere; }
+body.expenses-users-page .expense-ticket--user-destination .expense-ticket__reason { text-align: center; overflow-wrap: anywhere; }
+@media (max-width: 380px) {
+  body.expenses-users-page .expense-ticket--user-destination .expense-ticket__destination-date .expense-ticket__date { padding-inline: .45rem; }
+  body.expenses-users-page .expense-ticket--user-destination .expense-ticket__destination-icon { width: 26px; height: 26px; flex-basis: 26px; }
+  body.expenses-users-page .expense-ticket--user-destination .expense-ticket__header-row--user-reason.has-actions { grid-template-columns: 34px minmax(0, 1fr) 34px; gap: 5px; }
+}
