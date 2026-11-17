@@ -4177,3 +4177,107 @@ html[data-theme="dark"] .agenda-v2 .agenda-calendar .agenda-day.is-today {
   top: auto;
   bottom: calc(100% + 6px);
 }
+
+/* V457 — independent event card action menu and calendar-only detail sheet. */
+.agenda-v2 .agenda-row {
+  display: flex; align-items: center; gap: 4px; padding: 7px 6px 7px 10px;
+  min-width: 0;
+}
+.agenda-v2 .agenda-row > .agenda-row-open {
+  display: grid !important; grid-template-columns: 68px minmax(0,1fr) auto;
+  align-items: center !important; gap: 10px; flex: 1 1 0; min-width: 0;
+  text-align: left !important; padding: 0 !important; margin: 0 !important;
+  width: auto !important; height: auto !important; min-height: 0 !important;
+  background: transparent !important; border: 0 !important; box-shadow: none !important;
+  color: var(--ag-ink); cursor: pointer; border-radius: 8px;
+}
+.agenda-v2 .agenda-row > .agenda-row-more {
+  display: grid !important; place-items: center !important; flex: 0 0 32px;
+  width: 32px !important; height: 36px !important; min-width: 32px !important; min-height: 36px !important;
+  padding: 0 !important; margin: 0 !important; border: 0 !important; box-shadow: none !important;
+  border-radius: 9px; background: transparent; color: var(--ag-muted); cursor: pointer;
+}
+.agenda-v2 .agenda-row-more:hover,.agenda-v2 .agenda-row-more[aria-expanded="true"] {background: var(--ag-soft); color: var(--ag-ink);}
+.agenda-v2 .agenda-row-more svg { width: 18px; height: 18px; flex: none; }
+.agenda-v2 .agenda-row-open:focus-visible,.agenda-v2 .agenda-row-more:focus-visible {outline: 2px solid #e85d04;outline-offset: -2px;}
+@media(max-width:1020px){.agenda-v2 .agenda-row > .agenda-row-open {grid-template-columns: 56px minmax(0,1fr) auto;gap: 7px;}}
+@media(max-width:700px){.agenda-v2 .agenda-row > .agenda-row-open {grid-template-columns: 50px minmax(0,1fr) minmax(70px,92px);gap: 6px;}}
+@media(max-width:360px){.agenda-v2 .agenda-row {padding-inline: 7px 4px;gap: 2px;}.agenda-v2 .agenda-row > .agenda-row-open {grid-template-columns: 44px minmax(0,1fr) 70px;gap: 5px;}.agenda-v2 .agenda-row > .agenda-row-more {flex-basis: 28px;width:28px!important;min-width:28px!important;}}
+
+.agenda-event-actions-menu {
+  position: fixed; z-index: 1600; display: grid; gap: 5px; padding: 7px;
+  box-sizing: border-box; overflow-y: auto; overscroll-behavior: contain;
+  background: #fff; border: 1px solid #e2e5ea; border-radius: 14px;
+  box-shadow: 0 12px 36px #0f172a33; color: #111827;
+}
+.agenda-event-actions-menu > button,.agenda-event-actions-menu > a {
+  display: flex !important; flex-direction: row !important; align-items: center !important;
+  justify-content: flex-start !important; gap: 9px; min-height: 42px !important;
+  width: 100% !important; padding: 6px 8px !important; margin: 0 !important;
+  border: 1px solid #e8e9ed !important; border-radius: 9px; box-shadow: none !important;
+  text-decoration: none; text-align: left; font-family: inherit; font-size: .8rem; font-weight: 750;
+  color: inherit; background: #fff; cursor: pointer; box-sizing: border-box;
+}
+.agenda-event-actions-menu > :is(button,a) > span {display: grid;place-items:center;flex: 0 0 28px;width:28px;height:28px;border-radius:7px;background:#f2f4f7;color:#475569;}
+.agenda-event-actions-menu svg {width:16px;height:16px;flex:none;}
+.agenda-event-actions-menu > .is-danger {color:#b42328;}
+.agenda-event-actions-menu > .is-danger > span {background:#feecec;color:#b42328;}
+.agenda-event-actions-menu > :is(button,a):hover,.agenda-event-actions-menu > :is(button,a):focus-visible {background:#fff5ec;outline:1px solid #e99b51;}
+html[data-theme="dark"] .agenda-event-actions-menu,body.dark-mode .agenda-event-actions-menu,body[data-theme="dark"] .agenda-event-actions-menu {background:#202226;color:#f5f5f6;border-color:#41444a;}
+html[data-theme="dark"] .agenda-event-actions-menu > :is(button,a),body.dark-mode .agenda-event-actions-menu > :is(button,a),body[data-theme="dark"] .agenda-event-actions-menu > :is(button,a) {background:#292c32;border-color:#41444a!important;}
+html[data-theme="dark"] .agenda-event-actions-menu > .is-danger,body.dark-mode .agenda-event-actions-menu > .is-danger,body[data-theme="dark"] .agenda-event-actions-menu > .is-danger {color:#fca5a5;}
+
+/* Preserve the old standalone request detail layout. Only Calendar gets a sheet. */
+.event-detail-body {display: contents;}
+.events-modal-overlay.event-detail-overlay.event-detail-overlay--sheet {
+  position: fixed !important; inset: var(--event-sheet-top, 0px) 0 auto 0 !important; width: 100% !important;
+  height: var(--event-sheet-height, 100dvh) !important; display: flex !important; box-sizing: border-box; padding: 24px 0 0 !important;
+  align-items: flex-end !important; justify-content: center !important; overflow: hidden !important;
+}
+.events-modal-overlay.event-detail-overlay--sheet > .events-modal.event-detail-v2--sheet {
+  width: 100% !important; max-width: 1120px !important; height: auto !important;
+  max-height: 100% !important; min-height: 0 !important; margin: 0 !important;
+  padding: 0 !important; border-radius: 24px 24px 0 0 !important;
+  display: flex !important; flex-direction: column !important; gap: 0 !important;
+  overflow: hidden !important; transform: none !important;
+}
+.event-detail-v2--sheet > .event-detail-body {
+  display: flex; flex-direction: column; gap: 12px; flex: 1 1 auto; min-height: 0;
+  padding: 16px 16px 12px; overflow: auto; overscroll-behavior: contain;
+}
+.event-detail-v2--sheet .event-detail-header {grid-template-columns: minmax(0,1fr);gap: 8px;}
+.event-detail-v2--sheet .event-detail-status-row {justify-content:flex-start;}
+.event-detail-v2--sheet .event-detail-scroll {flex: 0 0 auto;overflow: visible;}
+.event-detail-v2--sheet .event-detail-sheet-footer {
+  display: grid; gap: 8px; flex: 0 0 auto; min-width: 0;
+  padding: 10px 16px max(16px,env(safe-area-inset-bottom,0px));
+  background: var(--ed-surface); border-top: 1px solid var(--ed-border);
+  box-shadow: 0 -4px 18px #00000008;
+}
+.event-detail-sheet-buttons {display:flex;gap:10px;align-items:center;}
+.event-detail-v2--sheet .event-detail-sheet-buttons > button {
+  display: flex !important; flex: 1 1 0; align-items:center !important;justify-content:center !important;
+  min-height: 44px !important; min-width: 0 !important; width: auto !important; gap: 7px;
+  padding: 8px 12px !important; margin: 0 !important; border: 0 !important; border-radius: 12px;
+  box-shadow: none !important; color:#fff !important;font-size:.9rem;font-weight:800;cursor:pointer;
+}
+.event-detail-v2--sheet .event-detail-sheet-close {background:#ef4444!important;}
+.event-detail-v2--sheet .event-detail-sheet-update {background:#111111!important;}
+.event-detail-v2--sheet .event-detail-sheet-buttons > button:disabled {opacity:.55;cursor:wait;}
+.event-detail-status-options {display:grid;gap:6px;padding:8px;border:1px solid var(--ed-border);border-radius:13px;background:var(--ed-soft);max-height: 28vh;overflow-y:auto;}
+.event-detail-status-current {display:flex;align-items:center;justify-content:space-between;gap:8px;padding:3px 5px;font-size:.75rem;color:var(--ed-muted);}
+.event-detail-status-current strong {color:var(--ed-ink);}
+.event-detail-v2--sheet .event-detail-status-options > .event-detail-status-choice {
+  display:flex!important;flex-direction:row!important;align-items:center!important;justify-content:flex-start!important;gap:9px;
+  width:100%!important;min-height:38px!important;padding:8px 10px!important;margin:0!important;box-shadow:none!important;
+  border:1px solid transparent!important;border-radius:9px;font-size:.8rem;font-weight:800;cursor:pointer;
+}
+.event-detail-status-choice.is-confirm {background:#e1f5e3!important;color:#146c28!important;}
+.event-detail-status-choice.is-cancel {background:#fbe6e6!important;color:#9a3030!important;}
+html[data-theme="dark"] .event-detail-v2--sheet {--ed-surface:#1c1e23;--ed-soft:#25282e;--ed-border:#383b42;--ed-ink:#f5f5f6;--ed-muted:#b9bdc6;color:var(--ed-ink);background:var(--ed-surface);}
+html[data-theme="dark"] .event-detail-v2--sheet .event-detail-sheet-update,body.dark-mode .event-detail-v2--sheet .event-detail-sheet-update,body[data-theme="dark"] .event-detail-v2--sheet .event-detail-sheet-update {background:#f1f3f5!important;color:#111827!important;}
+@media(max-width:760px){
+  .events-modal-overlay.event-detail-overlay--sheet > .events-modal.event-detail-v2--sheet {max-width:none!important;}
+  .event-detail-v2--sheet > .event-detail-body {padding: 12px 12px 10px;gap:10px;}
+  .event-detail-v2--sheet .event-detail-sheet-footer {padding:10px 12px max(24px,env(safe-area-inset-bottom,0px));}
+}

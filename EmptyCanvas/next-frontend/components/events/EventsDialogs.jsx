@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import EventIcon from "./EventIcon";
 import { eventConfirmation, eventConfirmationLabel } from "../../lib/event-confirmation.mjs";
 
@@ -158,6 +159,20 @@ function EventDetailsContent({ event, busy, onClose, onDownload, onWorkflow, onR
   canWorkflow = canRequestActions, canExport = true, calendarMode = false,
   canOpenRequests = true, onConfirmEvent }) {
   const [activeTab, setActiveTab] = useState("overview");
+  const [statusOpen, setStatusOpen] = useState(false);
+  const [viewportStyle, setViewportStyle] = useState(null);
+  useEffect(() => {
+    if (!calendarMode) return;
+    const viewport = window.visualViewport;
+    function resize() {
+      setViewportStyle({ "--event-sheet-top": `${viewport?.offsetTop || 0}px`, "--event-sheet-height": `${viewport?.height || window.innerHeight}px` });
+    }
+    resize();
+    window.addEventListener("resize", resize);
+    viewport?.addEventListener("resize", resize);
+    viewport?.addEventListener("scroll", resize);
+    return () => { window.removeEventListener("resize", resize); viewport?.removeEventListener("resize", resize); viewport?.removeEventListener("scroll", resize); };
+  }, [calendarMode]);
   const full = !calendarMode || canOpenRequests;
   const tab = full ? activeTab : "overview";
   const mapUrl = full ? safeUrl(event.locationUrl) : "";
@@ -170,6 +185,8 @@ function EventDetailsContent({ event, busy, onClose, onDownload, onWorkflow, onR
       ? { targetStatus: "completed", label: "Mark as completed" }
       : null;
   const showWorkflow = full && canWorkflow && workflow && (!calendarMode || !event.isArchived);
+  const canConfirmStatus = calendarMode && Boolean(showWorkflow);
+  const canCancelStatus = calendarMode && full && canCancel && !event.isArchived && confirmation !== "cancelled";
   const projects = Array.isArray(event.projects) ? event.projects : [];
   const marketing = Array.isArray(event.marketingMaterials) ? event.marketingMaterials : [];
   const requirements = Array.isArray(event.venueRequirements) ? event.venueRequirements : [];
@@ -185,24 +202,23 @@ function EventDetailsContent({ event, busy, onClose, onDownload, onWorkflow, onR
     </DetailPanel>;
   }
 
-  return (
-    <div className="events-modal-overlay next-modal-layer event-detail-overlay" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <section className="events-modal next-modal event-detail-v2" role="dialog" aria-modal="true" aria-label="Event details">
+  const content = (
+    <div style={calendarMode ? viewportStyle : undefined} className={`events-modal-overlay next-modal-layer event-detail-overlay${calendarMode ? " event-detail-overlay--sheet" : ""}`}  role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <section className={`events-modal next-modal event-detail-v2${calendarMode ? " event-detail-v2--sheet" : ""}`} role="dialog" aria-modal="true" aria-label="Event details">
+        <div className="event-detail-body">
         <header className="event-detail-header">
           <div className="event-detail-hero">
             <span className="event-detail-hero-icon"><EventIcon name="calendar" /></span>
             <div className="event-detail-hero-text"><small>{event.eventCode || "Event request"}</small><h2>{event.eventName || "Untitled Event"}</h2><p><EventIcon name="calendar" />{formatDateRange(event)}</p></div>
           </div>
           <div className="event-detail-header-side">
-            <div className="event-detail-status-row"><span className={`event-detail-status event-detail-status--${confirmation}`}><EventIcon name={confirmation === "confirmed" ? "check-circle" : confirmation === "cancelled" ? "x-circle" : "clock"} />{eventConfirmationLabel(event.status)}</span><button type="button" className="event-detail-close" aria-label="Close" onClick={onClose}>×</button></div>
-            <div className="event-detail-actions">
-              {!calendarMode && canEdit && <button type="button" disabled={busy} onClick={() => onRequestAction("edit")}><EventIcon name="edit-3" />Edit</button>}
-              {calendarMode && canEdit && !event.isArchived && <button type="button" disabled={busy} onClick={() => onRequestAction("edit")}><EventIcon name="edit-3" />Edit Event</button>}
-              {calendarMode && canCancel && !event.isArchived && status !== "cancelled" && <button type="button" disabled={busy} onClick={() => onRequestAction("cancel")}><EventIcon name="x-circle" />Cancel Event</button>}
-              {showWorkflow && <button type="button" className="event-detail-primary" disabled={busy} onClick={() => calendarMode ? onConfirmEvent() : onWorkflow(workflow.targetStatus)}><EventIcon name="check" />{workflow.label}</button>}
-              {full && canExport && (calendarMode ? <a href={`/next/api/events/pdf-direct?id=${encodeURIComponent(event.id)}`} target="_blank" rel="noreferrer"><EventIcon name="download" />PDF</a> : <button type="button" onClick={onDownload}><EventIcon name="download" />PDF</button>)}
-              {!calendarMode && canCancel && status !== "cancelled" && <button type="button" className="event-detail-danger" disabled={busy} onClick={() => onRequestAction("cancel")}>Cancel request</button>}
-            </div>
+            <div className="event-detail-status-row"><span className={`event-detail-status event-detail-status--${confirmation}`}><EventIcon name={confirmation === "confirmed" ? "check-circle" : confirmation === "cancelled" ? "x-circle" : "clock"} />{eventConfirmationLabel(event.status)}</span>{!calendarMode && <button type="button" className="event-detail-close" aria-label="Close" onClick={onClose}>×</button>}</div>
+            {!calendarMode && <div className="event-detail-actions">
+              {canEdit && <button type="button" disabled={busy} onClick={() => onRequestAction("edit")}><EventIcon name="edit-3" />Edit</button>}
+              {showWorkflow && <button type="button" className="event-detail-primary" disabled={busy} onClick={() => onWorkflow(workflow.targetStatus)}><EventIcon name="check" />{workflow.label}</button>}
+              {full && canExport && <button type="button" onClick={onDownload}><EventIcon name="download" />PDF</button>}
+              {canCancel && status !== "cancelled" && <button type="button" className="event-detail-danger" disabled={busy} onClick={() => onRequestAction("cancel")}>Cancel request</button>}
+            </div>}
           </div>
         </header>
 
@@ -233,9 +249,22 @@ function EventDetailsContent({ event, busy, onClose, onDownload, onWorkflow, onR
           </div>}
           {full && tab === "marketing" && <div className="event-detail-layout"><DetailPanel title={`Marketing Materials (${marketing.length})`} icon="image" wide><ItemList items={marketing} component showCost={!calendarMode} empty="No marketing materials were added." /></DetailPanel></div>}
         </div>
+        </div>
+        {calendarMode && <footer className="event-detail-sheet-footer">
+          {statusOpen && <div className="event-detail-status-options" role="group" aria-label="Update event status">
+            <div className="event-detail-status-current"><span>Current status</span><strong>{eventConfirmationLabel(event.status)}</strong></div>
+            {canConfirmStatus && <button type="button" className="event-detail-status-choice is-confirm" disabled={busy} onClick={() => { setStatusOpen(false); onConfirmEvent(); }}><EventIcon name="check-circle"/>Confirmed</button>}
+            {canCancelStatus && <button type="button" className="event-detail-status-choice is-cancel" disabled={busy} onClick={() => { setStatusOpen(false); onRequestAction("cancel"); }}><EventIcon name="x-circle"/>Cancelled</button>}
+          </div>}
+          <div className="event-detail-sheet-buttons">
+            <button type="button" className="event-detail-sheet-close" disabled={busy} onClick={onClose}>Close</button>
+            {(canConfirmStatus || canCancelStatus) && <button type="button" className="event-detail-sheet-update" disabled={busy} aria-expanded={statusOpen} onClick={() => setStatusOpen(value => !value)}><EventIcon name="activity"/>Update</button>}
+          </div>
+        </footer>}
       </section>
     </div>
   );
+  return calendarMode && typeof document !== "undefined" ? createPortal(content, document.body) : content;
 }
 
 export function AuthorizationModal({ authorization, busy, error, onClose, onPassword, onSubmit }) {

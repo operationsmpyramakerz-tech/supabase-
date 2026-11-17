@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
 import EventsCalendarClient from "../../components/events/EventsCalendarClient";
-import { loadDirectEventsPageData } from "../../lib/events-data";
+import { loadDirectEventsPageData, hasEventRequestsAdminAccess } from "../../lib/events-data";
 import { directPageMutationAccess } from "../../lib/order-action-auth";
 
 export const dynamic = "force-dynamic";
@@ -43,11 +43,12 @@ export default async function EventsCalendarPage() {
   const events = (Array.isArray(pageData.events) ? pageData.events : []).map(event => ({ ...event, ...requestDetails.get(event.id) }));
 
   return (
-    <AppShell account={pageData.account} title="Events" eyebrow="Event execution schedule" activePath="/next/events-calendar" bodyClass="events-page events-calendar-page" pageStyles={["/next/css/events.css?v=agenda-toolbar-v456"]}>
+    <AppShell account={pageData.account} title="Events" eyebrow="Event execution schedule" activePath="/next/events-calendar" bodyClass="events-page events-calendar-page" pageStyles={["/next/css/events.css?v=agenda-details-v457"]}>
       <EventsCalendarClient
         account={pageData.account}
         initialEvents={events}
         canMutateRequests={directPageMutationAccess(pageData.account, ["Event Requests"]) === true}
+        canArchiveRequests={hasEventRequestsAdminAccess(pageData.account)}
         bootstrapWarnings={pageData.warnings || []}
       />
     </AppShell>

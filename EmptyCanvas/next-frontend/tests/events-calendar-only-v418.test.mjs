@@ -27,12 +27,12 @@ test('Event creation and editing still use the existing guarded event wizard, re
   assert.match(read('components/events/EventsCalendarClient.jsx'), /navigateWithinApp\(`\/next\/events\/new\?/);
 });
 
-test('Calendar detail replaces Open Event Request with guarded Edit/Cancel using existing admin tokens', () => {
+test('Calendar action menu and detail status picker preserve existing admin tokens', () => {
   const details = read('components/events/EventsDialogs.jsx');
   const calendar = read('components/events/EventsCalendarClient.jsx');
   assert.doesNotMatch(details, /Open Event Request/);
-  assert.match(details, /calendarMode && canEdit/);
-  assert.match(details, /calendarMode && canCancel/);
+  assert.match(calendar, /canEdit && !event.isArchived/);
+  assert.match(details, /calendarMode && full && canCancel/);
   assert.match(calendar, /intent: "request_action", action, eventId:/);
   assert.match(calendar, /sessionStorage\.setItem\(`erp\.events\.editAuth/);
   assert.match(calendar, /requestAction: "cancel"/);

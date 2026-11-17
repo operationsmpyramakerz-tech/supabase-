@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { navigateWithinApp } from "../../lib/client-navigation";
 import EventIcon from "./EventIcon";
 import { AuthorizationModal, ConfirmationModal, EventsDetailsModal } from "./EventsDialogs";
@@ -139,17 +140,70 @@ function AgendaStatusFilter({ activeList, value, onChange }) {
   );
 }
 
-function DetailsModal({ event, canOpenRequests, canEdit = false, canCancel = false, canExport = true, canConfirm, onConfirmEvent, onRequestAction, onClose, busy }) {
+// Independent action trigger: never nest buttons inside the card button.
+function EventCardActions({ event, canEdit, canArchive, canExport, busy, onAction, open, onToggle, onClose }) {
+  const triggerRef = useRef(null);
+  const menuRef = useRef(null);
+  const [position, setPosition] = useState(null);
+  const options = [
+    ...(canEdit && !event.isArchived ? [{ key: "edit", label: "Edit Event", icon: "edit-3" }] : []),
+    ...(canExport ? [{ key: "pdf", label: "Download PDF", icon: "download" }] : []),
+    ...(canArchive && !event.isArchived ? [{ key: "archive", label: "Delete / Archive", icon: "trash-2" }] : []),
+  ];
+  useEffect(() => {
+    if (!open) { setPosition(null); return; }
+    function place() {
+      const rect = triggerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const vv = window.visualViewport;
+      const left = vv?.offsetLeft || 0, top = vv?.offsetTop || 0;
+      const width = vv?.width || window.innerWidth, height = vv?.height || window.innerHeight;
+      const menuWidth = Math.min(224, width - 16);
+      const below = top + height - rect.bottom - 12;
+      const above = rect.top - top - 12;
+      const showAbove = below < options.length * 48 + 16 && above > below;
+      setPosition({ left: Math.max(left + 8, Math.min(rect.right - menuWidth, left + width - menuWidth - 8)), width: menuWidth,
+        top: showAbove ? undefined : rect.bottom + 6, bottom: showAbove ? window.innerHeight - rect.top + 6 : undefined,
+        maxHeight: Math.max(48, showAbove ? above : below) });
+    }
+    function outside(e) { if (!triggerRef.current?.contains(e.target) && !menuRef.current?.contains(e.target)) onClose(); }
+    function key(e) { if (e.key === "Escape") { e.preventDefault(); onClose(); triggerRef.current?.focus(); } }
+    place();
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", key);
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    window.visualViewport?.addEventListener("resize", place);
+    window.visualViewport?.addEventListener("scroll", place);
+    return () => {
+      document.removeEventListener("pointerdown", outside); document.removeEventListener("keydown", key);
+      window.removeEventListener("resize", place); window.removeEventListener("scroll", place, true);
+      window.visualViewport?.removeEventListener("resize", place); window.visualViewport?.removeEventListener("scroll", place);
+    };
+  }, [open, options.length, onClose]);
+  useEffect(() => { if (open && position) menuRef.current?.querySelector("button, a")?.focus({ preventScroll: true }); }, [open, Boolean(position)]);
+  if (!options.length) return null;
+  return <>
+    <button ref={triggerRef} type="button" className="agenda-row-more" aria-label={`Actions for ${event.eventName || event.eventCode || "event"}`} aria-expanded={open} disabled={busy} onClick={onToggle}><EventIcon name="more-horizontal"/></button>
+    {open && position && createPortal(<div ref={menuRef} className="agenda-event-actions-menu" style={position} role="group" aria-label="Event actions" onBlur={e => { if (e.relatedTarget && !e.currentTarget.contains(e.relatedTarget) && !triggerRef.current?.contains(e.relatedTarget)) onClose(); }}>
+      {options.map(option => option.key === "pdf"
+        ? <a key={option.key} href={`/next/api/events/pdf-direct?id=${encodeURIComponent(event.id)}`} target="_blank" rel="noreferrer" onClick={onClose}><span><EventIcon name={option.icon}/></span>{option.label}</a>
+        : <button key={option.key} type="button" className={option.key === "archive" ? "is-danger" : ""} onClick={() => { onClose(); onAction(option.key, event); }}><span><EventIcon name={option.icon}/></span>{option.label}</button>)}
+    </div>, document.body)}
+  </>;
+}
+
+function DetailsModal({ event, canOpenRequests, canCancel, canConfirm, onConfirmEvent, onRequestAction, onClose, busy }) {
   useEffect(() => {
     if (!event) return undefined;
     const onKey = (keyEvent) => { if (keyEvent.key === "Escape") onClose(); };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [event, onClose]);
-  return <EventsDetailsModal event={event} calendarMode canOpenRequests={canOpenRequests} canEdit={canEdit} canCancel={canCancel} canExport={canExport} canWorkflow={canConfirm} onConfirmEvent={onConfirmEvent} onRequestAction={onRequestAction} onClose={onClose} busy={busy} />;
+  return <EventsDetailsModal event={event} calendarMode canOpenRequests={canOpenRequests} canCancel={canCancel} canWorkflow={canConfirm} onConfirmEvent={onConfirmEvent} onRequestAction={onRequestAction} onClose={onClose} busy={busy} />;
 }
 
-export default function EventsCalendarClient({ account, initialEvents = [], canMutateRequests = false }) {
+export default function EventsCalendarClient({ account, initialEvents = [], canMutateRequests = false, canArchiveRequests = false }) {
   const access = useMemo(() => allowedSet(account), [account]);
   const canCreate = canMutateRequests && access.has("event requests") && featureAllowed(account, "events.requests.view") && featureAllowed(account, "events.requests.create");
   const canOpenRequests = access.has("event requests") && featureAllowed(account, "events.requests.view")
@@ -160,6 +214,9 @@ export default function EventsCalendarClient({ account, initialEvents = [], canM
     && !["own", "team", "none"].includes(eventRequestScopeFor(account, "events.requests.pdf"));
   const canConfirm = canMutateRequests && canOpenRequests && featureAllowed(account, "events.requests.workflow")
     && !["own", "team", "none"].includes(eventRequestScopeFor(account, "events.requests.workflow"));
+  const canArchive = canMutateRequests && canArchiveRequests && canOpenRequests && featureAllowed(account, "events.requests.archive")
+    && !["own", "team", "none"].includes(eventRequestScopeFor(account, "events.requests.archive"));
+  const [openMenuId, setOpenMenuId] = useState(null);
   const [events, setEvents] = useState(initialEvents);
   const [authorization, setAuthorization] = useState(null);
   const [confirmation, setConfirmation] = useState(null);
@@ -233,6 +290,7 @@ export default function EventsCalendarClient({ account, initialEvents = [], canM
   async function openEventDetails(event) {
     if (!event?.id) return;
     const requestId = ++detailRequest.current;
+    setOpenMenuId(null);
     setActiveEvent(event);
     try {
       const body = await requestJson(`/next/api/events/${encodeURIComponent(event.id)}?${canOpenRequests ? "" : "view=calendar&"}_ts=${Date.now()}`);
@@ -255,15 +313,19 @@ export default function EventsCalendarClient({ account, initialEvents = [], canM
     navigateWithinApp(`/next/events/new?${params.toString()}`);
   }
   function beginConfirmation() {
-    if (!activeEvent || !canConfirm) return;
+    if (!activeEvent || !canConfirm || activeEvent.isArchived || eventConfirmation(activeEvent.status) !== "pending") return;
     setActionError("");
     setAuthorization({ title: "Confirm Event", eventId: activeEvent.id, password: "" });
   }
-  function beginRequestAction(action) {
-    if (!activeEvent || !["edit", "cancel"].includes(action)) return;
-    if (action === "edit" && !canEdit || action === "cancel" && !canCancel) return;
+  function beginRequestAction(action, event = activeEvent) {
+    if (!event || event.isArchived || busy || !["edit", "cancel", "archive"].includes(action)) return;
+    if (action === "edit" && !canEdit || action === "cancel" && (!canCancel || eventConfirmation(event.status) === "cancelled") || action === "archive" && !canArchive) return;
     setActionError("");
-    setAuthorization({ intent: "request_action", action, title: action === "edit" ? "Edit Event" : "Cancel Event", eventId: activeEvent.id, password: "" });
+    if (action === "archive") {
+      setConfirmation({ kind: "archive", eventId: event.id, title: "Archive event?", message: "This removes the event from the active calendar and keeps its record in Archived.", label: "Archive Event", danger: true });
+      return;
+    }
+    setAuthorization({ intent: "request_action", action, eventId: event.id, title: action === "edit" ? "Edit Event" : "Cancel Event", password: "" });
   }
   async function authorizeConfirmation(e) {
     e.preventDefault();
@@ -296,13 +358,17 @@ export default function EventsCalendarClient({ account, initialEvents = [], canM
     if (!confirmation || busy) return;
     setBusy(true); setActionError("");
     try {
-      const body = await requestJson("/next/api/events/mutations-direct", { method: "POST", body: JSON.stringify(confirmation.kind === "cancel"
+      const body = await requestJson("/next/api/events/mutations-direct", { method: "POST", body: JSON.stringify(confirmation.kind === "archive"
+        ? { action: "archive-event", eventId: confirmation.eventId }
+        : confirmation.kind === "cancel"
         ? { action: "request-action", requestAction: "cancel", eventId: confirmation.eventId, authorizationToken: confirmation.token }
         : { action: "workflow-transition", eventId: confirmation.eventId, targetStatus: "in_progress", authorizationToken: confirmation.token }) });
       if (!body.event?.id) throw new Error("The event could not be refreshed.");
       detailRequest.current++;
-      setEvents(current => current.map(event => event.id === body.event.id ? { ...event, status: body.event.status } : event));
-      setActiveEvent(body.event); setConfirmation(null);
+      setEvents(current => current.map(event => event.id === body.event.id ? { ...event, status: body.event.status, isArchived: body.event.isArchived } : event));
+      // Only reopen details if the action originated from an open detail sheet.
+      setActiveEvent(current => current?.id === body.event.id ? (confirmation.kind === "archive" ? null : body.event) : current);
+      setConfirmation(null);
     } catch (error) { setActionError(error.message); setConfirmation(null); }
     finally { setBusy(false); }
   }
@@ -331,10 +397,10 @@ export default function EventsCalendarClient({ account, initialEvents = [], canM
         </aside>
         <section className="agenda-panel agenda-list" aria-label="Event agenda">
           <div className="agenda-toolbar"><div className="agenda-tabs" role="tablist" aria-label="Event history">{[{key:"upcoming",label:"Upcoming",icon:"calendar"},{key:"past",label:"Past",icon:"clock"},{key:"archived",label:"Archived",icon:"archive"}].map(tab => <button type="button" role="tab" aria-selected={activeList === tab.key} key={tab.key} className={activeList === tab.key ? "is-active" : ""} onClick={() => {setActiveList(tab.key);setFilter("all");if(tab.key === "upcoming" && selectedDate < today) {setSelectedKey(dateKey(today));setWeek(startOfWeek(today));}}}><EventIcon name={tab.icon}/>{tab.label} ({lists[tab.key].length})</button>)}</div><AgendaStatusFilter activeList={activeList} value={filter} onChange={setFilter}/></div>
-          <div className="agenda-rows" role="tabpanel">{list.length ? list.map(event => <button type="button" key={event.id} className={`agenda-row agenda-row--${eventConfirmation(event.status)}`} onClick={() => openEventDetails(event)}><span className="agenda-row-date"><small>{formatDate(startDate(event),{weekday:"short"})}</small><strong>{formatDate(startDate(event),{day:"2-digit",month:"short"})}</strong></span><span className="agenda-row-main"><strong>{event.eventName || "Untitled Event"}</strong><span><span><EventIcon name="map-pin"/>{event.venueName || event.organizationName || event.governorate || "Venue to be confirmed"}</span>{event.expectedAttendees != null ? <span><EventIcon name="user"/>{event.expectedAttendees} Attendees</span> : null}</span></span><StatusPill status={event.status}/><span className="agenda-row-more"><EventIcon name="more-horizontal"/></span></button>) : <div className="agenda-empty"><EventIcon name="calendar"/><strong>No {activeList} events</strong><span>{search || filter !== "all" ? "Try changing your search or filter." : "Events will appear here when available."}</span></div>}</div>
+          <div className="agenda-rows" role="tabpanel">{list.length ? list.map(event => <article key={event.id} className={`agenda-row agenda-row--${eventConfirmation(event.status)}`}><button type="button" className="agenda-row-open" onClick={() => openEventDetails(event)}><span className="agenda-row-date"><small>{formatDate(startDate(event),{weekday:"short"})}</small><strong>{formatDate(startDate(event),{day:"2-digit",month:"short"})}</strong></span><span className="agenda-row-main"><strong>{event.eventName || "Untitled Event"}</strong><span><span><EventIcon name="map-pin"/>{event.venueName || event.organizationName || event.governorate || "Venue to be confirmed"}</span>{event.expectedAttendees != null ? <span><EventIcon name="user"/>{event.expectedAttendees} Attendees</span> : null}</span></span><StatusPill status={event.status}/></button><EventCardActions event={event} canEdit={canEdit} canArchive={canArchive} canExport={canExport} busy={busy} open={openMenuId === event.id} onToggle={() => setOpenMenuId(current => current === event.id ? null : event.id)} onClose={() => setOpenMenuId(null)} onAction={beginRequestAction}/></article>) : <div className="agenda-empty"><EventIcon name="calendar"/><strong>No {activeList} events</strong><span>{search || filter !== "all" ? "Try changing your search or filter." : "Events will appear here when available."}</span></div>}</div>
         </section>
       </div>
-      {!authorization && !confirmation ? <DetailsModal busy={busy} event={activeEvent} canOpenRequests={canOpenRequests} canEdit={canEdit} canCancel={canCancel} canExport={canExport} canConfirm={canConfirm} onConfirmEvent={beginConfirmation} onRequestAction={beginRequestAction} onClose={() => {detailRequest.current++;setActiveEvent(null);setActionError("");}} /> : null}
+      {!authorization && !confirmation ? <DetailsModal busy={busy} event={activeEvent} canOpenRequests={canOpenRequests} canCancel={canCancel} canConfirm={canConfirm} onConfirmEvent={beginConfirmation} onRequestAction={beginRequestAction} onClose={() => {detailRequest.current++;setActiveEvent(null);setActionError("");}} /> : null}
       {authorization ? <AuthorizationModal authorization={authorization} busy={busy} error={actionError} onClose={() => { if (!busy) {setAuthorization(null);setActionError("");} }} onPassword={password=>setAuthorization(current=>({...current,password}))} onSubmit={authorizeConfirmation}/> : null}
       {confirmation ? <ConfirmationModal confirmation={confirmation} busy={busy} onClose={() => {if(!busy)setConfirmation(null);}} onConfirm={confirmEvent}/> : null}
       {actionError && !authorization ? <div className="agenda-action-error" role="alert">{actionError}<button type="button" aria-label="Dismiss error" onClick={()=>setActionError("")}>×</button></div> : null}
