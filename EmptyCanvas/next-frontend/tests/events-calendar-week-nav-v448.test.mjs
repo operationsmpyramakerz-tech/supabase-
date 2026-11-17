@@ -53,5 +53,5 @@ test('scoped arrow styles reset button padding and respect reduced motion', () =
   assert.match(css,/\.agenda-month > \.agenda-week-nav \{[^}]*padding: 0 !important;/s);
   assert.match(css,/\.agenda-week-nav\.has-next-week-events > svg \{\s*animation: agenda-next-week-nudge-v448/);
   assert.match(css,/@media \(prefers-reduced-motion: reduce\) \{[^}]*animation: none;/s);
-  assert.match(read('app/events-calendar/page.jsx'),/events\.css\?v=agenda-details-v459/);
+  assert.match(read('app/events-calendar/page.jsx'),/events\.css\?v=agenda-details-v460/);
 });

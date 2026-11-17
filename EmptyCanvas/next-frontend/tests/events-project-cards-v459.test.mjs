@@ -51,3 +51,15 @@ test('mobile footer reserves safe space separately from scrolling content',()=>{
   assert.match(css,/\.event-detail-v2--sheet > \.event-detail-sheet-footer \{[\s\S]*?flex: 0 0 auto[\s\S]*?padding:[^;]+!important/);
   assert.match(css,/grid-template-columns: repeat\(2,minmax\(0,1fr\)\)/);
 });
+
+test('calendar sheet has a definite height on initial open; scroll body cannot collapse to footer only',()=>{
+  const css=read('public/css/events.css');
+  const section=css.split('/* V459')[1];
+  const sheet=section.match(/\.events-modal-overlay\.event-detail-overlay\.event-detail-overlay--sheet > \.events-modal\.event-detail-v2--sheet \{([^}]+)\}/)[1];
+  assert.match(sheet,/(?:^|;)\s*height: 100% !important;/);
+  assert.match(sheet,/max-height: 100% !important;/);
+  assert.match(sheet,/flex: 0 0 auto !important;/);
+  assert.doesNotMatch(sheet,/(?:^|;)\s*height: auto/);
+  assert.match(section,/\.event-detail-v2--sheet > \.event-detail-body \{flex: 1 1 auto; min-height: 0; overflow-y: auto;\}/);
+  assert.match(section,/\.event-detail-v2--sheet > \.event-detail-body > \* \{flex-shrink: 0;\}/);
+});

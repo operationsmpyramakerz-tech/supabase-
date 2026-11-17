@@ -41,5 +41,5 @@ test('Update precedes Close, with existing transition guards and a safe fixed fo
 });
 test('dark variables override the same sheet selector and versioned CSS is refreshed',()=>{
   assert.match(css,/:is\(html\[data-theme="dark"\],body.dark-mode,body\[data-theme="dark"\]\) \.events-modal-overlay\.event-detail-overlay\.event-detail-overlay--sheet > \.events-modal\.event-detail-v2--sheet \{/);
-  assert.match(load('app/events-calendar/page.jsx'),/events\.css\?v=agenda-details-v459/);
+  assert.match(load('app/events-calendar/page.jsx'),/events\.css\?v=agenda-details-v460/);
 });

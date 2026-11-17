@@ -4450,12 +4450,17 @@ html[data-theme="dark"] .event-detail-v2--sheet .event-detail-sheet-update,body.
   min-height: 0 !important;
 }
 .events-modal-overlay.event-detail-overlay.event-detail-overlay--sheet > .events-modal.event-detail-v2--sheet {
-  flex: 0 1 auto;
-  max-height: min(100%, calc(min(var(--event-sheet-height, 100dvh), 100dvh) - var(--event-sheet-top-gap))) !important;
+  /* A definite height is essential: an auto-height sheet with a zero-basis
+     scrolling body collapses to its footer and padding. The overlay already
+     reserves the top gap for the floating calendar badge. */
+  flex: 0 0 auto !important;
+  height: 100% !important;
+  max-height: 100% !important;
   min-height: 0 !important;
   box-sizing: border-box !important;
 }
-.event-detail-v2--sheet > .event-detail-body {flex: 1 1 0; min-height: 0; overflow-y: auto;}
+.event-detail-v2--sheet > .event-detail-body {flex: 1 1 auto; min-height: 0; overflow-y: auto;}
+.event-detail-v2--sheet > .event-detail-body > * {flex-shrink: 0;}
 .event-detail-v2--sheet > .event-detail-sheet-footer {
   position: relative; flex: 0 0 auto; box-sizing: border-box; z-index: 2;
   padding: 8px 12px max(var(--event-sheet-footer-clearance), calc(env(safe-area-inset-bottom,0px) + 24px)) !important;
