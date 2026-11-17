@@ -118,6 +118,7 @@ function normalizeProduct(product, index = 0) {
 function normalizeDraftItem(item) {
   return {
     id: text(item?.id),
+    orderRowId: text(item?.orderRowId),
     quantity: quantity(item?.quantity, 1),
     reason: text(item?.reason),
     issueDescription: text(item?.issueDescription),
@@ -128,11 +129,15 @@ function normalizeDraftItem(item) {
   };
 }
 
+function draftItemKey(item) {
+  return item?.orderRowId ? `order-row:${item.orderRowId}` : `product:${item?.id}`;
+}
+
 function normalizeDraft(items) {
   const unique = new Map();
   for (const raw of Array.isArray(items) ? items : []) {
     const item = normalizeDraftItem(raw);
-    if (item.id) unique.set(item.id, item);
+    if (item.id) unique.set(draftItemKey(item), item);
   }
   return [...unique.values()];
 }
@@ -199,44 +204,16 @@ function freshTransfer(payload) {
 }
 
 function readEditTransfer(editKey = "") {
-  const candidates = [];
-  const keys = [];
-  const addKey = (value) => {
-    const clean = text(value);
-    if (clean && !keys.includes(clean)) keys.push(clean);
-  };
-  addKey(editKey);
-
+  // An edit URL must identify its own transfer. Never open a different order's
+  // pending/fallback cart when this particular transfer is missing or expired.
+  if (!text(editKey)) return null;
   for (const storage of storageAreas()) {
     try {
-      const pending = parseJson(storage.getItem("shopping_cart:edit_pending:v2"));
-      if (freshTransfer(pending)) {
-        addKey(pending?.key);
-        candidates.push(pending);
-      }
+      const payload = parseJson(storage.getItem(`shopping_cart:edit_payload:v2:${editKey}`));
+      if (freshTransfer(payload) && Array.isArray(payload.products)) return payload;
     } catch {}
   }
-
-  for (const storage of storageAreas()) {
-    for (const transferKey of keys) {
-      try {
-        const payload = parseJson(storage.getItem(`shopping_cart:edit_payload:v2:${transferKey}`));
-        if (freshTransfer(payload)) candidates.push(payload);
-      } catch {}
-    }
-    try {
-      for (let index = 0; index < storage.length; index += 1) {
-        const storageKey = storage.key(index) || "";
-        if (!storageKey.startsWith("shopping_cart:edit_fallback:v1:")) continue;
-        const payload = parseJson(storage.getItem(storageKey));
-        if (freshTransfer(payload)) candidates.push(payload);
-      }
-    } catch {}
-  }
-
-  return candidates.find((candidate) => Array.isArray(candidate?.products) && candidate.products.length)
-    || candidates[0]
-    || null;
+  return null;
 }
 
 function clearEditTransfer() {
@@ -422,14 +399,14 @@ function CartQuantityEditor({ item, product, withdraw, onQuantityChange }) {
     const next = parseDraft();
     setDraft(formatQuantity(next));
     setEditing(false);
-    if (next !== qty) onQuantityChange(item.id, next);
+    if (next !== qty) onQuantityChange(draftItemKey(item), next);
   };
   const adjust = (delta) => {
     stepping.current = false;
     const next = stepCartQuantityInput(draft, qty, delta);
     setDraft(formatQuantity(next));
     setEditing(false);
-    if (next !== qty) onQuantityChange(item.id, next);
+    if (next !== qty) onQuantityChange(draftItemKey(item), next);
   };
   const onInput = (event) => {
     const next = event.target.value;
@@ -718,6 +695,7 @@ export default function ShoppingCartClient({
   const [saveState, setSaveState] = useState("");
   const [checkoutCommitted, setCheckoutCommitted] = useState(false);
   const [activeEditTransfer, setActiveEditTransfer] = useState(null);
+  const removedOrderRows = useRef(new Set());
   const [validationFeedback, setValidationFeedback] = useState({ cart: false, reason: false, priority: false, deliveryDate: false });
   const reasonTimer = useRef(null);
   const validationTimer = useRef(null);
@@ -752,6 +730,7 @@ export default function ShoppingCartClient({
 
   const payloadFor = (items = cart, type = selectedType, globalReason = reason) => normalizeDraft(items).map((item) => ({
     id: item.id,
+    ...(item.orderRowId ? { orderRowId: item.orderRowId } : {}),
     quantity: isMaintenance(type) ? 1 : quantity(item.quantity, 1),
     reason: isMaintenance(type) ? (text(item.issueDescription).slice(0, 80) || "Request Maintenance") : text(globalReason),
     issueDescription: isMaintenance(type) ? text(item.issueDescription) : "",
@@ -808,51 +787,34 @@ export default function ShoppingCartClient({
       if (editMode) {
         const transfer = readEditTransfer(editKey);
         const transferItems = normalizeDraft(transfer?.products);
-        if (transfer && transferItems.length) {
-          const transferReason = text(transfer?.reason) || transferItems.find((item) => item.reason)?.reason || "";
-          const patched = transferReason
-            ? transferItems.map((item) => ({ ...item, reason: item.reason || transferReason }))
-            : transferItems;
-          setActiveEditTransfer(transfer);
-          setCart(patched);
-          setReason(isMaintenance(cleanType) ? "" : transferReason);
-          setPriorityLevel(safePriority(transfer?.priorityLevel));
-          setRequestedDeliveryDate(safeDeliveryDate(transfer?.requestedDeliveryDate));
-          await persistDraft(patched, cleanType, transferReason, {
-            quiet: true, editTransfer: transfer,
-            priorityValue: safePriority(transfer?.priorityLevel),
-            deliveryDateValue: safeDeliveryDate(transfer?.requestedDeliveryDate),
-          });
-          return;
+        if (!transfer || !text(transfer.editToken) || !transferItems.length ||
+            transferItems.length !== transfer.products.length ||
+            transferItems.some(item => !item.orderRowId) ||
+            (transfer.count != null && transferItems.length !== transfer.count)) {
+          throw new Error("The full order could not be loaded. Close edit mode and reopen the order.");
         }
+        const transferReason = text(transfer.reason) || transferItems.find(item => item.reason)?.reason || "";
+        const patched = transferItems.map(item => ({ ...item, reason: item.reason || transferReason }));
+        removedOrderRows.current.clear();
+        setActiveEditTransfer(transfer);
+        setCart(patched);
+        setReason(isMaintenance(cleanType) ? "" : transferReason);
+        setPriorityLevel(safePriority(transfer.priorityLevel));
+        setRequestedDeliveryDate(safeDeliveryDate(transfer.requestedDeliveryDate));
+        await persistDraft(patched, cleanType, transferReason, {
+          quiet: true, editTransfer: transfer,
+          priorityValue: safePriority(transfer.priorityLevel),
+          deliveryDateValue: safeDeliveryDate(transfer.requestedDeliveryDate),
+        });
+        return;
       }
 
       const draft = fallback || readCartDraft({ draftScope, type: cleanType, editMode, editKey }) || {};
       let items = normalizeDraft(draft?.products);
       let nextReason = text(draft?.reason) || items.find((item) => item.reason)?.reason || "";
 
-      if (editMode) {
-        const transfer = readEditTransfer(editKey);
-        const transferItems = normalizeDraft(transfer?.products);
-        const transferReason = text(transfer?.reason) || transferItems.find((item) => item.reason)?.reason || "";
-        if (!items.length && transferItems.length) items = transferItems;
-        if (!nextReason && transferReason) nextReason = transferReason;
-        if (nextReason) items = items.map((item) => ({ ...item, reason: item.reason || nextReason }));
-        if (transfer) setActiveEditTransfer(transfer);
-        else if (text(draft?.editToken)) {
-          setActiveEditTransfer({
-            products: items,
-            reason: nextReason,
-            orderType: cleanType,
-            editToken: text(draft.editToken),
-            source: "shopping-cart-local-draft",
-            ts: number(draft?.ts) || Date.now(),
-          });
-        }
-      }
-
-      const nextPriority = safePriority(draft?.priorityLevel || (editMode ? readEditTransfer(editKey)?.priorityLevel : ""));
-      const nextDeliveryDate = safeDeliveryDate(draft?.requestedDeliveryDate || (editMode ? readEditTransfer(editKey)?.requestedDeliveryDate : ""));
+      const nextPriority = safePriority(draft?.priorityLevel);
+      const nextDeliveryDate = safeDeliveryDate(draft?.requestedDeliveryDate);
       setCart(items);
       setReason(isMaintenance(cleanType) ? "" : nextReason);
       setPriorityLevel(nextPriority);
@@ -866,6 +828,7 @@ export default function ShoppingCartClient({
         });
       }
     } catch (error) {
+      setActiveEditTransfer(null);
       setCart([]);
       setReason("");
       setPriorityLevel("");
@@ -1032,17 +995,22 @@ export default function ShoppingCartClient({
     if (!allowComponents && !picker?.item) throw new Error("Your account is not allowed to select individual Components.");
     const draftItem = selection?.item || selection;
     const next = [...cart];
-    const previousId = text(picker?.item?.id);
-    if (previousId && previousId !== draftItem.id) {
-      const previousIndex = next.findIndex((item) => item.id === previousId);
-      if (previousIndex >= 0) next.splice(previousIndex, 1);
-    }
+    const previous = picker?.item;
     const normalized = normalizeDraftItem({ ...draftItem, reason,
-      kitSourceIds: !allowComponents ? (picker?.item?.kitSourceIds || []) : (draftItem?.kitSourceIds || []),
+      orderRowId: previous?.orderRowId,
+      kitSourceIds: !allowComponents ? (previous?.kitSourceIds || []) : (draftItem?.kitSourceIds || []),
     });
-    const targetIndex = next.findIndex((item) => item.id === normalized.id);
-    if (targetIndex >= 0) next[targetIndex] = normalized;
-    else next.push(normalized);
+    if (previous?.orderRowId) {
+      const previousIndex = next.findIndex(item => draftItemKey(item) === draftItemKey(previous));
+      if (previousIndex < 0) throw new Error("The original component is no longer in the cart.");
+      next[previousIndex] = normalized;
+    } else {
+      const previousIndex = previous ? next.findIndex(item => draftItemKey(item) === draftItemKey(previous)) : -1;
+      if (previousIndex >= 0 && previous.id !== normalized.id) next.splice(previousIndex, 1);
+      const targetIndex = next.findIndex(item => draftItemKey(item) === draftItemKey(normalized));
+      if (targetIndex >= 0) next[targetIndex] = normalized;
+      else next.push(normalized);
+    }
     setCart(next);
     await persistDraft(next);
     setPicker(null);
@@ -1068,13 +1036,14 @@ export default function ShoppingCartClient({
   };
 
   const deleteItem = async (item) => {
-    const next = cart.filter((row) => row.id !== item.id);
+    if (item.orderRowId) removedOrderRows.current.add(item.orderRowId);
+    const next = cart.filter((row) => draftItemKey(row) !== draftItemKey(item));
     setCart(next);
     await persistDraft(next);
   };
 
   const updateQuantity = (id, value, options = { save: true }) => {
-    const next = cart.map((item) => item.id === id ? { ...item, quantity: quantity(value, 1) } : item);
+    const next = cart.map((item) => draftItemKey(item) === id ? { ...item, quantity: quantity(value, 1) } : item);
     setCart(next);
     if (options?.save !== false) persistDraft(next);
   };
@@ -1106,13 +1075,14 @@ export default function ShoppingCartClient({
     if (!cart.length) return;
     const confirmed = await confirmDelete({ title: "Clear cart?", itemType: "cart", message: "All products currently added to this cart will be removed." });
     if (!confirmed) return;
+    for (const item of cart) if (item.orderRowId) removedOrderRows.current.add(item.orderRowId);
     setCart([]);
     await persistDraft([]);
   };
 
   const canSubmit = editMode ? permissions.edit_submit === true : permissions.submit === true;
   const checkout = async () => {
-    if (!canSubmit) return false;
+    if (!canSubmit || (editMode && !activeEditTransfer)) return false;
     const cartMissing = !cart.length;
     const reasonMissing = !maintenance && !text(reason);
     const priorityMissing = !maintenance && !text(priorityLevel);
@@ -1152,6 +1122,7 @@ export default function ShoppingCartClient({
           requestedDeliveryDate: maintenance ? null : requestedDeliveryDate || null,
           editMode,
           editToken: text(activeEditTransfer?.editToken),
+          ...(editMode ? { removedOrderRowIds: [...removedOrderRows.current] } : {}),
         }),
       });
       setCheckoutCommitted(true);
@@ -1253,8 +1224,8 @@ export default function ShoppingCartClient({
 
       <div className={`classic-cart-type-pill ${typeTheme}`}>
         {editMode ? (
-          <button className="classic-cart-back-btn" type="button" onClick={backToTypes} aria-label="Back to Current Orders">
-            <CartSvgIcon name="arrow-left" size={16}/>
+          <button className="classic-cart-back-btn classic-cart-cancel-edit" type="button" onClick={backToTypes} aria-label="Cancel edit" title="Cancel edit" disabled={busy}>
+            <CartSvgIcon name="x" size={22}/>
           </button>
         ) : null}
         <div className="classic-cart-flow-heading">
@@ -1283,7 +1254,7 @@ export default function ShoppingCartClient({
                     : (productMap.get(item.id) || normalizeProduct({ id: item.id, name: "Unavailable product" }));
                   return (
                     <CartItem
-                      key={item.id}
+                      key={draftItemKey(item)}
                       item={item}
                       product={product}
                       type={selectedType}
@@ -1378,7 +1349,7 @@ export default function ShoppingCartClient({
 
           {canSubmit ? <SlideToSubmit
             label="Slide to submit"
-            disabled={busy || loadingDraft || (!maintenance && !allowComponents && !allowKits)}
+            disabled={busy || loadingDraft || (editMode && !activeEditTransfer) || (!maintenance && !allowComponents && !allowKits)}
             onSubmit={checkout}
           /> : null}
         </aside>

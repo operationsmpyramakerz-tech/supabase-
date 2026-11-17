@@ -400,7 +400,8 @@ function progressIndex(group) {
 function writeEditTransfer(data, group) {
   try {
     const products = Array.isArray(data?.products) ? data.products : [];
-    if (!products.length) return "";
+    const suppliedIds = new Set(products.map(item => text(item?.orderRowId)));
+    if (!products.length || products.length !== group.orderIds.length || suppliedIds.size !== products.length || group.orderIds.some(id => !suppliedIds.has(text(id)))) return "";
     const reason = text(data?.reason || group?.reason);
     const orderType = text(data?.orderType || group?.orderType);
     const priorityLevel = text(data?.priorityLevel) || "Normal";
@@ -409,6 +410,7 @@ function writeEditTransfer(data, group) {
     const editKey = `current-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     const payload = JSON.stringify({
       products: patched,
+      count: patched.length,
       reason,
       orderType,
       priorityLevel,
@@ -423,14 +425,18 @@ function writeEditTransfer(data, group) {
       `shopping_cart:edit_fallback:v1:${typeKey}`,
       "shopping_cart:edit_fallback:v1:default",
     ];
-    for (const storage of [window.sessionStorage, window.localStorage]) {
+    let stored = false;
+    for (const storageName of ["sessionStorage", "localStorage"]) {
       try {
-        keys.forEach((key) => storage.setItem(key, payload));
+        const storage = window[storageName];
+        storage.setItem(keys[0], payload);
+        stored = true;
+        keys.slice(1).forEach((key) => storage.setItem(key, payload));
         storage.setItem("shopping_cart:edit_pending:v2", JSON.stringify({ key: editKey, orderType, reason, ts: Date.now() }));
         if (orderType) storage.setItem("shopping_cart:edit_target_type:v1", orderType);
       } catch {}
     }
-    return editKey;
+    return stored ? editKey : "";
   } catch {
     return "";
   }
@@ -854,6 +860,7 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
       const data = await runProtectedAction(action, group);
       if (action === "edit") {
         const editKey = writeEditTransfer(data, group);
+        if (!editKey) throw new Error("The complete order could not be transferred. Please reopen it before editing.");
         const editUrl = new URL("/next/orders/new", window.location.origin);
         editUrl.searchParams.set("edit", "1");
         if (data?.orderType) editUrl.searchParams.set("type", String(data.orderType));

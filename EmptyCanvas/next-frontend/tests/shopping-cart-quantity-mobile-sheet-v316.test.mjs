@@ -32,7 +32,7 @@ test("cart quantity is directly editable and commits on blur, preserving buttons
   assert.match(cart, /function CartQuantityEditor/);
   assert.match(cart, /input type="text" inputMode="decimal"/);
   assert.match(cart, /onChange=\{onInput\} onBlur=\{commit\}/);
-  assert.match(cart, /if \(next !== qty\) onQuantityChange\(item\.id, next\)/);
+  assert.match(cart, /if \(next !== qty\) onQuantityChange\(draftItemKey\(item\), next\)/);
   assert.match(cart, /onPointerDown=.*stepping\.current = true/);
   assert.match(cart, /function updateQuantity|const updateQuantity/);
   assert.match(cart, /persistDraft\(next\)/);

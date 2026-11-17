@@ -39,5 +39,5 @@ test("Preview is a modal and can be dismissed with close, Escape, and background
 });
 
 test("Shopping Cart CSS revision is cache-busted", () => {
-  assert.match(shell, /shopping-cart\.css\?v=v338-required-fields/);
+  assert.match(shell, /shopping-cart\.css\?v=v450-edit-row-identity/);
 });

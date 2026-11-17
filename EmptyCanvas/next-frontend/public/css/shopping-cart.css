@@ -2856,3 +2856,44 @@ body.shopping-cart-page .main-content > main::-webkit-scrollbar{
   display:block;max-width:100%;max-height:min(75dvh,720px);width:auto;height:auto;
   margin:auto;object-fit:contain;border-radius:12px;
 }
+
+
+/* V450 — explicit cancel-edit control; isolate it from shared button resets. */
+body.shopping-cart-page .classic-cart-page .classic-cart-type-pill > .classic-cart-cancel-edit {
+  box-sizing: border-box !important;
+  display: inline-grid !important;
+  place-items: center !important;
+  flex: 0 0 40px !important;
+  width: 40px !important;
+  height: 40px !important;
+  min-width: 40px !important;
+  min-height: 40px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 1px solid #fecaca !important;
+  border-radius: 12px !important;
+  background: #fff1f2 !important;
+  color: #be123c !important;
+  line-height: 1 !important;
+  align-self: center !important;
+  box-shadow: none !important;
+}
+body.shopping-cart-page .classic-cart-page .classic-cart-type-pill > .classic-cart-cancel-edit > svg {
+  display: block !important;
+  width: 22px !important;
+  height: 22px !important;
+  flex: none !important;
+  color: inherit !important;
+  stroke: currentColor !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  margin: 0 !important;
+}
+body.shopping-cart-page .classic-cart-page .classic-cart-type-pill > .classic-cart-cancel-edit:hover { background: #ffe4e6 !important; }
+html[data-theme="dark"] body.shopping-cart-page .classic-cart-page .classic-cart-type-pill > .classic-cart-cancel-edit {
+  background: #3a2028 !important; color: #fda4af !important; border-color: #713443 !important;
+}
+@media (max-width: 640px) {
+  body.shopping-cart-page .classic-cart-page .classic-cart-type-pill:has(> .classic-cart-cancel-edit) { gap: .6rem; }
+  body.shopping-cart-page .classic-cart-page .classic-cart-type-pill > .classic-cart-cancel-edit { flex-basis: 36px !important; width: 36px !important; min-width: 36px !important; height: 36px !important; min-height: 36px !important; }
+}

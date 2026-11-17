@@ -47,6 +47,7 @@ export async function POST(request) {
       requestedDeliveryDate: body?.requestedDeliveryDate,
       editMode: body?.editMode === true,
       editToken: body?.editToken,
+      removedOrderRowIds: body?.removedOrderRowIds,
     });
     if (result) return noStore(result);
     return noStore(

@@ -145,29 +145,57 @@ function verifySignedPayload(signedValue = "", expectedScope = "", account = {})
   return payload;
 }
 
+// Names (including Arabic) are more reliable than shared supplier links on legacy order rows.
+function productNameKey(value) {
+  return text(value).normalize("NFKC").toLowerCase().replace(/\s+/g, " ");
+}
 function productMaps(products = []) {
   const byId = new Map();
   const byUrl = new Map();
   const byName = new Map();
+  const add = (map, key, product) => {
+    if (!key) return;
+    const entries = map.get(key) || [];
+    if (!entries.some(entry => text(entry.id) === text(product.id))) entries.push(product);
+    map.set(key, entries);
+  };
   for (const product of Array.isArray(products) ? products : []) {
     const id = text(product?.id);
-    const url = text(product?.url);
-    const nameKey = token(product?.name);
-    if (id) byId.set(id, product);
-    if (url && !byUrl.has(url)) byUrl.set(url, product);
-    if (nameKey && !byName.has(nameKey)) byName.set(nameKey, product);
+    if (!id) continue;
+    byId.set(id, product);
+    add(byUrl, text(product?.url), product);
+    add(byName, productNameKey(product?.name), product);
   }
   return { byId, byUrl, byName };
 }
 
 function resolveRowProduct(row = {}, maps = {}) {
   const directId = text(valueFor(row, ["product_id", "productId", "product_page_id", "productPageId"]));
-  if (directId && maps.byId?.has(directId)) return maps.byId.get(directId);
+  if (directId) return maps.byId?.get(directId) || null;
   const productUrl = text(valueFor(row, ["product_url", "Product URL", "url", "URL"]));
-  if (productUrl && maps.byUrl?.has(productUrl)) return maps.byUrl.get(productUrl);
-  const nameKey = token(valueFor(row, ["product_name", "Product Name", "product", "Product"]));
-  if (nameKey && maps.byName?.has(nameKey)) return maps.byName.get(nameKey);
-  return null;
+  const nameKey = productNameKey(valueFor(row, ["product_name", "Product Name", "product", "Product"]));
+  const names = maps.byName?.get(nameKey) || [];
+  if (names.length === 1) return names[0];
+  const links = maps.byUrl?.get(productUrl) || [];
+  if (names.length > 1) {
+    const matches = names.filter(product => links.some(link => text(link.id) === text(product.id)));
+    return matches.length === 1 ? matches[0] : null;
+  }
+  // A named but unmatched row must not silently become a different product.
+  return !nameKey && links.length === 1 ? links[0] : null;
+}
+
+// Every original order row must be retained or explicitly removed; a missing
+// row from an incomplete/stale browser transfer is NEVER an implicit deletion.
+function validateEditRowSelection(ids, products, removedOrderRowIds) {
+  const expected = new Set(ids);
+  const seen = new Set();
+  if (!Array.isArray(removedOrderRowIds)) throw directError("Reopen the order before editing. The edit session is incomplete.", 409);
+  for (const id of [...products.map(item => text(item?.orderRowId)).filter(Boolean), ...removedOrderRowIds.map(text)]) {
+    if (!id || !expected.has(id) || seen.has(id)) throw directError("Invalid or duplicate order component. Reopen the order.", 409);
+    seen.add(id);
+  }
+  if (seen.size !== expected.size) throw directError("Some original order components are missing. Reopen the order before saving.", 409);
 }
 
 function rawOrderNumber(row = {}) {
@@ -194,6 +222,7 @@ function cleanSubmittedProducts(products = [], orderType = "") {
   const source = Array.isArray(products) ? products : [];
   const clean = source.map((item) => ({
     id: text(item?.id),
+    orderRowId: text(item?.orderRowId),
     quantity: maintenance ? 1 : Number(item?.quantity),
     reason: text(item?.reason),
     issueDescription: text(item?.issueDescription),
@@ -310,6 +339,7 @@ export async function initializeCurrentOrderEditDirect({
     if (!Number.isFinite(orderNumber)) orderNumber = rawOrderNumber(row);
     draft.push({
       id: text(product.id),
+      orderRowId: text(row.id),
       quantity: Math.abs(rawRequestedQty(row)) || 1,
       reason: text(valueFor(row, ["reason", "Reason"])),
       issueDescription: text(valueFor(row, ["issue_description", "Issue Description"])),
@@ -318,7 +348,7 @@ export async function initializeCurrentOrderEditDirect({
     });
   }
 
-  if (rows.length !== draft.length) throw directError("This order contains a component that is not yet in Products. Add the requested component to Products before editing this order.", 409);
+  if (rows.length !== draft.length) throw directError("Some order components could not be uniquely matched to Products. Check their Product ID or name before editing. No components were changed.", 409);
   if (!draft.length) throw directError("No editable products found for this order.", 400);
   if (!orderType) {
     if (draft.some((item) => item.issueDescription)) orderType = "Request Maintenance";
@@ -383,7 +413,7 @@ async function createNewOrderDirect({ account = {}, products = [], orderType = "
       order_number: orderNumber,
       order_type: finalType || null,
       notion_created_time: now,
-      ...(item.customProduct ? { product_id: null } : {}),
+      product_id: item.customProduct ? null : item.id,
       product_name: text(product?.name) || item.id,
       product_url: text(product?.url) || null,
       unit_price: product?.unitPrice === null || product?.unitPrice === undefined ? null : (Number.isFinite(Number(product.unitPrice)) ? Number(product.unitPrice) : null),
@@ -455,12 +485,13 @@ async function createNewOrderDirect({ account = {}, products = [], orderType = "
   };
 }
 
-async function updateExistingOrderDirect({ account = {}, products = [], orderType = "", priorityLevel = "", requestedDeliveryDate = null, editToken = "" } = {}) {
+async function updateExistingOrderDirect({ account = {}, products = [], orderType = "", priorityLevel = "", requestedDeliveryDate = null, editToken = "", removedOrderRowIds } = {}) {
   const signed = verifySignedPayload(editToken, "edit-order", account);
   const ids = cleanIds(signed?.ids);
   if (!ids.length || ids.length > 500 || !ids.every((id) => /^\d+$/.test(id))) throw directError("Edit session expired. Please reopen the order and try again.", 400);
 
   const rows = await verifyOwnedRows(ids, account);
+  validateEditRowSelection(ids, Array.isArray(products) ? products : [], removedOrderRowIds);
   const finalType = canonicalOrderType(orderType || signed?.orderType || rawOrderType(rows[0]));
   let requestMetadata = { priorityLevel: null, requestedDeliveryDate: null };
   if (orderTypeKey(finalType) !== "requestmaintenance") {
@@ -474,12 +505,6 @@ async function updateExistingOrderDirect({ account = {}, products = [], orderTyp
   const unknown = cleanProducts.find((item) => !maps.byId.has(item.id));
   if (unknown) throw directError("One or more selected products no longer exist.", 400);
 
-  const rowById = new Map(rows.map((row) => [text(row?.id), row]));
-  const unused = ids.map((id) => {
-    const row = rowById.get(id);
-    const product = resolveRowProduct(row, maps);
-    return { rowId: id, productId: text(product?.id) };
-  });
   const orderNumber = Number.isFinite(Number(signed?.orderNumber))
     ? Number(signed.orderNumber)
     : (rawOrderNumber(rows[0]) ?? await nextOrderNumber());
@@ -488,22 +513,13 @@ async function updateExistingOrderDirect({ account = {}, products = [], orderTyp
   const currentTeamMemberId = text(valueFor(rows[0], ["team_member_id", "team_members_id", "created_by_id", "owner_id"])) || null;
   const currentTeamMemberName = text(valueFor(rows[0], ["team_member_name", "Teams Members", "teams_members", "created_by_name", "created_by", "Created By"])) || accountUsername(account) || null;
   const createdTime = rawCreatedTime(rows[0]);
-  const usedIds = new Set();
   const updated = [];
   let mutationStarted = false;
-
-  const takeMatch = (productId) => {
-    const exactIndex = unused.findIndex((entry) => entry.productId === productId && !usedIds.has(entry.rowId));
-    if (exactIndex >= 0) return unused.splice(exactIndex, 1)[0];
-    const anyIndex = unused.findIndex((entry) => !usedIds.has(entry.rowId));
-    if (anyIndex >= 0) return unused.splice(anyIndex, 1)[0];
-    return null;
-  };
 
   try {
     for (const item of cleanProducts) {
       const product = maps.byId.get(item.id) || {};
-      const match = takeMatch(item.id);
+      const match = item.orderRowId ? { rowId: item.orderRowId } : null;
       const patch = {
         reason: item.reason || null,
         ...(orderTypeKey(finalType) !== "requestmaintenance" ? {
@@ -529,7 +545,6 @@ async function updateExistingOrderDirect({ account = {}, products = [], orderTyp
 
       mutationStarted = true;
       if (match?.rowId) {
-        usedIds.add(match.rowId);
         updated.push({ row: await updateById(orderTable(), match.rowId, patch), productId: item.id });
       } else {
         updated.push({
@@ -544,9 +559,8 @@ async function updateExistingOrderDirect({ account = {}, products = [], orderTyp
       }
     }
 
-    for (const leftover of unused) {
-      if (!leftover?.rowId || usedIds.has(leftover.rowId)) continue;
-      await updateById(orderTable(), leftover.rowId, { status: "Archive" });
+    for (const rowId of removedOrderRowIds.map(text)) {
+      await updateById(orderTable(), rowId, { status: "Archive" });
     }
   } catch (error) {
     throw directError(error?.message || "Failed to update order in Supabase.", Number(error?.status) || 500, mutationStarted);
@@ -578,13 +592,14 @@ export async function submitShoppingCartOrderDirect({
   requestedDeliveryDate = null,
   editMode = false,
   editToken = "",
+  removedOrderRowIds,
 } = {}) {
   const key = editMode ? "orders.shopping.edit_submit" : "orders.shopping.submit";
   if (!orderActionAllowed(account, key) || (editMode && !orderActionAllowed(account, "orders.my.edit"))) throw directError("Order submission is not permitted.", 403);
   if (!isSupabaseConfigured()) return null;
   if (editMode) {
     if (!text(editToken)) return null;
-    return await updateExistingOrderDirect({ account, products, orderType, priorityLevel, requestedDeliveryDate, editToken });
+    return await updateExistingOrderDirect({ account, products, orderType, priorityLevel, requestedDeliveryDate, editToken, removedOrderRowIds });
   }
   return await createNewOrderDirect({ account, products, orderType, priorityLevel, requestedDeliveryDate });
 }
