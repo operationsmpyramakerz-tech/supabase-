@@ -34,5 +34,5 @@ test('existing receipt conditions and selectable values remain unchanged', () =>
   assert.match(dialogs, /const SCREENSHOT_REQUIRED_KEYS = new Set/);
   assert.match(dialogs, /const screenshotRequired = SCREENSHOT_REQUIRED_KEYS\.has\(typeKey\(form\.fundsType\)\)/);
   assert.match(dialogs, /onChange\(option\.value\); setOpen\(false\);/);
-  assert.match(page, /expenses-classic-inline\.css\?v=v445-all-expenses-destination/);
+  assert.match(page, /expenses-classic-inline\.css\?v=v446-all-expenses-black-ticket/);
 });

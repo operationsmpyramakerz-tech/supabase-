@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import { createPortal } from "react-dom";
 import { featureAllowed } from "../../lib/feature-permissions-registry";
 import { DEFAULT_OWN_CAR_RATE_EGP_PER_KM } from "../../lib/own-car-expense.mjs";
 
@@ -406,7 +407,8 @@ function AllExpensesSheet({ items, lastSettledAt, onClose, onScreenshots, onExpo
   const pastItems = Number.isFinite(boundary) ? items.filter((item) => transactionTime(item) <= boundary) : [];
   const recentGroups = groupTransactions(recentItems, { byDestination: true });
   const pastGroups = showPast ? groupTransactions(pastItems, { byDestination: true }) : [];
-  return <div id="allExpenses" className="ios-modal next-ios-modal-open all-expenses-bottom-sheet" style={{ display: "flex" }} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+  if (typeof document === "undefined") return null;
+  return createPortal(<div id="allExpenses" className="ios-modal next-ios-modal-open all-expenses-bottom-sheet" style={{ display: "flex" }} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
     <section className="ios-sheet all-expenses-sheet" role="dialog" aria-modal="true" aria-labelledby="allExpensesTitle">
       <span className="all-expenses-sheet__badge" aria-hidden="true"><ClassicExpenseIcon name="file-text" size={28}/></span>
       <header className="all-expenses-sheet__header">
@@ -420,7 +422,7 @@ function AllExpensesSheet({ items, lastSettledAt, onClose, onScreenshots, onExpo
       </div>
       <footer className="all-expenses-sheet__footer"><button className="next-all-expenses-close" type="button" onClick={onClose}>Close</button></footer>
     </section>
-  </div>;
+  </div>, document.body);
 }
 
 export default function ExpensesClient({ account, initialPayload = {}, initialTypes = [], cashInFromOptions = [], orderOptions = [], bootstrapWarnings = [] }) {

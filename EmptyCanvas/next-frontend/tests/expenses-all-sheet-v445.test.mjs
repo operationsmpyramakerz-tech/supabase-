@@ -49,3 +49,16 @@ test('bottom sheet overrides old dock constraints and keeps floating badge outsi
   assert.match(css,/\.all-expenses-sheet \{[^}]*overflow: visible !important/);
   assert.match(css,/#allExpenses #allExpensesList \{[^}]*overflow-y: auto !important/);
 });
+test('V446 sheet is attached to body and sized against its viewport-constrained overlay', () => {
+  assert.match(sheet,/return createPortal\(<div id="allExpenses"[\s\S]*?<\/div>, document\.body\);/);
+  assert.match(css,/\.all-expenses-bottom-sheet \{[^}]*height: 100dvh;[^}]*max-height: 100%;/);
+  assert.match(css,/\.all-expenses-sheet \{[^}]*max-height: 100% !important;/);
+  assert.match(css,/\.all-expenses-sheet__footer \{[^}]*flex: 0 0 auto;[^}]*padding: 8px 20px max\(32px, calc\(env\(safe-area-inset-bottom, 0px\) \+ 16px\)\);/);
+  assert.match(css,/\.next-all-expenses-close \{[^}]*min-height: 44px;/);
+});
+test('V446 black outer ticket preserves white expense rows and legible signed totals', () => {
+  assert.match(css,/#allExpenses \.expense-ticket \{[^}]*background: #111111;/);
+  assert.match(css,/#allExpenses \.expense-ticket__route-frame \{[^}]*background: #ffffff;/);
+  assert.match(css,/#allExpenses \.expense-ticket__footer-value\.is-negative \{ color: #f87171; \}/);
+  assert.match(css,/#allExpenses \.expense-ticket__footer-value\.is-positive \{ color: #4ade80; \}/);
+});
