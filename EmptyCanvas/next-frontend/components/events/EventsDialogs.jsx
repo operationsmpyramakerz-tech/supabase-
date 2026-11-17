@@ -135,7 +135,7 @@ const DETAIL_TABS = [
 
 function DetailPanel({ title, icon, children, wide = false }) {
   return <section className={`event-detail-panel${wide ? " event-detail-panel--wide" : ""}`}>
-    <h3><EventIcon name={icon} />{title}</h3>
+    <h3><span className="event-detail-panel-icon"><EventIcon name={icon} /></span>{title}</h3>
     <div className="event-detail-panel-body">{children}</div>
   </section>;
 }
@@ -144,8 +144,12 @@ function SummaryItem({ icon, label, value }) {
   return <div className="event-detail-summary-item"><span className="event-detail-summary-icon"><EventIcon name={icon} /></span><div><strong>{text(value) || "—"}</strong><small>{label}</small></div></div>;
 }
 
-function DetailField({ label, value }) {
-  return <div className="event-detail-field"><small>{label}</small><strong>{text(value) || "—"}</strong></div>;
+function DetailField({ label, value, icon, wide = false, highlight = false }) {
+  if (!icon) return <div className="event-detail-field"><small>{label}</small><strong>{text(value) || "—"}</strong></div>;
+  return <div className={`event-detail-field event-detail-field--icon${wide ? " event-detail-field--wide" : ""}${highlight ? " event-detail-field--highlight" : ""}`}>
+    <span className="event-detail-field-icon"><EventIcon name={icon} /></span>
+    <div className="event-detail-field-text"><small>{label}</small><strong>{text(value) || "—"}</strong></div>
+  </div>;
 }
 
 // Calendar and request pages share the presentation, but keep their own authorization flows.
@@ -194,24 +198,29 @@ function EventDetailsContent({ event, busy, onClose, onDownload, onWorkflow, onR
   function venuePanel() {
     return <DetailPanel title="Venue & Setup" icon="map-pin">
       <div className="event-detail-fields">
-        {full && <DetailField label="Venue" value={event.venueName} />}
-        <DetailField label="Governorate" value={event.governorate} />
-        {full && <><DetailField label="Venue type" value={event.venueType} /><DetailField label="Setup time" value={formatDateTime(event.venueSetupTime)} /><DetailField label="Utilities" value={utilities} /></>}
+        {full && <DetailField label="Venue" icon={calendarMode ? "building" : undefined} value={event.venueName} />}
+        <DetailField label="Governorate" icon={calendarMode ? "map-pin" : undefined} value={event.governorate} />
+        {full && <><DetailField label="Venue type" icon={calendarMode ? "layers" : undefined} value={event.venueType} /><DetailField label="Setup time" icon={calendarMode ? "calendar" : undefined} value={formatDateTime(event.venueSetupTime)} /><DetailField label="Utilities" icon={calendarMode ? "zap" : undefined} wide={calendarMode} highlight={calendarMode} value={utilities} /></>}
       </div>
       {mapUrl && <a className="event-detail-map" href={mapUrl} target="_blank" rel="noreferrer">Open map location <EventIcon name="external-link" /></a>}
     </DetailPanel>;
   }
 
+  const statusLabel = eventConfirmationLabel(event.status);
+  const statusIcon = confirmation === "confirmed" ? "check" : confirmation === "cancelled" ? "x" : "clock";
   const content = (
     <div style={calendarMode ? viewportStyle : undefined} className={`events-modal-overlay next-modal-layer event-detail-overlay${calendarMode ? " event-detail-overlay--sheet" : ""}`}  role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <section className={`events-modal next-modal event-detail-v2${calendarMode ? " event-detail-v2--sheet" : ""}`} role="dialog" aria-modal="true" aria-label="Event details">
+        {calendarMode && <span className="event-detail-floating-icon" aria-hidden="true"><EventIcon name="calendar" /></span>}
         <div className="event-detail-body">
+        {calendarMode && <h2 className="event-detail-sheet-title">Event Details</h2>}
         <header className="event-detail-header">
           <div className="event-detail-hero">
-            <span className="event-detail-hero-icon"><EventIcon name="calendar" /></span>
+            {!calendarMode && <span className="event-detail-hero-icon"><EventIcon name="calendar" /></span>}
             <div className="event-detail-hero-text"><small>{event.eventCode || "Event request"}</small><h2>{event.eventName || "Untitled Event"}</h2><p><EventIcon name="calendar" />{formatDateRange(event)}</p></div>
+            {calendarMode && <div className="event-detail-hero-status"><span className={`event-detail-status event-detail-status--${confirmation}`}><span className="event-detail-status-glyph"><EventIcon name={statusIcon} /></span><span>{statusLabel}</span></span></div>}
           </div>
-          <div className="event-detail-header-side">
+          {!calendarMode && <div className="event-detail-header-side">
             <div className="event-detail-status-row"><span className={`event-detail-status event-detail-status--${confirmation}`}><EventIcon name={confirmation === "confirmed" ? "check-circle" : confirmation === "cancelled" ? "x-circle" : "clock"} />{eventConfirmationLabel(event.status)}</span>{!calendarMode && <button type="button" className="event-detail-close" aria-label="Close" onClick={onClose}>×</button>}</div>
             {!calendarMode && <div className="event-detail-actions">
               {canEdit && <button type="button" disabled={busy} onClick={() => onRequestAction("edit")}><EventIcon name="edit-3" />Edit</button>}
@@ -219,23 +228,23 @@ function EventDetailsContent({ event, busy, onClose, onDownload, onWorkflow, onR
               {full && canExport && <button type="button" onClick={onDownload}><EventIcon name="download" />PDF</button>}
               {canCancel && status !== "cancelled" && <button type="button" className="event-detail-danger" disabled={busy} onClick={() => onRequestAction("cancel")}>Cancel request</button>}
             </div>}
-          </div>
+          </div>}
         </header>
 
         <div className="event-detail-summary">
           <SummaryItem icon="layers" label="Event Type" value={typeLabel(event)} />
-          <SummaryItem icon="clipboard" label="Organization" value={event.organizationName} />
+          <SummaryItem icon={calendarMode ? "calendar" : "clipboard"} label="Organization" value={event.organizationName} />
           {full && <><SummaryItem icon="user" label="Expected Attendees" value={event.expectedAttendees ?? "—"} /><SummaryItem icon="box" label="Projects" value={event.summaryFormat ? "—" : projects.length} /></>}
         </div>
 
         {full && <nav className="event-detail-tabs" aria-label="Event detail sections">
-          {DETAIL_TABS.map(item => <button key={item.id} type="button" className={tab === item.id ? "is-active" : ""} aria-pressed={tab === item.id} onClick={() => setActiveTab(item.id)}><EventIcon name={item.icon} />{item.label}{item.id === "projects" && !event.summaryFormat ? ` (${projects.length})` : ""}</button>)}
+          {DETAIL_TABS.map(item => <button key={item.id} type="button" className={tab === item.id ? "is-active" : ""} aria-pressed={tab === item.id} onClick={() => setActiveTab(item.id)}><EventIcon name={calendarMode && item.id === "overview" ? "calendar" : item.icon} /><span>{calendarMode && item.id === "marketing" ? "Media" : item.label}{item.id === "projects" && !event.summaryFormat ? ` (${projects.length})` : ""}</span></button>)}
         </nav>}
 
         <div className="event-detail-scroll" key={tab}>
           {tab === "overview" && <div className="event-detail-layout">
             {full && <DetailPanel title="Contact Information" icon="user"><div className="event-detail-fields">
-              <DetailField label="Contact person" value={event.contactPerson} /><DetailField label="Phone" value={event.contactPhone} /><DetailField label="Email" value={event.contactEmail} /><DetailField label="Requested by" value={event.requesterName} /><DetailField label="Created" value={formatDateTime(event.createdAt)} />
+              <DetailField label="Contact person" icon={calendarMode ? "user" : undefined} value={event.contactPerson} /><DetailField label="Phone" icon={calendarMode ? "phone" : undefined} value={event.contactPhone} /><DetailField label="Email" icon={calendarMode ? "mail" : undefined} value={event.contactEmail} /><DetailField label="Requested by" icon={calendarMode ? "user" : undefined} value={event.requesterName} /><DetailField label="Created" icon={calendarMode ? "calendar" : undefined} wide={calendarMode} value={formatDateTime(event.createdAt)} />
             </div></DetailPanel>}
             {venuePanel()}
             {full && <><DetailPanel title="Target Audience" icon="user"><p className="event-detail-note">{text(event.audience) || "—"}</p></DetailPanel><DetailPanel title="Operations Notes" icon="file-text"><p className="event-detail-note">{text(event.operationsNotes) || "—"}</p></DetailPanel></>}
@@ -257,8 +266,8 @@ function EventDetailsContent({ event, busy, onClose, onDownload, onWorkflow, onR
             {canCancelStatus && <button type="button" className="event-detail-status-choice is-cancel" disabled={busy} onClick={() => { setStatusOpen(false); onRequestAction("cancel"); }}><EventIcon name="x-circle"/>Cancelled</button>}
           </div>}
           <div className="event-detail-sheet-buttons">
+            {(canConfirmStatus || canCancelStatus) && <button type="button" className="event-detail-sheet-update" disabled={busy} aria-expanded={statusOpen} onClick={() => setStatusOpen(value => !value)}><EventIcon name="refresh-cw"/>Update</button>}
             <button type="button" className="event-detail-sheet-close" disabled={busy} onClick={onClose}>Close</button>
-            {(canConfirmStatus || canCancelStatus) && <button type="button" className="event-detail-sheet-update" disabled={busy} aria-expanded={statusOpen} onClick={() => setStatusOpen(value => !value)}><EventIcon name="activity"/>Update</button>}
           </div>
         </footer>}
       </section>
