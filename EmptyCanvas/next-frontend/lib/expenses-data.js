@@ -7,6 +7,7 @@ import { listTeamMembersLite } from "./team-members-service";
 import { recordPerformanceSample } from "./performance-profiler";
 import { ownCarCostForKilometers, ownCarRatePerKm } from "./own-car-expense.mjs";
 import { parseStrictImageDataUrl } from "./strict-upload-image.mjs";
+import { expenseOrderNumber, expensePublicOrderHref } from "./expense-public-share.mjs";
 
 function text(value) {
   if (value === null || typeof value === "undefined") return "";
@@ -171,7 +172,7 @@ function expenseOrders(row = {}) {
 function serializeExpense(row = {}) {
   const screenshots = parseScreenshots(valueFor(row, ["screenshot", "Screenshot", "files_media"]));
   const createdTime = dateTimeValue(valueFor(row, ["notion_created_time", "created_at", "Created time"])) || new Date().toISOString();
-  return {
+  const item = {
     id: text(valueFor(row, ["id", "ID"])),
     createdTime,
     date: dateValue(valueFor(row, ["expense_date", "Date", "date"])),
@@ -192,9 +193,19 @@ function serializeExpense(row = {}) {
     teamMemberName: text(valueFor(row, ["team_member_name", "Team Member"])),
     userId: text(valueFor(row, ["user_id", "employee_code"])),
     receiptNumber: text(valueFor(row, ["receipt_number", "receiptNumber", "orders_raw", "orders_names"])),
-    ordersRaw: text(valueFor(row, ["orders_raw", "orders_names"])),
+    ordersRaw: text(valueFor(row, ["orders_raw"])),
     source: "supabase",
   };
+  item.orders = item.orders.map(order => {
+    const number = expenseOrderNumber(order);
+    if (!number) return order;
+    // Missing signing configuration should not prevent normal expense reads.
+    // Export still reports configuration errors rather than exposing a raw URL.
+    let publicDetailsHref = "";
+    try { publicDetailsHref = expensePublicOrderHref(item, number); } catch {}
+    return { ...order, publicDetailsHref };
+  });
+  return item;
 }
 
 function memberIdentity(account = {}, rows = []) {
@@ -1053,8 +1064,8 @@ export async function createExpenseCashOut(account = {}, payload = {}) {
     cash_in: null,
     kilometer: isOwnCar ? kilometers : null,
     screenshot,
-    orders_names: verifiedOrder ? verifiedOrder.orderLabel : (text(payload.orderLabel || payload.orderDisplayId) || null),
-    orders_raw: Array.isArray(payload.orderIds) ? payload.orderIds.map(text).filter(Boolean).join(",") : (text(payload.orderId) || null),
+    orders_names: verifiedOrder ? verifiedOrder.orderLabel : "Other reason",
+    orders_raw: verifiedOrder ? payload.orderIds.map(text).filter(Boolean).join(",") : null,
   }));
   invalidateExpenseDataCaches();
   return { success: true, message: "Cash out saved successfully", item: serializeExpense(row || {}), source: "supabase-next" };

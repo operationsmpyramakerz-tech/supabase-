@@ -188,7 +188,7 @@ function TransactionCard({ item, onScreenshots, canViewOrderReceipts = true }) {
         <div className="expense-transaction__title"><strong>{displayReason(item)}</strong><time>{formatDate(item?.date || item?.createdTime)}</time></div>
         <div className="expense-transaction__meta"><span>{text(item?.fundsType) || "Other"}</span><span>{route.from}</span><i>→</i><span>{route.to}</span></div>
         {orders.length ? <div className="expense-order-links">{orders.map((order, index) => {
-          const href = modernTrackingHref(order);
+          const href = text(order?.publicDetailsHref);
           const receiptHref = canViewOrderReceipts ? modernReceiptViewerHref(order) : "";
           const label = text(order?.orderId || order?.label) || "Order";
           return <span className="expense-order-link-group" key={`${order?.key || order?.label}-${index}`}>{href ? <a href={href} target="_blank" rel="noreferrer">{label}</a> : <span>{label}</span>}{receiptHref ? <a className="receipt-link" href={receiptHref} target="_blank" rel="noreferrer">Receipts</a> : null}</span>;
@@ -266,7 +266,7 @@ function groupTransactions(items, { byDestination = false } = {}) {
     group.created = Math.max(group.created, transactionTime(item));
     for (const order of Array.isArray(item?.orders) ? item.orders : []) {
       const orderKey = text(order?.key || order?.trackingGroupId || order?.orderId || order?.label);
-      if (orderKey && !group.orders.has(orderKey)) group.orders.set(orderKey, order);
+      if (orderKey && (!group.orders.has(orderKey) || (!group.orders.get(orderKey)?.publicDetailsHref && order.publicDetailsHref))) group.orders.set(orderKey, order);
     }
   }
   return [...groups.values()].map((group) => ({ ...group, orders: [...group.orders.values()], total: group.cashIn - group.cashOut })).sort((a, b) => {
@@ -303,7 +303,7 @@ function orderMeta(order) {
 function ExpenseOrderActions({ orders, reasonLabel = "", canViewOrderReceipts = true }) {
   if (!orders?.length) return null;
   return <div className="expense-ticket__order-actions">{orders.map((order, index) => {
-    const href = (canViewOrderReceipts ? modernReceiptViewerHref(order) : "") || modernTrackingHref(order);
+    const href = text(order?.publicDetailsHref);
     const meta = orderMeta(order);
     const orderKind = typeKey(order?.orderType);
     const originalLabel = [text(order?.orderId), text(order?.orderType)].filter(Boolean).join(" · ") || text(order?.label) || "Order";

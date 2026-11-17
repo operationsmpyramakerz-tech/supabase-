@@ -29,21 +29,55 @@ export function expenseShareUrl(baseUrl, id, kind, target, fingerprint, { secret
   const token = `${fingerprint}.${signature(id, kind, target, fingerprint, secret)}`;
   return `${base.origin}/next/share/expenses/${kind}?${new URLSearchParams({ expenseId: id, target, token })}`;
 }
+// Historical picker labels include the order type (e.g. ORD-129 - Request
+// Maintenance). Parse the complete structured label, never free-text Reason
+// or a numeric receipt number. Do not use the derived orderId if a label exists.
+export function expenseOrderNumber(order = {}) {
+  const label = text(order?.label || order?.orderId);
+  const match = label.match(/^(?:ORD|ORDER)[-:\s]?(\d{1,18})(?:\s*(?:[-–—·]|\|)\s*(?:Request(?:\s+Products|\s+Maintenance)?|Withdraw(?:\s+Products)?|Withdrawal|Maintenance|Delivery|Approved|Pending|Shipped|Arrived|Delivered|Under Supervision))?$/i);
+  return match ? String(BigInt(match[1])) : '';
+}
 export function expenseOrderNumbers(item = {}) {
-  // Use original label, not the derived orderId (legacy receipt number '25'
-  // and UUID fragments can otherwise be incorrectly treated as ORD-25).
   if (!(Number(item.cashOut) > 0)) return [];
-  return [...new Set((Array.isArray(item.orders) ? item.orders : []).map(o => {
-    const m = text(o?.label || o?.orderId).match(/^(?:ORD[-\s]?|ord:)(\d{1,18})$/i);
-    return m?.[1] || '';
-  }).filter(Boolean))];
+  return [...new Set((Array.isArray(item.orders) ? item.orders : []).map(expenseOrderNumber).filter(Boolean))];
+}
+function relationTokens(value) {
+  if (Array.isArray(value)) {
+    if (value.some(entry => typeof entry !== 'string' && typeof entry !== 'number')) return [];
+    return value.map(text).filter(Boolean);
+  }
+  if (value && typeof value === 'object') return [];
+  const raw = text(value);
+  if (!raw) return [];
+  if (raw.startsWith('[')) {
+    try { const parsed = JSON.parse(raw); return Array.isArray(parsed) ? relationTokens(parsed) : []; }
+    catch { return []; }
+  }
+  return raw.split(/[,\n]+/).map(text).filter(Boolean);
 }
 export function expenseOrderReference(item = {}) {
   const numbers = expenseOrderNumbers(item);
-  const raw = text(item.ordersRaw);
-  const ids = [...new Set(raw.split(',').map(text).filter(Boolean))];
-  if (!numbers.length || numbers.length > 25 || !ids.length || ids.length > 200 || !ids.every(id => idPattern.test(id) && !/^ORD[-\s]?\d+$/i.test(id))) return null;
+  const ids = [...new Set(relationTokens(item.ordersRaw))];
+  if (!numbers.length || numbers.length > 25 || !ids.length || ids.length > 200) return null;
+  // Only explicit group references stored in orders_raw may authorize a whole
+  // historical group. The names must agree exactly; mixed raw IDs/group keys
+  // and free-text labels alone cannot grant access.
+  const groupNumbers = ids.map(id => /^(?:ORD|ORDER)[-:\s]?(\d{1,18})$/i.exec(id)?.[1]);
+  if (groupNumbers.some(Boolean)) {
+    const groups = [...new Set(groupNumbers.filter(Boolean).map(n => String(BigInt(n))))];
+    if (groupNumbers.some(n => !n) || groups.length !== numbers.length || numbers.some(n => !groups.includes(n))) return null;
+    return { numbers, ids, mode: 'group', fingerprint: digest(['legacy-group', numbers, ids]) };
+  }
+  if (!ids.every(id => idPattern.test(id))) return null;
   return { numbers, ids, fingerprint: digest([numbers, ids]) };
+}
+// Same-origin UI links use exactly the same capability as Excel; the signing
+// secret stays on the server. No dependency on Host headers or client routing.
+export function expensePublicOrderHref(item, number, options) {
+  const reference = expenseOrderReference(item);
+  if (!reference || !reference.numbers.includes(number)) return '';
+  const url = expenseShareUrl('https://erp.invalid', item.id, 'order', number, reference.fingerprint, options);
+  return url ? url.slice('https://erp.invalid'.length) : '';
 }
 export function expenseShotEntries(item = {}) {
   const shots = Array.isArray(item.screenshots) ? item.screenshots : [];
@@ -86,4 +120,52 @@ export function groupSharedOrderRows(reference, rows, target) {
   }
   if ([...groups.values()].some(group => !group.length)) return null;
   return target === 'all' ? [...groups.values()] : groups.has(target) ? [groups.get(target)] : null;
+}
+
+// Group-key legacy records are a distinct signed mode, not a fallback from a
+// missing/mismatched primary-key relationship.
+export function groupExplicitSharedOrderRows(reference, rows, target) {
+  if (reference?.mode !== 'group' || !Array.isArray(rows) || !rows.length || rows.length > 200) return null;
+  const groups = new Map(reference.numbers.map(n => [n, []]));
+  const ids = new Set();
+  for (const row of rows) {
+    const id = text(row?.id), n = text(row?.order_number);
+    if (!id || ids.has(id) || !groups.has(n)) return null;
+    ids.add(id); groups.get(n).push(row);
+  }
+  if ([...groups.values()].some(group => !group.length)) return null;
+  return target === 'all' ? [...groups.values()] : groups.has(target) ? [groups.get(target)] : null;
+}
+
+// Resolve imported Notion row IDs only if an actual order row has the exact
+// old ID. Never infer a match merely from the expense's display label.
+const legacyUuid = value => {
+  const compact = text(value).replace(/-/g, '').toLowerCase();
+  return /^[a-f0-9]{32}$/.test(compact) ? compact : '';
+};
+export async function loadSharedExpenseRows(reference, { loadByIds, loadByLegacyId, loadByNumbers }) {
+  if (reference.mode === 'group') return await loadByNumbers(reference.numbers);
+  try { return await loadByIds(reference.ids); } catch (error) {
+    // Only an imported UUID can require a legacy alias lookup. Numeric or
+    // other missing row IDs cannot silently become an order number lookup.
+    if (!reference.ids.some(legacyUuid)) throw error;
+    const result = [];
+    for (const id of reference.ids) {
+      let rows;
+      try { rows = await loadByIds([id]); } catch (error) {
+        const uuid = legacyUuid(id);
+        if (!uuid) throw error;
+        rows = await loadByLegacyId(uuid);
+      }
+      if (!Array.isArray(rows) || rows.length !== 1) return [];
+      const row = rows[0];
+      const aliases = ['id', 'notion_page_id', 'notion_id', 'page_id', 'legacy_id'];
+      if (text(row.id) !== id && (!legacyUuid(id) || !aliases.some(key => legacyUuid(row[key]) === legacyUuid(id)))) return [];
+      // The group verifier checks row IDs against the signed original refs.
+      // Preserve the canonical row separately to detect aliases of one row.
+      result.push({ ...row, __shareCanonicalId: text(row.id), id });
+    }
+    if (new Set(result.map(row => row.__shareCanonicalId)).size !== result.length) return [];
+    return result;
+  }
 }

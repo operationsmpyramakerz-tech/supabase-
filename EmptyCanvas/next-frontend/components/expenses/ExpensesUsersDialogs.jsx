@@ -209,7 +209,7 @@ function groupUserExpenses(items, sortType = "newest") {
     group.createdSort = Math.max(group.createdSort || 0, transactionTime(item));
     for (const order of ordersFor(item)) {
       const orderKey = text(order?.key || order?.orderId || order?.label);
-      if (orderKey && !group.ordersMap.has(orderKey)) group.ordersMap.set(orderKey, order);
+      if (orderKey && (!group.ordersMap.has(orderKey) || (!group.ordersMap.get(orderKey)?.publicDetailsHref && order.publicDetailsHref))) group.ordersMap.set(orderKey, order);
     }
   }
 
@@ -433,7 +433,7 @@ function UserExpenseOrderActions({ orders, canViewOrderReceipts = true }) {
   if (!orders?.length) return null;
   return <div className="expense-ticket__order-actions">{orders.map((order, index) => {
     const meta = getExpenseOrderTypeMeta(order?.orderType);
-    const href = (canViewOrderReceipts ? modernReceiptViewerHref(order) : "") || modernTrackingHref(order);
+    const href = text(order?.publicDetailsHref);
     const label = [text(order?.orderId), text(order?.orderType)].filter(Boolean).join(" · ") || text(order?.label) || "Order";
     const style = { "--expense-order-btn-bg": meta.bg, "--expense-order-btn-fg": meta.fg, "--expense-order-btn-border": meta.bd };
     const content = <><UserClassicIcon name={meta.icon} size={15}/><span>{label}</span>{href ? <UserClassicIcon name="external" size={14}/> : null}</>;

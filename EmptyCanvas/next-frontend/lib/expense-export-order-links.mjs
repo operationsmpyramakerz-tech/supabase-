@@ -13,5 +13,5 @@ export function expenseReasonExportPayload(item = {}, baseUrl = '', options) {
   const links = expenseOrderLinks(item, baseUrl, options);
   const reference = expenseOrderReference(item);
   if (!links.length) return { text: text(item.reason), hyperlink: '', links: [] };
-  return { text: links.map(entry => entry.text).join(', '), hyperlink: reference ? expenseShareUrl(baseUrl, item.id, 'order', 'all', reference.fingerprint, options) : '', links };
+  return { text: text(item.reason) || links.map(entry => entry.text).join(', '), hyperlink: reference ? expenseShareUrl(baseUrl, item.id, 'order', 'all', reference.fingerprint, options) : '', links };
 }

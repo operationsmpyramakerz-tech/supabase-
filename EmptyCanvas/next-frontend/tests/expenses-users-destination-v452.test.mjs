@@ -125,3 +125,18 @@ test('export flag is server-derived and canonical row supplies destination rathe
   const result = selectAuthorizedExpenseExportRows([{ id: '1', destinationUserName: 'Forged' }], [row('1', 'a', 'ACIC')]);
   assert.equal(result.rows[0].destinationUserName, 'ACIC');
 });
+
+
+test('legacy maintenance expense exports a real hyperlink cell in Reason and Order 1 without changing screenshot or totals', async()=>{
+  const item=row('legacy-129','a','Princeton',137,{reason:'ORD-129 - Request Maintenance',orders:[{label:'ORD-129 - Request Maintenance',orderId:'ORD-129'}],ordersRaw:'["maintenance-row-1"]',screenshots:[{name:'receipt.jpg',url:'https://erp.test/receipt'}]});
+  const sheet=await runExport([item],true);
+  const cell=label=>sheet.getRow(9).getCell(columnFor(sheet,label));
+  assert.equal(cell('Reason').value.text,item.reason);
+  assert.match(cell('Reason').value.hyperlink,/\/next\/share\/expenses\/order\?expenseId=legacy-129&target=all&token=/);
+  assert.equal(cell('Order 1').value.text,'ORD-129');
+  assert.match(cell('Order 1').value.hyperlink,/target=129&token=/);
+  assert.match(cell('Screenshot 1').value.hyperlink,/\/share\/expenses\/screenshot/);
+  assert.equal(cell('Destination').value,'Princeton');
+  assert.equal(cell('Cash Out').value,137);
+  assert.equal(sheet.getCell('B5').value,137);
+});

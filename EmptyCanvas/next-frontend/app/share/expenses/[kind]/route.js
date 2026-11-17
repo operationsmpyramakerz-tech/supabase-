@@ -1,7 +1,7 @@
 import { expenseForPublicShare } from '../../../../lib/expenses-data';
 import { loadRawOrderRowsByIds, serializeOperationsOrderDetail } from '../../../../lib/order-details-data';
-import { createSignedDownloadUrl, getSupabaseConfig } from '../../../../lib/supabase-rest';
-import { expenseOrderReference, expenseShotEntries, screenshotFingerprint, expenseStorageObject, groupSharedOrderRows, verifyExpenseShare } from '../../../../lib/expense-public-share.mjs';
+import { createSignedDownloadUrl, getSupabaseConfig, select } from '../../../../lib/supabase-rest';
+import { expenseOrderReference, expenseShotEntries, screenshotFingerprint, expenseStorageObject, groupSharedOrderRows, groupExplicitSharedOrderRows, loadSharedExpenseRows, verifyExpenseShare } from '../../../../lib/expense-public-share.mjs';
 import { renderPublicExpenseOrders } from '../../../../lib/expense-public-order-template.mjs';
 import { parseStrictImageDataUrl } from '../../../../lib/strict-upload-image.mjs';
 export const runtime = 'nodejs';
@@ -40,6 +40,26 @@ async function screenshotResponse(shot) {
   if (config.url && url.origin === new URL(config.url).origin && !url.pathname.includes('/storage/v1/object/public/')) return unavailable();
   return new Response(null, { status: 302, headers: { ...headers, Location: url.href } });
 }
+// Exact compatibility reads for imported IDs. All calls happen only after
+// the signed expense reference has been validated.
+async function loadLegacyOrderId(uuid) {
+  const table = String(process.env.SUPABASE_ORDERS_TABLE || 'orders');
+  const hyphenated = `${uuid.slice(0,8)}-${uuid.slice(8,12)}-${uuid.slice(12,16)}-${uuid.slice(16,20)}-${uuid.slice(20)}`;
+  const rowsById = new Map();
+  for (const column of ['id', 'notion_page_id', 'notion_id', 'page_id', 'legacy_id']) {
+    try {
+      const matches = await select(table, { select: '*', [column]: `in.(${uuid},${hyphenated})`, limit: '2' }, { profileName: 'expenses.public-legacy-order-id' });
+      if (!Array.isArray(matches) || matches.length > 1) return [];
+      for (const row of matches) rowsById.set(String(row.id), row);
+    } catch (error) {
+      // Older schemas do not have every legacy column, and numeric PKs do
+      // not accept UUID filters. Other failures must not authorize a fallback.
+      const details = `${error?.message || ''} ${JSON.stringify(error?.details || {})}`;
+      if (Number(error?.status) !== 400 || !/column|22P02|invalid input syntax/i.test(details)) throw error;
+    }
+  }
+  return [...rowsById.values()];
+}
 export async function GET(request, { params }) {
   const { kind } = await params;
   const url = new URL(request.url);
@@ -57,7 +77,16 @@ export async function GET(request, { params }) {
     }
     const reference = expenseOrderReference(item);
     if (!reference || reference.fingerprint !== fingerprint) return unavailable();
-    const groups = groupSharedOrderRows(reference, await loadRawOrderRowsByIds(reference.ids), target);
+    const rows = await loadSharedExpenseRows(reference, {
+      loadByIds: loadRawOrderRowsByIds,
+      loadByLegacyId: loadLegacyOrderId,
+      loadByNumbers: numbers => select(String(process.env.SUPABASE_ORDERS_TABLE || 'orders'), {
+        select: '*', order_number: `in.(${numbers.join(',')})`, order: 'notion_created_time.desc,id.desc', limit: '201',
+      }, { profileName: 'expenses.public-legacy-order-group' }),
+    });
+    const groups = reference.mode === 'group'
+      ? groupExplicitSharedOrderRows(reference, rows, target)
+      : groupSharedOrderRows(reference, rows, target);
     if (!groups) return unavailable();
     return new Response(renderPublicExpenseOrders(groups.map(rows => rows.map(serializeOperationsOrderDetail))), { headers: { ...headers, 'Content-Type': 'text/html; charset=utf-8' } });
   } catch { return unavailable(); }
