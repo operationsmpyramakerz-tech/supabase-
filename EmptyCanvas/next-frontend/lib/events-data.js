@@ -189,6 +189,7 @@ function normalizeProjects(value) {
   return array(value)
     .slice(0, 50)
     .map((row) => ({
+      componentId: uuid(row?.componentId || row?.component_id) || null,
       title: text(row?.title || row?.name, 180),
       description: longText(row?.description, 1500),
       quantity: number(row?.quantity, { min: 0, max: 100000, fallback: 1, integer: true }),

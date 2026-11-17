@@ -126,6 +126,35 @@ function ItemList({ items, component = false, empty, showCost = true }) {
   );
 }
 
+function ProjectResourcePhoto({ photoUrl, title }) {
+  const [failed, setFailed] = useState(false);
+  const photo = safeUrl(photoUrl);
+  return <div className="event-project-photo">
+    {photo && !failed ? <img src={photo} alt={title} loading="lazy" decoding="async" onError={() => setFailed(true)} /> : <EventIcon name="box" />}
+  </div>;
+}
+
+function ProjectResourceCards({ projects }) {
+  if (!projects.length) return <p className="next-events-empty-copy">No projects were added.</p>;
+  return <div className="event-project-grid">
+    {projects.map((project, index) => {
+      const resource = project.resource;
+      const title = text(project.title) || "Untitled project";
+      const description = text(project.description) || text(resource?.description);
+      const notes = text(project.notes);
+      return <article key={`${project.componentId || title}-${index}`} className="event-project-card">
+        <div className="event-project-top"><span className="event-project-category"><EventIcon name="layers" />Project Resource</span>{resource && <span className={`event-project-active${resource.isActive ? "" : " is-inactive"}`}>{resource.isActive ? "Active" : "Inactive"}</span>}</div>
+        <ProjectResourcePhoto key={resource?.photoUrl || "placeholder"} photoUrl={resource?.photoUrl} title={title} />
+        <div className="event-project-copy"><h4>{title}</h4>{description && <p>{description}</p>}{notes && notes !== description && <p>{notes}</p>}</div>
+        <div className="event-project-meta">
+          <div><small>Source type</small><strong>{resource ? resource.ownershipType === "external_rental" ? "External Rental" : "Company Owned" : "—"}</strong></div>
+          <div><small>Required qty.</small><strong>{number(project.quantity)}</strong></div>
+        </div>
+      </article>;
+    })}
+  </div>;
+}
+
 const DETAIL_TABS = [
   { id: "overview", label: "Overview", icon: "clipboard" },
   { id: "projects", label: "Projects", icon: "box" },
@@ -169,7 +198,9 @@ function EventDetailsContent({ event, busy, onClose, onDownload, onWorkflow, onR
     if (!calendarMode) return;
     const viewport = window.visualViewport;
     function resize() {
-      setViewportStyle({ "--event-sheet-top": `${viewport?.offsetTop || 0}px`, "--event-sheet-height": `${viewport?.height || window.innerHeight}px` });
+      const top = Math.max(0, viewport?.offsetTop || 0);
+      const available = Math.min(viewport?.height || window.innerHeight, Math.max(1, window.innerHeight - top));
+      setViewportStyle({ "--event-sheet-top": `${top}px`, "--event-sheet-height": `${Math.floor(available)}px` });
     }
     resize();
     window.addEventListener("resize", resize);
@@ -249,7 +280,7 @@ function EventDetailsContent({ event, busy, onClose, onDownload, onWorkflow, onR
             {venuePanel()}
             {full && <><DetailPanel title="Target Audience" icon="user"><p className="event-detail-note">{text(event.audience) || "—"}</p></DetailPanel><DetailPanel title="Operations Notes" icon="file-text"><p className="event-detail-note">{text(event.operationsNotes) || "—"}</p></DetailPanel></>}
           </div>}
-          {full && tab === "projects" && <div className="event-detail-layout"><DetailPanel title={`Projects (${projects.length})`} icon="box" wide><ItemList items={projects} showCost={!calendarMode} empty="No projects were added." /></DetailPanel></div>}
+          {full && tab === "projects" && <div className="event-detail-layout"><DetailPanel title={`Projects (${projects.length})`} icon="box" wide>{calendarMode ? <ProjectResourceCards projects={projects} /> : <ItemList items={projects} showCost={!calendarMode} empty="No projects were added." />}</DetailPanel></div>}
           {full && tab === "logistics" && <div className="event-detail-layout">
             {venuePanel()}
             <DetailPanel title="Venue Requirements" icon="tool"><ItemList items={requirements} component showCost={!calendarMode} empty="No venue requirements were added." /></DetailPanel>

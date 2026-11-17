@@ -293,7 +293,7 @@ export default function EventsCalendarClient({ account, initialEvents = [], canM
     setOpenMenuId(null);
     setActiveEvent(event);
     try {
-      const body = await requestJson(`/next/api/events/${encodeURIComponent(event.id)}?${canOpenRequests ? "" : "view=calendar&"}_ts=${Date.now()}`);
+      const body = await requestJson(`/next/api/events/${encodeURIComponent(event.id)}?${canOpenRequests ? "projectCards=1&" : "view=calendar&"}_ts=${Date.now()}`);
       if (body?.event && detailRequest.current === requestId) setActiveEvent(body.event);
     } catch { /* Keep the permitted summary visible. */ }
   }
