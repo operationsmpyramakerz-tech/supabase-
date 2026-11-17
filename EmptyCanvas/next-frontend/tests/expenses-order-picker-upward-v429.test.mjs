@@ -37,7 +37,8 @@ test("manual reason action has no arrow and uses softer dark background", () => 
   const page = code("../app/expenses/page.jsx");
   assert.match(jsx, /expenseOrderMenuPosition\(rect, viewport, \{ preferBelow: true \}\)/);
   assert.match(jsx, /window.visualViewport\?\.addEventListener\("resize", position\)/);
-  assert.doesNotMatch(jsx, /<ClassicExpenseIcon name="arrow-right" size=\{16\}\/>/);
+  const picker = jsx.slice(jsx.indexOf("function ExpenseOrderMultiSelect("), jsx.indexOf("function ClassicFileField("));
+  assert.doesNotMatch(picker, /<ClassicExpenseIcon name="arrow-right" size=\{16\}\/>/);
   assert.match(css, /\.expense-orders-menu__manual\{[^}]+background:#28354a;color:#fff/);
-  assert.match(page, /expenses-classic-inline\.css\?v=v443-unified-expense-forms/);
+  assert.match(page, /expenses-classic-inline\.css\?v=v444-expense-ticket-cards/);
 });

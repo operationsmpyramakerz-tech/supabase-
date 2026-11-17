@@ -3676,11 +3676,6 @@ body.expenses-page .expense-upload-preview__image {
 body.expenses-page .expense-upload-preview__details { display: flex; flex: 1; flex-direction: column; min-width: 0; gap: 5px; }
 body.expenses-page .expense-upload-preview__details strong { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: #111827; font-size: 13px; font-weight: 800; }
 body.expenses-page .expense-upload-preview__details span { color: #64748b; font-size: 11px; font-weight: 600; }
-body.expenses-page .expense-upload-preview__remove {
-  width: 34px; height: 34px; flex: 0 0 34px; display: grid; place-items: center;
-  background: #fff1f2; border: 1px solid #ffe4e6; border-radius: 11px; color: #e11d48; cursor: pointer;
-}
-body.expenses-page .expense-upload-preview__remove:hover { background: #ffe4e6; }
 body.expenses-page .expense-upload-field .help { margin-top: 8px; font-size: 11px; line-height: 1.4; }
 /* Numeric input keeps its real numeric value; the currency label is only visual. */
 body.expenses-page .expense-currency-field { position: relative; width: 100%; }
@@ -3690,33 +3685,6 @@ body.expenses-page .expense-currency-field__unit {
   display: flex; align-items: center; color: #9aa5b5; font-size: 13px; font-weight: 800;
   letter-spacing: .035em; pointer-events: none;
 }
-/* Route / cost pending drafts: no reason, order number or redundant badges. */
-body.expenses-page .expense-draft-card--route {
-  display: grid; grid-template-columns: minmax(0, 1fr) 33px; gap: 9px 12px;
-  position: relative; width: 100%; padding: 13px;
-  border: 1px solid #e4e8ef; border-radius: 16px; background: #fff;
-  box-shadow: 0 8px 22px rgba(15, 23, 42, .045);
-}
-body.expenses-page .expense-draft-card--route .expense-draft-card__route {
-  display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center;
-  gap: 9px; grid-column: 1; min-width: 0;
-}
-body.expenses-page .expense-draft-card__stop { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-body.expenses-page .expense-draft-card__stop small { font-size: 10px; font-weight: 750; color: #94a3b8; text-transform: uppercase; letter-spacing: .05em; }
-body.expenses-page .expense-draft-card__stop strong { font-size: 13px; font-weight: 850; color: #111827; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-body.expenses-page .expense-draft-card__route-arrow { display: grid; place-items: center; color: #f97316; padding-top: 11px; }
-body.expenses-page .expense-draft-card__bottom {
-  grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center;
-  border-top: 1px solid #f1f3f6; padding-top: 11px; margin-top: 1px;
-}
-body.expenses-page .expense-draft-card__cost-label { color: #64748b; font-size: 12px; font-weight: 700; }
-body.expenses-page .expense-draft-card__cost { color: #0f172a; font-size: 18px; font-weight: 900; font-variant-numeric: tabular-nums; }
-body.expenses-page .expense-draft-card__cost small { color: #94a3b8; font-size: 11px; font-weight: 800; }
-body.expenses-page .expense-draft-card--route .expense-draft-card__remove {
-  grid-row: 1; grid-column: 2; align-self: start; width: 33px; height: 33px;
-  border: 1px solid #fee2e2; background: #fff1f2; color: #dc2626; margin: 0;
-}
-body.expenses-page .expense-draft-card--route .expense-draft-card__remove:hover { background: #fee2e2; }
 /* Buttons have a consistent black/red system palette, not the old blue primary. */
 body.expenses-page .ex-modal-box--flush-bottom .ex-modal-actions .ex-btn { min-height: 45px; border-radius: 13px; font-size: 13px; font-weight: 800; }
 body.expenses-page .ex-modal-box--flush-bottom .ex-modal-actions .ex-dark { background: #101114; color: #fff; }
@@ -3738,13 +3706,78 @@ body.expenses-page .ex-modal-box--flush-bottom .ex-modal-actions .ex-danger { ba
 @media (max-width: 380px) {
   body.expenses-page .expense-upload-button { gap: 9px; padding: 9px; }
   body.expenses-page .expense-upload-preview__image { width: 49px; height: 49px; flex-basis: 49px; }
-  body.expenses-page .expense-draft-card--route { padding: 10px; }
 }
 html[data-theme="dark"] body.expenses-page .expense-upload-button,
-html[data-theme="dark"] body.expenses-page .expense-upload-preview,
-html[data-theme="dark"] body.expenses-page .expense-draft-card--route { background: #1b2636; border-color: #39485c; }
+html[data-theme="dark"] body.expenses-page .expense-upload-preview { background: #1b2636; border-color: #39485c; }
 html[data-theme="dark"] body.expenses-page .expense-upload-button__icon { background: #273447; border-color: #39485c; color: #f8fafc; }
 html[data-theme="dark"] body.expenses-page .expense-upload-button__copy strong,
-html[data-theme="dark"] body.expenses-page .expense-upload-preview__details strong,
-html[data-theme="dark"] body.expenses-page .expense-draft-card__stop strong,
-html[data-theme="dark"] body.expenses-page .expense-draft-card__cost { color: #f8fafc; }
+html[data-theme="dark"] body.expenses-page .expense-upload-preview__details strong { color: #f8fafc; }
+
+
+/* V444 — Added expenses use the exact All Expenses route frame; compact remove actions. */
+body.expenses-page .expense-upload-preview > button.expense-upload-preview__remove,
+body.expenses-page .expense-draft-card--ticket > button.expense-draft-card__remove {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  flex: 0 0 30px;
+  width: 30px;
+  min-width: 30px;
+  max-width: 30px;
+  height: 30px;
+  min-height: 30px;
+  max-height: 30px;
+  padding: 0;
+  margin: 0;
+  border: 1px solid #fee2e2;
+  border-radius: 9px;
+  background: #fff1f2;
+  color: #dc2626;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: none;
+}
+body.expenses-page .expense-upload-preview > button.expense-upload-preview__remove > svg,
+body.expenses-page .expense-draft-card--ticket > button.expense-draft-card__remove > svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  color: inherit;
+  stroke: currentColor;
+  stroke-width: 2.3;
+  opacity: 1;
+}
+body.expenses-page .expense-upload-preview > button.expense-upload-preview__remove:hover,
+body.expenses-page .expense-draft-card--ticket > button.expense-draft-card__remove:hover { background: #fee2e2; }
+body.expenses-page .expense-upload-preview > button.expense-upload-preview__remove:focus-visible,
+body.expenses-page .expense-draft-card--ticket > button.expense-draft-card__remove:focus-visible { outline: 2px solid #dc2626; outline-offset: 2px; }
+body.expenses-page .expense-draft-card--ticket > button.expense-draft-card__remove:disabled { opacity: .5; cursor: not-allowed; }
+body.expenses-page .expense-upload-preview { align-items: center; }
+body.expenses-page .expense-draft-card--ticket {
+  grid-template-columns: auto minmax(0, 1fr) 30px;
+  direction: ltr;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+body.expenses-page .expense-draft-card--ticket .expense-ticket__route-body { min-width: 0; }
+body.expenses-page .expense-draft-card--ticket .expense-ticket__route-top { flex-wrap: wrap; gap: 3px 8px; }
+body.expenses-page .expense-draft-card--ticket .expense-ticket__route-title { flex: 1 1 auto; }
+body.expenses-page .expense-draft-card--ticket .expense-ticket__route-amount { margin-left: auto; }
+body.expenses-page .expense-draft-card--ticket .expense-ticket__shot-btn {
+  box-sizing: border-box; padding: 0; margin: 0; display: inline-flex; flex-shrink: 0;
+}
+body.expenses-page .expense-draft-card--ticket .expense-ticket__shot-btn:disabled { cursor: default; }
+@media (max-width: 380px) {
+  body.expenses-page .expense-draft-card--ticket { gap: 7px; padding: 10px 8px; }
+  body.expenses-page .expense-draft-card--ticket .expense-ticket__shot-btn { width: 36px; height: 36px; }
+}
+html[data-theme="dark"] body.expenses-page .expense-draft-card--ticket { background: #1b2636; border-color: #39485c; }
+html[data-theme="dark"] body.expenses-page .expense-draft-card--ticket .expense-ticket__route-title { color: #f8fafc; }
+html[data-theme="dark"] body.expenses-page .expense-draft-card--ticket .expense-ticket__route-endpoint { color: #cbd5e1; }
+html[data-theme="dark"] body.expenses-page .expense-draft-card--ticket .expense-ticket__route-amount.is-negative { color: #fca5a5; }
+html[data-theme="dark"] body.expenses-page .expense-upload-preview > button.expense-upload-preview__remove,
+html[data-theme="dark"] body.expenses-page .expense-draft-card--ticket > button.expense-draft-card__remove { background: #3b202b; border-color: #663342; color: #fda4af; }

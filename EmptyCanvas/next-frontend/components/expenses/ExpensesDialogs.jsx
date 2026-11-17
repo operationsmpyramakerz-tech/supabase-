@@ -629,7 +629,7 @@ function ClassicFileField({ files, onChange, required = false, hint = "Upload re
           {previews.map(({ file, url }, index) => <div className="expense-upload-preview" key={`${file.name}-${file.size}-${file.lastModified}-${index}`}>
             <img className="expense-upload-preview__image" src={url} alt={`Preview of ${file.name}`}/>
             <div className="expense-upload-preview__details"><strong title={file.name}>{file.name}</strong><span>{(file.size / 1024 / 1024).toFixed(2)} MB · Image {index + 1}</span></div>
-            <button type="button" className="expense-upload-preview__remove" aria-label={`Remove ${file.name}`} onClick={() => onChange(files.filter((_, i) => i !== index))}><ClassicExpenseIcon name="x" size={17}/></button>
+            <button type="button" className="expense-upload-preview__remove" aria-label={`Remove ${file.name}`} onClick={() => onChange(files.filter((_, i) => i !== index))}><ClassicExpenseIcon name="x" size={16}/></button>
           </div>)}
         </div> : null}
       </div>
@@ -778,6 +778,8 @@ function CashOutModal({ fundsTypes, orderOptions, destinationPeople = [], ownCar
   const [destinationUserId, setDestinationUserId] = useState("");
   const [manualReason, setManualReason] = useState("");
   const [drafts, setDrafts] = useState([]);
+  const [draftScreenshotId, setDraftScreenshotId] = useState("");
+  const draftScreenshot = drafts.find((draft) => draft.id === draftScreenshotId);
   const [form, setForm] = useState({ fundsType: "", from: "", to: "", amount: "", kilometer: "" });
   const [files, setFiles] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -948,7 +950,7 @@ function CashOutModal({ fundsTypes, orderOptions, destinationPeople = [], ownCar
     </>;
   }
 
-  return (
+  return (<>
     <ClassicModal title="Cash Out" onClose={onClose} compact bottomSheet>
 
       <ClassicFieldLabel icon="file-text">Orders <span className="req-star">*</span></ClassicFieldLabel>
@@ -973,15 +975,32 @@ function CashOutModal({ fundsTypes, orderOptions, destinationPeople = [], ownCar
 
       {drafts.length ? <div className="expense-drafts">
         <div className="expense-drafts__header"><span className="expense-drafts__title">Added expenses</span><span className="expense-drafts__count">{drafts.length}</span></div>
-        <div className="expense-drafts__list">{drafts.map((draft) => <div className="expense-draft-card expense-draft-card--route" key={draft.id}>
-          <div className="expense-draft-card__route">
-            <div className="expense-draft-card__stop"><small>From</small><strong dir="auto">{text(draft.from) || "—"}</strong></div>
-            <span className="expense-draft-card__route-arrow" aria-hidden="true"><ClassicExpenseIcon name="arrow-right" size={18}/></span>
-            <div className="expense-draft-card__stop"><small>To</small><strong dir="auto">{text(draft.to) || "—"}</strong></div>
-          </div>
-          <div className="expense-draft-card__bottom"><span className="expense-draft-card__cost-label">Cost</span><strong className="expense-draft-card__cost">{new Intl.NumberFormat("en-EG", { maximumFractionDigits: 2 }).format(typeKey(draft.fundsType) === "owncar" ? ownCarCostForKilometers(draft.kilometer, ownCarRate) : number(draft.amount))}<small> EGP</small></strong></div>
-          <button type="button" className="expense-draft-card__remove" onClick={() => setDrafts((current) => current.filter((item) => item.id !== draft.id))} aria-label="Remove expense"><ClassicExpenseIcon name="x" size={17}/></button>
-        </div>)}</div>
+        <div className="expense-drafts__list">{drafts.map((draft) => {
+          const shots = screenshotsFor(draft);
+          const cost = typeKey(draft.fundsType) === "owncar" ? ownCarCostForKilometers(draft.kilometer, ownCarRate) : number(draft.amount);
+          const typeLabel = text(draft.fundsType) || "Cash Out";
+          const from = text(draft.from) || "—";
+          const to = text(draft.to) || "—";
+          return <div className="expense-ticket__route-frame expense-draft-card--ticket" key={draft.id}>
+            <div className="expense-ticket__route-shot">
+              <button type="button" className={`expense-ticket__shot-btn${shots.length ? " expense-ticket__shot-btn--has-shots" : ""}`} disabled={busy || !shots.length} onClick={() => setDraftScreenshotId(draft.id)} aria-label={shots.length ? `View ${shots.length} screenshots` : "No screenshots uploaded"}>
+                <span className="expense-ticket__shot-btn-icon"><ClassicExpenseIcon name="image" size={18}/></span>
+              </button>
+            </div>
+            <div className="expense-ticket__route-body">
+              <div className="expense-ticket__route-top">
+                <div className="expense-ticket__route-title" dir="auto" title={typeLabel}>{typeLabel}</div>
+                <div className="expense-ticket__route-amount is-negative" dir="ltr">{money(-cost)}</div>
+              </div>
+              <div className="expense-ticket__route-sub">
+                <span className="expense-ticket__route-endpoint expense-ticket__route-endpoint--from" dir="auto" title={from}>{from}</span>
+                <span className="expense-ticket__route-arrow" aria-hidden="true"><ClassicExpenseIcon name="arrow-right" size={16}/></span>
+                <span className="expense-ticket__route-endpoint expense-ticket__route-endpoint--to" dir="auto" title={to}>{to}</span>
+              </div>
+            </div>
+            <button type="button" className="expense-draft-card__remove" disabled={busy} onClick={() => setDrafts((current) => current.filter((item) => item.id !== draft.id))} aria-label="Remove expense"><ClassicExpenseIcon name="x" size={16}/></button>
+          </div>;
+        })}</div>
       </div> : null}
 
       <div className="ex-modal-actions">
@@ -989,7 +1008,8 @@ function CashOutModal({ fundsTypes, orderOptions, destinationPeople = [], ownCar
         <button type="button" className="ex-btn ex-danger" onClick={onClose} disabled={busy}>Cancel</button>
       </div>
     </ClassicModal>
-  );
+    {draftScreenshot ? <ScreenshotModal transaction={draftScreenshot} onClose={() => setDraftScreenshotId("")} /> : null}
+  </>);
 }
 
 function SettleModal({ onClose, onSaved, notify }) {

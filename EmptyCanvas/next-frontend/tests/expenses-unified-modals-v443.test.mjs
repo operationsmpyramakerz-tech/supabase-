@@ -47,11 +47,13 @@ test('Screenshots appear as per-image preview cards and can be deleted before sa
   assert.match(dialogs, /async function filesPayload\(files\)/);
 });
 
-test('Added expense cards show route, amount and remove only, never order numbers', () => {
+test('Added expense cards mirror All Expenses with route, amount and remove, never order numbers', () => {
   const draftView = cashOut.slice(cashOut.indexOf('expense-drafts__list'), cashOut.indexOf('  </ClassicModal>', cashOut.indexOf('expense-drafts__list')));
-  assert.match(draftView, /expense-draft-card__route/);
-  assert.match(draftView, /expense-draft-card__stop/);
-  assert.match(draftView, /expense-draft-card__cost/);
+  assert.match(draftView, /expense-ticket__route-frame expense-draft-card--ticket/);
+  assert.match(draftView, /expense-ticket__route-endpoint--from/);
+  assert.match(draftView, /expense-ticket__route-endpoint--to/);
+  assert.match(draftView, /expense-ticket__route-amount is-negative/);
+  assert.match(draftView, /money\(-cost\)/);
   assert.match(draftView, /expense-draft-card__remove/);
   assert.doesNotMatch(draftView, /draft\.reason|draft\.selectedOrderLabel|draft\.fundsType\}<\/div>/);
   assert.match(cashOut, /selectedOrderKeys: isManual \? \[\] : selectedOrders\.map/);
@@ -74,7 +76,7 @@ test('Cash In and Settle My Account use the unified bottom sheet with distinctiv
 });
 
 test('Only frontend assets change; CSS is updated and cache-busted', () => {
-  assert.match(page, /expenses-classic-inline\.css\?v=v443-unified-expense-forms/);
+  assert.match(page, /expenses-classic-inline\.css\?v=v444-expense-ticket-cards/);
   assert.match(css, /V443 — Unified expenses bottom sheets/);
   assert.match(css, /\.ex-modal-expense-icon--cash-in\s*\{ background: #16a34a/);
   assert.match(css, /\.ex-modal-expense-icon--settlement\s*\{ background: #111827/);

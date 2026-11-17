@@ -44,5 +44,5 @@ test('multi-select and downward opening remain intact and stylesheet cache is up
   assert.match(dialogs, /const filtered = options.filter/);
   assert.match(dialogs, /onChange\(existing.includes\(id\)/);
   assert.match(dialogs, /expenseOrderMenuPosition\(rect, viewport, \{ preferBelow: true \}\)/);
-  assert.match(page, /expenses-classic-inline\.css\?v=v443-unified-expense-forms/);
+  assert.match(page, /expenses-classic-inline\.css\?v=v444-expense-ticket-cards/);
 });
