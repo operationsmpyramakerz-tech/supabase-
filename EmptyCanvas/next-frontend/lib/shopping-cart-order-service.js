@@ -15,7 +15,7 @@ import {
 import { getProductsList } from "./products-service";
 import { isCustomCartItem, validateProductAddition } from "./product-addition-request-payload.mjs";
 import { requireOrderRequestMetadata } from "./order-request-metadata.mjs";
-import { ensureProductAdditionRequestsTable, createProductAdditionRequests, cancelProductAdditionRequestsForOrderRows } from "./product-addition-requests-service";
+import { ensureProductAdditionRequestsTable, createProductAdditionRequests, cancelProductAdditionRequestsForOrderRows, findProductAdditionRequestsForOrderRows } from "./product-addition-requests-service";
 import { listTeamMembersLite } from "./team-members-service";
 import { loadRawOrderRowsByIds } from "./order-details-data";
 import { orderActionAllowed } from "./current-shopping-action-permissions.mjs";
@@ -185,6 +185,27 @@ function resolveRowProduct(row = {}, maps = {}) {
   return !nameKey && links.length === 1 ? links[0] : null;
 }
 
+// Pending catalog requests deliberately have no product_id. Do not match
+// them to catalog entries by name or shared supplier URL.
+async function pendingRequestsForRows(rows) {
+  const ids = rows.filter(row => !text(valueFor(row, ["product_id", "productId", "product_page_id", "productPageId"]))).map(row => text(row.id));
+  return ids.length ? await findProductAdditionRequestsForOrderRows(ids) : new Map();
+}
+
+function pendingCartItem(row, request) {
+  if (request.status !== "pending") throw directError("Catalog review is in progress or the product has not been linked yet. Reopen the order after review.", 409);
+  const quantity = Math.abs(rawRequestedQty(row));
+  const id = `new:${text(request.id)}`;
+  let customProduct;
+  try {
+    customProduct = validateProductAddition({
+      name: request.name, idCode: request.id_code, unitPrice: request.unit_price,
+      unit: request.unit, tag: request.tag, url: request.url, imageUrl: request.image_url,
+    }, quantity);
+  } catch (error) { throw directError(error.message, 409); }
+  return { id, customProduct, quantity };
+}
+
 // Every original order row must be retained or explicitly removed; a missing
 // row from an incomplete/stale browser transfer is NEVER an implicit deletion.
 function validateEditRowSelection(ids, products, removedOrderRowIds) {
@@ -328,12 +349,15 @@ export async function initializeCurrentOrderEditDirect({
     getProductsList({ fresh: true }),
   ]);
   const maps = productMaps(products);
+  const pending = await pendingRequestsForRows(rows);
   const draft = [];
   let orderType = "";
   let orderNumber = null;
 
   for (const row of rows) {
-    const product = resolveRowProduct(row, maps);
+    const pendingRequest = pending.get(text(row.id));
+    const pendingItem = pendingRequest ? pendingCartItem(row, pendingRequest) : null;
+    const product = pendingItem || resolveRowProduct(row, maps);
     if (!product?.id) continue;
     if (!orderType) orderType = rawOrderType(row);
     if (!Number.isFinite(orderNumber)) orderNumber = rawOrderNumber(row);
@@ -341,6 +365,7 @@ export async function initializeCurrentOrderEditDirect({
       id: text(product.id),
       orderRowId: text(row.id),
       quantity: Math.abs(rawRequestedQty(row)) || 1,
+      ...(pendingItem ? { customProduct: pendingItem.customProduct } : {}),
       reason: text(valueFor(row, ["reason", "Reason"])),
       issueDescription: text(valueFor(row, ["issue_description", "Issue Description"])),
       schoolId: "",
@@ -492,7 +517,9 @@ async function updateExistingOrderDirect({ account = {}, products = [], orderTyp
 
   const rows = await verifyOwnedRows(ids, account);
   validateEditRowSelection(ids, Array.isArray(products) ? products : [], removedOrderRowIds);
-  const finalType = canonicalOrderType(orderType || signed?.orderType || rawOrderType(rows[0]));
+  const originalType = canonicalOrderType(signed?.orderType || rawOrderType(rows[0]));
+  const finalType = canonicalOrderType(orderType || originalType);
+  if (orderTypeKey(finalType) !== orderTypeKey(originalType)) throw directError("The order type cannot be changed in edit mode.", 409);
   let requestMetadata = { priorityLevel: null, requestedDeliveryDate: null };
   if (orderTypeKey(finalType) !== "requestmaintenance") {
     try { requestMetadata = requireOrderRequestMetadata({ priorityLevel, requestedDeliveryDate }); }
@@ -501,9 +528,26 @@ async function updateExistingOrderDirect({ account = {}, products = [], orderTyp
   const cleanProducts = cleanSubmittedProducts(products, finalType);
   const catalog = await getProductsList({ fresh: true });
   const maps = productMaps(catalog);
-  if (cleanProducts.some((item) => item.customProduct)) throw directError("Pending components cannot be added while editing an existing order.", 409);
-  const unknown = cleanProducts.find((item) => !maps.byId.has(item.id));
+  const pending = await pendingRequestsForRows(rows);
+  const originals = new Map(rows.map(row => [text(row.id), row]));
+  // Already submitted requests belong to the catalog review workflow. Keep
+  // them intact, including their quantity, until a reviewer links the product.
+  for (const [rowId, request] of pending) {
+    const item = cleanProducts.find(entry => entry.orderRowId === rowId);
+    const original = pendingCartItem(originals.get(rowId), request);
+    if (!item || item.id !== original.id || !item.customProduct || item.quantity !== original.quantity ||
+        Object.keys(original.customProduct).some(key => item.customProduct[key] !== original.customProduct[key])) {
+      throw directError("A pending catalog component cannot be changed or removed here. Wait for catalog review and reopen the order.", 409);
+    }
+  }
+  if (cleanProducts.some(item => item.customProduct && item.orderRowId && !pending.has(item.orderRowId))) {
+    throw directError("A component has changed during catalog review. Reopen the order before saving.", 409);
+  }
+  const unknown = cleanProducts.find((item) => !item.customProduct && !maps.byId.has(item.id));
   if (unknown) throw directError("One or more selected products no longer exist.", 400);
+  const additions = cleanProducts.filter(item => item.customProduct && !item.orderRowId);
+  if (new Set(additions.map(item => item.id)).size !== additions.length) throw directError("Duplicate new component request.", 400);
+  if (additions.length) await ensureProductAdditionRequestsTable();
 
   const orderNumber = Number.isFinite(Number(signed?.orderNumber))
     ? Number(signed.orderNumber)
@@ -517,9 +561,66 @@ async function updateExistingOrderDirect({ account = {}, products = [], orderTyp
   let mutationStarted = false;
 
   try {
+    // Insert new custom rows and link their requests BEFORE touching existing
+    // rows. A failed request insert rolls back these new rows, not the order.
+    if (additions.length) {
+      const newRows = [];
+      try {
+        mutationStarted = true;
+        for (const item of additions) {
+          const custom = item.customProduct;
+          const row = await insert(orderTable(), {
+            reason: item.reason || null,
+            priority_level: requestMetadata.priorityLevel,
+            requested_delivery_date: requestMetadata.requestedDeliveryDate,
+            order_number: orderNumber, order_type: finalType,
+            notion_created_time: createdTime,
+            product_id: null, product_name: custom.name, product_url: custom.url,
+            unit_price: custom.unitPrice, product_tag: custom.tag, kit_tag: null,
+            quantity_requested: item.quantity, quantity_progress: item.quantity,
+            quantity_received_by_operations: 0, quantity_remaining: item.quantity,
+            status: "Under Supervision", sv_approval: null,
+            team_member_id: currentTeamMemberId, team_member_name: currentTeamMemberName,
+            issue_description: null, supervisor: null, person_received_by_operations: null,
+          });
+          if (!text(row?.id)) throw directError("Could not create the new component order row.", 500);
+          newRows.push(row);
+        }
+        await createProductAdditionRequests(additions, newRows, account, orderNumber);
+      } catch (error) {
+        const createdIds = newRows.map(row => text(row.id));
+        if (createdIds.length) {
+          // Best effort compensation, matching normal cart submission.
+          try {
+            await cancelProductAdditionRequestsForOrderRows(createdIds);
+            await deleteByIds(orderTable(), createdIds);
+          } catch (rollbackError) { console.error("Failed to roll back new edit components:", rollbackError); }
+        }
+        throw error;
+      }
+      updated.push(...newRows.map(row => ({ row, productId: "" })));
+    }
     for (const item of cleanProducts) {
+      if (item.customProduct) {
+        if (item.orderRowId) {
+          // Update only shared order metadata, never overwrite catalog data or
+          // status while a reviewer may be working on the pending request.
+          mutationStarted = true;
+          const row = await updateById(orderTable(), item.orderRowId, {
+            reason: item.reason || null,
+            priority_level: requestMetadata.priorityLevel,
+            requested_delivery_date: requestMetadata.requestedDeliveryDate,
+          });
+          updated.push({ row, productId: "" });
+        }
+        continue;
+      }
       const product = maps.byId.get(item.id) || {};
       const match = item.orderRowId ? { rowId: item.orderRowId } : null;
+      const original = match ? originals.get(match.rowId) : null;
+      // Adding a component must not reset the received/progress quantities of
+      // unchanged original components (including legacy rows resolved by name).
+      const unchanged = original && text(resolveRowProduct(original, maps)?.id) === item.id && rawRequestedQty(original) === item.quantity;
       const patch = {
         reason: item.reason || null,
         ...(orderTypeKey(finalType) !== "requestmaintenance" ? {
@@ -533,12 +634,14 @@ async function updateExistingOrderDirect({ account = {}, products = [], orderTyp
         product_url: text(product?.url) || null,
         unit_price: Number.isFinite(Number(product?.unitPrice)) ? Number(product.unitPrice) : null,
         quantity_requested: item.quantity,
-        quantity_progress: item.quantity,
-        quantity_received_by_operations: 0,
-        quantity_remaining: item.quantity,
+        ...(unchanged ? {} : {
+          quantity_progress: item.quantity,
+          quantity_received_by_operations: 0,
+          quantity_remaining: item.quantity,
+        }),
         issue_description: item.issueDescription || null,
-        status: currentStatus,
-        sv_approval: currentApproval,
+        status: match ? (text(valueFor(originals.get(match.rowId), ["status", "Status"])) || currentStatus) : currentStatus,
+        sv_approval: match ? (text(valueFor(originals.get(match.rowId), ["sv_approval", "S.V Approval", "SV Approval"])) || null) : currentApproval,
         team_member_id: currentTeamMemberId,
         team_member_name: currentTeamMemberName,
       };

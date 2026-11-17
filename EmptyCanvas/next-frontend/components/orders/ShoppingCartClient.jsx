@@ -459,6 +459,7 @@ function CartItem({ item, product, type, index, onEdit, onDelete, onQuantityChan
   const withdraw = isWithdraw(type);
   const qty = quantity(item.quantity, 1);
   const total = product.unitPrice * qty * (withdraw ? -1 : 1);
+  const pendingReview = Boolean(item.customProduct && item.orderRowId);
   if (maintenance) {
     return (
       <article className="classic-cart-row classic-cart-row--maintenance-card">
@@ -480,24 +481,24 @@ function CartItem({ item, product, type, index, onEdit, onDelete, onQuantityChan
   return (
     <article className="classic-cart-row classic-cart-row--request-card">
       <div className="classic-cart-card-topline">
-        <div className="classic-cart-card-main" role="button" tabIndex={0} onClick={() => onEdit(item)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onEdit(item); } }}>
+        <div className="classic-cart-card-main" role={pendingReview ? undefined : "button"} tabIndex={pendingReview ? undefined : 0} onClick={pendingReview ? undefined : () => onEdit(item)} onKeyDown={pendingReview ? undefined : (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onEdit(item); } }}>
           <CartThumb product={product} index={index}/>
           <span className="classic-cart-prod-meta">
             <strong>{product.name}</strong>
             {product.displayId ? <small className="part">Part No: {product.displayId}</small> : null}
-            {item.customProduct ? <small className="classic-cart-new-item-badge">New · Pending Catalog Approval</small> : null}
+            {item.customProduct ? <small className="classic-cart-new-item-badge">{pendingReview ? "Pending Catalog Approval · Read only" : "New · Pending Catalog Approval"}</small> : null}
           </span>
         </div>
         <div className="classic-cart-card-actions classic-cart-card-actions--compact">
           <CartProductResourceLink product={product}/>
-          <button className="classic-cart-action classic-cart-action--delete" type="button" onClick={() => onDelete(item)} aria-label={`Delete ${product.name}`} title="Delete product"><CartSvgIcon name="trash" size={17}/></button>
+          <button className="classic-cart-action classic-cart-action--delete" type="button" onClick={() => onDelete(item)} disabled={pendingReview} aria-label={`Delete ${product.name}`} title={pendingReview ? "Pending catalog review" : "Delete product"}><CartSvgIcon name="trash" size={17}/></button>
         </div>
       </div>
       <div className="classic-cart-card-metrics">
         <div className="classic-cart-card-metric classic-cart-card-metric--qty">
           <span>Qty</span>
           <div className="classic-cart-card-qty-unit-row">
-            <CartQuantityEditor item={item} product={product} withdraw={withdraw} onQuantityChange={onQuantityChange}/>
+            {pendingReview ? <strong className="classic-cart-unit-badge" title="Pending catalog review">{formatQuantity(qty)}</strong> : <CartQuantityEditor item={item} product={product} withdraw={withdraw} onQuantityChange={onQuantityChange}/>}
             <strong className="classic-cart-unit-badge" title={product.unit}>{product.unit}</strong>
           </div>
         </div>
@@ -708,6 +709,8 @@ export default function ShoppingCartClient({
   const allowComponents = maintenance || permissions.components !== false;
   const allowKits = !maintenance && permissions.kits !== false;
   const itemCount = cart.length;
+  const canAddNewComponent = !maintenance && !withdraw && key(selectedType) === "requestproducts" && allowComponents
+    && (!editMode || (permissions.edit_submit === true && !!activeEditTransfer));
 
   useEffect(() => {
     const heading = selectedType
@@ -1017,7 +1020,7 @@ export default function ShoppingCartClient({
   };
 
   const saveAddition = async (customProduct) => {
-    if (editMode || maintenance || withdraw || !allowComponents || key(selectedType) !== "requestproducts") {
+    if (!canAddNewComponent || additionEditor?.item?.orderRowId) {
       throw new Error("New components require Request Products and Components permission.");
     }
     const oldItem = additionEditor?.item;
@@ -1027,7 +1030,7 @@ export default function ShoppingCartClient({
       reason,
     });
     const next = oldItem
-      ? cart.map(item => item.id === id ? nextItem : item)
+      ? cart.map(item => draftItemKey(item) === draftItemKey(oldItem) ? nextItem : item)
       : [...cart, nextItem];
     setCart(next);
     await persistDraft(next);
@@ -1036,6 +1039,7 @@ export default function ShoppingCartClient({
   };
 
   const deleteItem = async (item) => {
+    if (item.customProduct && item.orderRowId) return;
     if (item.orderRowId) removedOrderRows.current.add(item.orderRowId);
     const next = cart.filter((row) => draftItemKey(row) !== draftItemKey(item));
     setCart(next);
@@ -1072,7 +1076,7 @@ export default function ShoppingCartClient({
   };
 
   const clearCart = async () => {
-    if (!cart.length) return;
+    if (!cart.length || cart.some(item => item.customProduct && item.orderRowId)) return;
     const confirmed = await confirmDelete({ title: "Clear cart?", itemType: "cart", message: "All products currently added to this cart will be removed." });
     if (!confirmed) return;
     for (const item of cart) if (item.orderRowId) removedOrderRows.current.add(item.orderRowId);
@@ -1282,7 +1286,7 @@ export default function ShoppingCartClient({
                   </span>
                   <span className="classic-cart-add-new-plus"><CartSvgIcon name="list-check" size={22}/></span>
                 </button>
-                {!editMode && !maintenance && !withdraw && key(selectedType) === "requestproducts" && allowComponents ? (
+                {canAddNewComponent ? (
                   <button className={`classic-cart-add-new classic-cart-add-new--requested ${typeTheme}`} type="button" onClick={() => setAdditionEditor({ item: null })} aria-label="Request a product not in Products">
                     <span className="classic-cart-add-new-copy"><strong>Add New</strong><small>Request a component not in Products</small></span>
                     <span className="classic-cart-add-new-plus"><CartSvgIcon name="plus" size={22}/></span>
@@ -1299,7 +1303,7 @@ export default function ShoppingCartClient({
                   <CartSvgIcon name="list-check" size={15}/>
                   <span>Select Component</span>
                 </button>
-                {!editMode && !withdraw && key(selectedType) === "requestproducts" && allowComponents ? (
+                {canAddNewComponent ? (
                   <button className="classic-cart-update-btn classic-cart-update-btn--new" type="button" onClick={() => setAdditionEditor({ item: null })}>
                     <CartSvgIcon name="plus" size={17}/><span>Add New</span>
                   </button>
@@ -1361,6 +1365,7 @@ export default function ShoppingCartClient({
         tags={tags}
         onClose={() => setAdditionEditor(null)}
         onSave={saveAddition}
+        uploadEndpoint={`/next/api/orders/shopping-cart/request-image${editMode ? "?edit=1" : ""}`}
       /> : null}
 
       {picker ? (

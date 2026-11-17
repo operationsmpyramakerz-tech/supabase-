@@ -6,7 +6,10 @@ import { createProductImageUploadTicket } from "../../../../../lib/products-serv
 
 export const dynamic = "force-dynamic";
 export async function POST(request) {
-  const gate = orderActionGate(await getLegacyAccountGate(["Create New Order"]), "orders.shopping.submit");
+  const editMode = new URL(request.url).searchParams.get("edit") === "1";
+  const sessionGate = await getLegacyAccountGate(["Create New Order"]);
+  let gate = orderActionGate(sessionGate, editMode ? "orders.shopping.edit_submit" : "orders.shopping.submit");
+  if (editMode) gate = orderActionGate(gate, "orders.my.edit");
   if (!gate.ok) return NextResponse.json({ ok: false, error: gate.error }, { status: gate.status || 403 });
   if (!shoppingSourceAllowed(gate.account, "components")) {
     return NextResponse.json({ ok: false, error: "Components permission is required to request a new product." }, { status: 403 });

@@ -32,6 +32,30 @@ export async function ensureProductAdditionRequestsTable() {
   }
 }
 
+// Only look up requests linked to rows already authorized by the order service.
+// Older installations can still edit ordinary legacy rows before v308 is installed.
+export async function findProductAdditionRequestsForOrderRows(orderRowIds = []) {
+  const ids = [...new Set(orderRowIds.map(clean).filter(id => /^\d+$/.test(id)))];
+  const result = new Map();
+  if (!ids.length) return result;
+  try {
+    await ensureProductAdditionRequestsTable();
+  } catch (error) {
+    if (error?.status === 503 && /require the supplied SQL migration/.test(error.message)) return result;
+    throw error;
+  }
+  for (let offset = 0; offset < ids.length; offset += 100) {
+    const batch = ids.slice(offset, offset + 100);
+    const rows = await select(table(), { select: "*", order_row_id: `in.(${batch.join(",")})`, limit: "1000" });
+    for (const row of rows || []) {
+      const id = clean(row.order_row_id);
+      if (result.has(id)) throw fail("Multiple catalog requests were found for one order component. Contact Operations.", 409);
+      result.set(id, row);
+    }
+  }
+  return result;
+}
+
 export async function createProductAdditionRequests(items = [], createdRows = [], account = {}, orderNumber) {
   const rows = items.flatMap((item, index) => {
     if (!item?.customProduct) return [];
