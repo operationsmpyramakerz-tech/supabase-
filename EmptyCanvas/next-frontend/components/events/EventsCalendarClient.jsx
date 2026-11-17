@@ -58,6 +58,87 @@ function StatusPill({ status }) {
   return <span className={`agenda-status agenda-status--${key}`}><EventIcon name={key === "confirmed" ? "check-circle" : key === "cancelled" ? "x-circle" : "clock"} />{eventConfirmationLabel(status)}</span>;
 }
 
+// Keep the agenda controls in a single row; this popover replaces the native
+// mobile select without changing the confirmation status values.
+function AgendaStatusFilter({ activeList, value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [opensAbove, setOpensAbove] = useState(false);
+  const rootRef = useRef(null);
+  const triggerRef = useRef(null);
+  const options = [
+    { key: "all", label: "All statuses", icon: "layers" },
+    { key: "pending", label: "Pending Confirmation", icon: "clock" },
+    { key: "confirmed", label: "Confirmed", icon: "check-circle" },
+    ...(activeList !== "upcoming" ? [{ key: "cancelled", label: "Cancelled", icon: "x-circle" }] : []),
+  ];
+  const selectedLabel = options.find(option => option.key === value)?.label || "All statuses";
+  useEffect(() => { setOpen(false); }, [activeList]);
+  useEffect(() => {
+    if (!open) return undefined;
+    const onPointerDown = event => {
+      if (!rootRef.current?.contains(event.target)) setOpen(false);
+    };
+    const positionMenu = () => {
+      const trigger = triggerRef.current;
+      const menu = rootRef.current?.querySelector(".agenda-status-menu");
+      if (!trigger || !menu) return;
+      const rect = trigger.getBoundingClientRect();
+      const viewport = window.visualViewport;
+      const top = viewport?.offsetTop || 0;
+      const bottom = top + (viewport?.height || window.innerHeight);
+      // Keep the menu clear of the mobile navigation dock when possible.
+      const clearance = window.matchMedia("(max-width: 1020px)").matches ? 92 : 12;
+      const needed = menu.getBoundingClientRect().height + 6;
+      setOpensAbove(bottom - rect.bottom - clearance < needed && rect.top - top > bottom - rect.bottom - clearance);
+    };
+    positionMenu();
+    document.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("resize", positionMenu);
+    window.addEventListener("scroll", positionMenu, true);
+    window.visualViewport?.addEventListener("resize", positionMenu);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("resize", positionMenu);
+      window.removeEventListener("scroll", positionMenu, true);
+      window.visualViewport?.removeEventListener("resize", positionMenu);
+    };
+  }, [open]);
+  function closeAndFocus() {
+    setOpen(false);
+    triggerRef.current?.focus();
+  }
+  function onKeyDown(event) {
+    if (event.key === "Escape" && open) {
+      event.preventDefault();
+      event.stopPropagation();
+      closeAndFocus();
+    }
+    if (open && ["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+      event.preventDefault();
+      const buttons = [...rootRef.current.querySelectorAll(".agenda-status-menu-option")];
+      if (!buttons.length) return;
+      const index = buttons.indexOf(document.activeElement);
+      const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : index < 0 ? (event.key === "ArrowDown" ? 0 : buttons.length - 1) : (index + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length;
+      buttons[next]?.focus();
+    }
+  }
+  return (
+    <div className="agenda-status-filter" ref={rootRef} onKeyDown={onKeyDown} onBlur={event => { if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) setOpen(false); }}>
+      <button ref={triggerRef} type="button" className={`agenda-status-filter-trigger${value !== "all" ? " is-filtered" : ""}${open ? " is-open" : ""}`} aria-label={`Filter confirmation status: ${selectedLabel}`} aria-expanded={open} title={`Filter: ${selectedLabel}`} onClick={() => setOpen(previous => !previous)}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 4h18l-7 8v7l-4 2v-9z"/></svg>
+        {value !== "all" ? <span className="agenda-filter-dot" aria-hidden="true"/> : null}
+      </button>
+      {open ? <div className={`agenda-status-menu${opensAbove ? " opens-above" : ""}`} role="group" aria-label="Confirmation status">
+        {options.map(option => <button key={option.key} type="button" className={`agenda-status-menu-option agenda-status-menu-option--${option.key}${value === option.key ? " is-active" : ""}`} aria-pressed={value === option.key} onClick={() => { onChange(option.key); closeAndFocus(); }}>
+          <span className="agenda-status-menu-icon"><EventIcon name={option.icon}/></span>
+          <span className="agenda-status-menu-label">{option.label}</span>
+          <span className="agenda-status-menu-check" aria-hidden="true">{value === option.key ? <EventIcon name="check"/> : null}</span>
+        </button>)}
+      </div> : null}
+    </div>
+  );
+}
+
 function DetailsModal({ event, canOpenRequests, canEdit = false, canCancel = false, canExport = true, canConfirm, onConfirmEvent, onRequestAction, onClose, busy }) {
   useEffect(() => {
     if (!event) return undefined;
@@ -89,6 +170,21 @@ export default function EventsCalendarClient({ account, initialEvents = [], canM
   const [activeList, setActiveList] = useState("upcoming");
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
+  // The persistent shell's HeaderSearch dispatches an input event both when
+  // typing and when closing/clearing. Use the same bridge as the other pages.
+  useEffect(() => {
+    const input = document.querySelector(".classic-app-shell .main-header .searchbar input");
+    if (!input) return undefined;
+    input.value = "";
+    input.placeholder = "Search events...";
+    const handle = event => setSearch(event.target.value || "");
+    input.addEventListener("input", handle);
+    return () => {
+      input.removeEventListener("input", handle);
+      input.value = "";
+      input.placeholder = "Search";
+    };
+  }, []);
   const [activeEvent, setActiveEvent] = useState(null);
   const detailRequest = useRef(0);
   const deepLinkOpened = useRef(false);
@@ -127,6 +223,7 @@ export default function EventsCalendarClient({ account, initialEvents = [], canM
     setSelectedKey(dateKey(day));
     setWeek(startOfWeek(day));
     setActiveList(day < today ? "past" : "upcoming");
+    if (day >= today && filter === "cancelled") setFilter("all");
   }
   function shiftWeek(direction) {
     const target = new Date(selectedDate);
@@ -226,14 +323,14 @@ export default function EventsCalendarClient({ account, initialEvents = [], canM
               const matches = scheduled.filter(event => eventOnDate(event,day));
               const states = [...new Set(matches.map(event => eventConfirmation(event.status)))];
               const selected = dateKey(day) === selectedKey;
-              return <button type="button" key={dateKey(day)} className={`agenda-day${selected ? " is-selected" : ""}${sameDay(day,today) ? " is-today" : ""}`} aria-pressed={selected} aria-label={`${formatDate(day,{weekday:"long",day:"numeric",month:"long",year:"numeric"})}, ${matches.length} events${states.length ? `, ${states.map(state => state === "pending" ? "Pending Confirmation" : "Confirmed").join(", ")}` : ""}`} onClick={() => selectDate(day)}><small>{day.toLocaleDateString("en-GB",{weekday:"short"})}</small><strong>{day.getDate()}</strong><span className="agenda-dots">{states.map(state => <i key={state} className={`agenda-dot agenda-dot--${state}`}/>)}</span></button>;
+              return <button type="button" key={dateKey(day)} className={`agenda-day${selected ? " is-selected" : ""}${sameDay(day,today) ? " is-today" : ""}`} aria-pressed={selected} aria-current={sameDay(day,today) ? "date" : undefined} aria-label={`${formatDate(day,{weekday:"long",day:"numeric",month:"long",year:"numeric"})}, ${matches.length} events${states.length ? `, ${states.map(state => state === "pending" ? "Pending Confirmation" : "Confirmed").join(", ")}` : ""}`} onClick={() => selectDate(day)}><small>{day.toLocaleDateString("en-GB",{weekday:"short"})}</small><strong>{day.getDate()}</strong><span className="agenda-dots">{states.map(state => <i key={state} className={`agenda-dot agenda-dot--${state}`}/>)}</span></button>;
             })}</div>
             <div className="agenda-legend"><span><i className="agenda-dot agenda-dot--pending"/>Pending Confirmation</span><span><i className="agenda-dot agenda-dot--confirmed"/>Confirmed</span></div>
           </section>
           {canCreate ? <button type="button" className="agenda-add" onClick={openNewEvent}><EventIcon name="plus-circle"/>Add New Event</button> : null}
         </aside>
         <section className="agenda-panel agenda-list" aria-label="Event agenda">
-          <div className="agenda-toolbar"><div className="agenda-tabs" role="tablist" aria-label="Event history">{[{key:"upcoming",label:"Upcoming",icon:"calendar"},{key:"past",label:"Past",icon:"clock"},{key:"archived",label:"Archived",icon:"archive"}].map(tab => <button type="button" role="tab" aria-selected={activeList === tab.key} key={tab.key} className={activeList === tab.key ? "is-active" : ""} onClick={() => {setActiveList(tab.key);setFilter("all");if(tab.key === "upcoming" && selectedDate < today) {setSelectedKey(dateKey(today));setWeek(startOfWeek(today));}}}><EventIcon name={tab.icon}/>{tab.label} ({lists[tab.key].length})</button>)}</div><div className="agenda-tools"><label className="agenda-search"><EventIcon name="search"/><input type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search events…" aria-label="Search events"/></label><label className="agenda-filter"><EventIcon name="filter"/><select value={filter} onChange={e=>setFilter(e.target.value)} aria-label="Filter confirmation status"><option value="all">All statuses</option><option value="pending">Pending Confirmation</option><option value="confirmed">Confirmed</option>{activeList !== "upcoming" ? <option value="cancelled">Cancelled</option> : null}</select></label></div></div>
+          <div className="agenda-toolbar"><div className="agenda-tabs" role="tablist" aria-label="Event history">{[{key:"upcoming",label:"Upcoming",icon:"calendar"},{key:"past",label:"Past",icon:"clock"},{key:"archived",label:"Archived",icon:"archive"}].map(tab => <button type="button" role="tab" aria-selected={activeList === tab.key} key={tab.key} className={activeList === tab.key ? "is-active" : ""} onClick={() => {setActiveList(tab.key);setFilter("all");if(tab.key === "upcoming" && selectedDate < today) {setSelectedKey(dateKey(today));setWeek(startOfWeek(today));}}}><EventIcon name={tab.icon}/>{tab.label} ({lists[tab.key].length})</button>)}</div><AgendaStatusFilter activeList={activeList} value={filter} onChange={setFilter}/></div>
           <div className="agenda-rows" role="tabpanel">{list.length ? list.map(event => <button type="button" key={event.id} className={`agenda-row agenda-row--${eventConfirmation(event.status)}`} onClick={() => openEventDetails(event)}><span className="agenda-row-date"><small>{formatDate(startDate(event),{weekday:"short"})}</small><strong>{formatDate(startDate(event),{day:"2-digit",month:"short"})}</strong></span><span className="agenda-row-main"><strong>{event.eventName || "Untitled Event"}</strong><span><span><EventIcon name="map-pin"/>{event.venueName || event.organizationName || event.governorate || "Venue to be confirmed"}</span>{event.expectedAttendees != null ? <span><EventIcon name="user"/>{event.expectedAttendees} Attendees</span> : null}</span></span><StatusPill status={event.status}/><span className="agenda-row-more"><EventIcon name="more-horizontal"/></span></button>) : <div className="agenda-empty"><EventIcon name="calendar"/><strong>No {activeList} events</strong><span>{search || filter !== "all" ? "Try changing your search or filter." : "Events will appear here when available."}</span></div>}</div>
         </section>
       </div>
