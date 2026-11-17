@@ -3964,3 +3964,65 @@ body.dark-mode .event-detail-v2 .event-detail-map,body[data-theme="dark"] .event
   .agenda-v2 .agenda-month button{width:32px;height:32px;flex-basis:32px;}
   .agenda-v2 .agenda-month-title h3{font-size:.96rem;}
 }
+
+
+/* V448 — Compact, centered weekly navigation and next-week event hint.
+   Scope the reset to the two calendar arrows, not other agenda buttons. */
+.agenda-v2 .agenda-calendar .agenda-month {
+  --agenda-week-nav-size: 34px;
+  display: grid;
+  grid-template-columns: var(--agenda-week-nav-size) minmax(0, 1fr) var(--agenda-week-nav-size);
+  align-items: center;
+}
+.agenda-v2 .agenda-calendar .agenda-month > .agenda-week-nav {
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  width: var(--agenda-week-nav-size);
+  height: var(--agenda-week-nav-size);
+  min-width: var(--agenda-week-nav-size);
+  min-height: var(--agenda-week-nav-size);
+  max-width: var(--agenda-week-nav-size);
+  max-height: var(--agenda-week-nav-size);
+  padding: 0 !important;
+  margin: 0;
+  border-radius: 10px;
+  line-height: 1;
+  border: 1px solid var(--ag-border);
+  background: var(--ag-surface);
+  color: var(--ag-ink);
+  box-shadow: none;
+  transition: background-color .18s ease, border-color .18s ease, color .18s ease;
+}
+.agenda-v2 .agenda-calendar .agenda-week-nav > svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+}
+.agenda-v2 .agenda-calendar .agenda-month > .agenda-week-nav.has-next-week-events {
+  background: #fff2e5;
+  border-color: #ffb979;
+  color: #c64e00;
+}
+.agenda-v2 .agenda-calendar .agenda-week-nav.has-next-week-events > svg {
+  animation: agenda-next-week-nudge-v448 1.6s ease-in-out infinite;
+}
+@keyframes agenda-next-week-nudge-v448 {
+  0%, 55%, 100% { transform: translateX(0); }
+  25% { transform: translateX(3px); }
+}
+body.dark-mode .agenda-v2 .agenda-calendar .agenda-month > .agenda-week-nav.has-next-week-events,
+body[data-theme="dark"] .agenda-v2 .agenda-calendar .agenda-month > .agenda-week-nav.has-next-week-events,
+html[data-theme="dark"] .agenda-v2 .agenda-calendar .agenda-month > .agenda-week-nav.has-next-week-events {
+  background: #392719;
+  border-color: #935025;
+  color: #ffab64;
+}
+@media (max-width: 760px) {
+  .agenda-v2 .agenda-calendar .agenda-month { --agenda-week-nav-size: 32px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .agenda-v2 .agenda-calendar .agenda-week-nav.has-next-week-events > svg { animation: none; }
+}

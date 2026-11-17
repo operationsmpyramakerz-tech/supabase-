@@ -7,6 +7,7 @@ import { AuthorizationModal, ConfirmationModal, EventsDetailsModal } from "./Eve
 import { featureAllowed } from "../../lib/feature-permissions-registry";
 import { eventRequestScopeFor } from "../../lib/event-request-scope.mjs";
 import { eventConfirmation, eventConfirmationLabel } from "../../lib/event-confirmation.mjs";
+import { localDay, startOfDay, startOfWeek, dateKey, sameDay, startDate, endDate, eventOnDate, isScheduledEvent, hasEventsNextWeek } from "../../lib/event-calendar-dates.mjs";
 
 const TYPE_LABELS = {
   tech_day: "Tech Day",
@@ -23,55 +24,6 @@ function text(value) {
 
 function lower(value) {
   return text(value).toLowerCase();
-}
-
-function localDay(value) {
-  if (!value) return null;
-  if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    return new Date(value.getFullYear(), value.getMonth(), value.getDate());
-  }
-  const raw = text(value);
-  const dateOnly = raw.slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (dateOnly) {
-    const parsed = new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]));
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-  }
-  const parsed = new Date(raw);
-  return Number.isNaN(parsed.getTime()) ? null : new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
-}
-
-function startOfDay(value = new Date()) {
-  return new Date(value.getFullYear(), value.getMonth(), value.getDate());
-}
-
-function startOfWeek(value = new Date()) {
-  const first = startOfDay(value);
-  first.setDate(first.getDate() - (first.getDay() + 6) % 7);
-  return first;
-}
-
-function dateKey(value) {
-  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
-}
-
-function sameDay(first, second) {
-  return Boolean(first && second && dateKey(first) === dateKey(second));
-}
-
-function startDate(event) {
-  return localDay(event?.eventStartDate);
-}
-
-function endDate(event) {
-  return localDay(event?.eventEndDate) || startDate(event);
-}
-
-function eventOnDate(event, day) {
-  const start = startDate(event);
-  const end = endDate(event);
-  if (!start || !end) return false;
-  const time = startOfDay(day).getTime();
-  return time >= start.getTime() && time <= end.getTime();
 }
 
 function formatDate(value, options = { day: "2-digit", month: "short", year: "numeric" }) {
@@ -142,7 +94,8 @@ export default function EventsCalendarClient({ account, initialEvents = [], canM
   const deepLinkOpened = useRef(false);
   const today = useMemo(() => startOfDay(new Date()), []);
   const selectedDate = useMemo(() => localDay(selectedKey) || today, [selectedKey, today]);
-  const scheduled = useMemo(() => events.filter(event => !event.isArchived && eventConfirmation(event.status) !== "cancelled"), [events]);
+  const scheduled = useMemo(() => events.filter(isScheduledEvent), [events]);
+  const nextWeekHasEvents = useMemo(() => hasEventsNextWeek(week, scheduled), [week, scheduled]);
   const archived = useMemo(() => events.filter(event => event.isArchived), [events]);
   const upcoming = useMemo(() => scheduled.filter(event => endDate(event) && endDate(event) >= today).sort((a,b) => startDate(a) - startDate(b)), [scheduled,today]);
   const past = useMemo(() => events.filter(event => !event.isArchived && (eventConfirmation(event.status) === "cancelled" || (endDate(event) && endDate(event) < today))).sort((a,b) => (startDate(b)?.getTime() || 0) - (startDate(a)?.getTime() || 0)), [events,today]);
@@ -265,9 +218,9 @@ export default function EventsCalendarClient({ account, initialEvents = [], canM
         <aside className="agenda-left">
           <section className="agenda-panel agenda-calendar" aria-label="Weekly event calendar">
             <div className="agenda-month">
-              <button type="button" aria-label="Previous week" onClick={() => shiftWeek(-1)}><EventIcon name="chevron-left"/></button>
+              <button type="button" className="agenda-week-nav" aria-label="Previous week" onClick={() => shiftWeek(-1)}><EventIcon name="chevron-left"/></button>
               <div className="agenda-month-title"><h3>{selectedDate.toLocaleDateString("en-GB",{month:"long"})} <span>{selectedDate.getFullYear()}</span></h3><small>{weekLabel}</small></div>
-              <button type="button" aria-label="Next week" onClick={() => shiftWeek(1)}><EventIcon name="chevron-right"/></button>
+              <button type="button" className={`agenda-week-nav${nextWeekHasEvents ? " has-next-week-events" : ""}`} aria-label={nextWeekHasEvents ? "Next week — events scheduled" : "Next week"} title={nextWeekHasEvents ? "Events scheduled next week" : "Next week"} onClick={() => shiftWeek(1)}><EventIcon name="chevron-right"/></button>
             </div>
             <div className="agenda-days">{calendarDays.map(day => {
               const matches = scheduled.filter(event => eventOnDate(event,day));
