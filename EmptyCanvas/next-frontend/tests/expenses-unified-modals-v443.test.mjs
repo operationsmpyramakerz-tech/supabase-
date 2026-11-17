@@ -76,7 +76,7 @@ test('Cash In and Settle My Account use the unified bottom sheet with distinctiv
 });
 
 test('Only frontend assets change; CSS is updated and cache-busted', () => {
-  assert.match(page, /expenses-classic-inline\.css\?v=v446-all-expenses-black-ticket/);
+  assert.match(page, /expenses-classic-inline\.css\?v=v447-all-expenses-gray-ticket/);
   assert.match(css, /V443 — Unified expenses bottom sheets/);
   assert.match(css, /\.ex-modal-expense-icon--cash-in\s*\{ background: #16a34a/);
   assert.match(css, /\.ex-modal-expense-icon--settlement\s*\{ background: #111827/);

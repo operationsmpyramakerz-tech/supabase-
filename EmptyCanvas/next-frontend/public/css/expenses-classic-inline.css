@@ -3786,14 +3786,15 @@ html[data-theme="dark"] body.expenses-page .expense-draft-card--ticket > button.
 body.expenses-page #allExpenses.all-expenses-bottom-sheet {
   box-sizing: border-box;
   position: fixed;
-  inset: 0;
+  --all-expenses-top-gap: max(30px, calc(env(safe-area-inset-top, 0px) + 28px));
+  inset: var(--all-expenses-visible-top, 0px) 0 auto;
   width: 100%;
-  height: 100%;
-  height: 100dvh;
-  max-height: 100%;
+  height: var(--all-expenses-visible-height, 100vh);
+  height: var(--all-expenses-visible-height, 100dvh);
+  max-height: var(--all-expenses-visible-height, 100dvh) !important;
   align-items: flex-end !important;
   justify-content: center !important;
-  padding: max(36px, calc(env(safe-area-inset-top, 0px) + 30px)) 16px 0 !important;
+  padding: var(--all-expenses-top-gap) 16px 0 !important;
   overflow: hidden !important;
 }
 body.expenses-page #allExpenses .all-expenses-sheet {
@@ -3834,7 +3835,7 @@ body.expenses-page #allExpenses .all-expenses-sheet__badge {
 }
 body.expenses-page #allExpenses .all-expenses-sheet__header {
   flex: 0 0 auto;
-  padding: 44px 20px 8px;
+  padding: 39px 20px 8px;
   min-width: 0;
 }
 body.expenses-page #allExpenses .all-expenses-sheet__header .ex-modal-title {
@@ -3862,7 +3863,7 @@ body.expenses-page #allExpenses #allExpensesList {
 body.expenses-page #allExpenses .all-expenses-sheet__footer {
   flex: 0 0 auto;
   box-sizing: border-box;
-  padding: 8px 20px max(32px, calc(env(safe-area-inset-bottom, 0px) + 16px));
+  padding: 8px 20px max(20px, calc(env(safe-area-inset-bottom, 0px) + 16px));
   background: inherit;
 }
 body.expenses-page #allExpenses .next-all-expenses-close {
@@ -3934,7 +3935,15 @@ body.expenses-page .expense-shots-modal.is-open { z-index: 100270; }
   body.expenses-page #allExpenses .all-expenses-sheet {
     width: 100% !important;
     max-width: none !important;
-    height: 100%;
+    flex: 0 0 auto;
+    height: calc(var(--all-expenses-visible-height, 100vh) - var(--all-expenses-top-gap)) !important;
+    height: calc(var(--all-expenses-visible-height, 100dvh) - var(--all-expenses-top-gap)) !important;
+  }
+  /* Keep the entire Close button above the phone navigation area, even if
+     the device does not expose a safe-area inset. Only the list scrolls. */
+  body.expenses-page #allExpenses .all-expenses-sheet__footer {
+    flex: 0 0 auto;
+    padding-bottom: max(56px, calc(env(safe-area-inset-bottom, 0px) + 32px));
   }
 }
 @media (max-width: 380px) {
@@ -3948,27 +3957,27 @@ html[data-theme="dark"] body.expenses-page #allExpenses .all-expenses-sheet { ba
 html[data-theme="dark"] body.expenses-page #allExpenses .all-expenses-sheet__header .ex-modal-title { color: #f8fafc; }
 html[data-theme="dark"] body.expenses-page #allExpenses .next-all-expenses-close { background: #263447; }
 
-/* V446 — Black outer ticket only. Keep the individual expense cards white,
+/* V447 — Soft gray outer ticket only. Keep the individual expense cards white,
    and preserve the existing reason/order chips and signed amount colors. */
 body.expenses-page #allExpenses .expense-ticket {
   box-sizing: border-box;
-  background: #111111;
-  border-color: #292929;
-  color: #ffffff;
+  background: #eef0f3;
+  border-color: #dce1e7;
+  color: #111827;
 }
 body.expenses-page #allExpenses .expense-ticket__destination-copy strong,
 body.expenses-page #allExpenses .expense-ticket__footer-label,
 body.expenses-page #allExpenses .expense-ticket__footer-value,
-body.expenses-page #allExpenses .expense-ticket__footer-value.is-neutral { color: #ffffff; }
-body.expenses-page #allExpenses .expense-ticket__destination-label { color: #cbd5e1; }
+body.expenses-page #allExpenses .expense-ticket__footer-value.is-neutral { color: #111827; }
+body.expenses-page #allExpenses .expense-ticket__destination-label { color: #475569; }
 body.expenses-page #allExpenses .expense-ticket__destination-date .expense-ticket__date {
-  background: #292929;
-  border-color: #454545;
-  color: #f1f5f9;
+  background: #f8fafc;
+  border-color: #d9dfe7;
+  color: #475569;
 }
 body.expenses-page #allExpenses .expense-ticket__destination-divider,
 body.expenses-page #allExpenses .expense-ticket__header-divider,
-body.expenses-page #allExpenses .expense-ticket__separator { border-color: #626262; }
+body.expenses-page #allExpenses .expense-ticket__separator { border-color: #c4ccd7; }
 body.expenses-page #allExpenses .expense-ticket__separator::before,
 body.expenses-page #allExpenses .expense-ticket__separator::after {
   background: #ffffff;
@@ -3976,8 +3985,8 @@ body.expenses-page #allExpenses .expense-ticket__separator::after {
 }
 html[data-theme="dark"] body.expenses-page #allExpenses .expense-ticket__separator::before,
 html[data-theme="dark"] body.expenses-page #allExpenses .expense-ticket__separator::after { background: #151d29; }
-body.expenses-page #allExpenses .expense-ticket__footer-value.is-negative { color: #f87171; }
-body.expenses-page #allExpenses .expense-ticket__footer-value.is-positive { color: #4ade80; }
+body.expenses-page #allExpenses .expense-ticket__footer-value.is-negative { color: #b91c1c; }
+body.expenses-page #allExpenses .expense-ticket__footer-value.is-positive { color: #15803d; }
 body.expenses-page #allExpenses .expense-ticket__route-frame {
   background: #ffffff;
   border-color: #e2e8f0;

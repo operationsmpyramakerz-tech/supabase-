@@ -402,13 +402,36 @@ function ExpenseTicket({ group, onScreenshots, compact = false, canViewOrderRece
 
 function AllExpensesSheet({ items, lastSettledAt, onClose, onScreenshots, onExport, canViewOrderReceipts = true }) {
   const [showPast, setShowPast] = useState(false);
+  const overlayRef = useRef(null);
+  // Mobile browser chrome / navigation can make the visible viewport shorter
+  // than 100dvh. Size only this sheet from the smallest reported height.
+  useEffect(() => {
+    const overlay = overlayRef.current;
+    if (!overlay) return;
+    const viewport = window.visualViewport;
+    const syncViewport = () => {
+      const heights = [viewport?.height, window.innerHeight, document.documentElement.clientHeight]
+        .filter((height) => Number.isFinite(height) && height > 0);
+      if (heights.length) overlay.style.setProperty("--all-expenses-visible-height", `${Math.floor(Math.min(...heights))}px`);
+      overlay.style.setProperty("--all-expenses-visible-top", `${Math.max(0, viewport?.offsetTop || 0)}px`);
+    };
+    syncViewport();
+    window.addEventListener("resize", syncViewport);
+    viewport?.addEventListener("resize", syncViewport);
+    viewport?.addEventListener("scroll", syncViewport);
+    return () => {
+      window.removeEventListener("resize", syncViewport);
+      viewport?.removeEventListener("resize", syncViewport);
+      viewport?.removeEventListener("scroll", syncViewport);
+    };
+  }, []);
   const boundary = lastSettledAt ? new Date(lastSettledAt).getTime() : Number.NaN;
   const recentItems = Number.isFinite(boundary) ? items.filter((item) => transactionTime(item) > boundary) : items;
   const pastItems = Number.isFinite(boundary) ? items.filter((item) => transactionTime(item) <= boundary) : [];
   const recentGroups = groupTransactions(recentItems, { byDestination: true });
   const pastGroups = showPast ? groupTransactions(pastItems, { byDestination: true }) : [];
   if (typeof document === "undefined") return null;
-  return createPortal(<div id="allExpenses" className="ios-modal next-ios-modal-open all-expenses-bottom-sheet" style={{ display: "flex" }} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+  return createPortal(<div id="allExpenses" ref={overlayRef} className="ios-modal next-ios-modal-open all-expenses-bottom-sheet" style={{ display: "flex" }} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
     <section className="ios-sheet all-expenses-sheet" role="dialog" aria-modal="true" aria-labelledby="allExpensesTitle">
       <span className="all-expenses-sheet__badge" aria-hidden="true"><ClassicExpenseIcon name="file-text" size={28}/></span>
       <header className="all-expenses-sheet__header">
