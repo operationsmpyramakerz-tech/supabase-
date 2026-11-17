@@ -7,9 +7,9 @@ const dialogs = source('../components/expenses/ExpensesDialogs.jsx');
 const styles = source('../public/css/expenses-classic-inline.css');
 const page = source('../app/expenses/page.jsx');
 
-test('the Choose Order modal is the only ClassicModal using the bottom sheet variant', () => {
-  assert.match(dialogs, /function ClassicModal\(\{ title, onClose, children, compact = false, bottomSheet = false, flushBottom = false \}\)/);
-  assert.match(dialogs, /<ClassicModal title="Choose Order" onClose=\{onClose\} compact bottomSheet>/);
+test('the Cash Out modal remains the only ClassicModal using the bottom sheet variant', () => {
+  assert.match(dialogs, /function ClassicModal\(\{ title, onClose, children, compact = false, bottomSheet = false, flushBottom = false, badgeIcon = "money-add-badge", badgeTone = "expense" \}\)/);
+  assert.match(dialogs, /<ClassicModal title="Cash Out" onClose=\{onClose\} compact bottomSheet>/);
   assert.equal((dialogs.match(/\scompact bottomSheet>/g) || []).length, 1);
   assert.match(styles, /@media \(max-width: 768px\) \{\s*body\.expenses-page \.ex-modal--bottom-sheet/);
   assert.match(styles, /body\.expenses-page \.ex-modal--bottom-sheet \{\s*padding: 12px 0 0/);
@@ -32,7 +32,7 @@ test('the Add Expense action shows an add-money icon and confirmation uses green
   assert.match(dialogs, /className="ex-btn ex-confirm" onClick=\{confirm\}/);
   assert.match(dialogs, /className="ex-btn ex-danger" onClick=\{onClose\} disabled=\{busy\}>Cancel<\/button>/);
   assert.match(styles, /\.ex-modal-box--bottom-sheet \.ex-confirm \{\s*background: #12ad49/);
-  assert.match(page, /expenses-classic-inline\.css\?v=v442-funds-horizontal-orders-down/);
+  assert.match(page, /expenses-classic-inline\.css\?v=v443-unified-expense-forms/);
 });
 
 test('multi-order selection and expense drafting remain intact', () => {

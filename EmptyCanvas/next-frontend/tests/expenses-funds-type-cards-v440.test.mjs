@@ -8,7 +8,7 @@ const css = read('../public/css/expenses-classic-inline.css');
 const page = read('../app/expenses/page.jsx');
 
 test('both Cash Out sheet titles are centered below their existing floating icons', () => {
-  assert.match(dialogs, /<ClassicModal title="Choose Order"[^>]*bottomSheet>/);
+  assert.match(dialogs, /<ClassicModal title="Cash Out"[^>]*bottomSheet>/);
   assert.match(dialogs, /<ClassicModal title="Add Expense"[^\n]*flushBottom>/);
   assert.match(css, /\.ex-modal-box--bottom-sheet \.ex-modal-title,\s*body\.expenses-page \.ex-modal-box--flush-bottom \.ex-modal-title\s*\{[^}]*text-align:\s*center;/s);
   assert.match(css, /\.ex-modal-box--bottom-sheet \.ex-modal-sheet-icon--cash-out\s*\{[^}]*top:\s*-28px;/s);
@@ -34,5 +34,5 @@ test('existing receipt conditions and selectable values remain unchanged', () =>
   assert.match(dialogs, /const SCREENSHOT_REQUIRED_KEYS = new Set/);
   assert.match(dialogs, /const screenshotRequired = SCREENSHOT_REQUIRED_KEYS\.has\(typeKey\(form\.fundsType\)\)/);
   assert.match(dialogs, /onChange\(option\.value\); setOpen\(false\);/);
-  assert.match(page, /expenses-classic-inline\.css\?v=v442-funds-horizontal-orders-down/);
+  assert.match(page, /expenses-classic-inline\.css\?v=v443-unified-expense-forms/);
 });

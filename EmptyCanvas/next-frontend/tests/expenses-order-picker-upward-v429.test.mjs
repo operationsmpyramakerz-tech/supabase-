@@ -39,5 +39,5 @@ test("manual reason action has no arrow and uses softer dark background", () => 
   assert.match(jsx, /window.visualViewport\?\.addEventListener\("resize", position\)/);
   assert.doesNotMatch(jsx, /<ClassicExpenseIcon name="arrow-right" size=\{16\}\/>/);
   assert.match(css, /\.expense-orders-menu__manual\{[^}]+background:#28354a;color:#fff/);
-  assert.match(page, /expenses-classic-inline\.css\?v=v442-funds-horizontal-orders-down/);
+  assert.match(page, /expenses-classic-inline\.css\?v=v443-unified-expense-forms/);
 });

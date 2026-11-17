@@ -7,8 +7,8 @@ const dialogs = read('../components/expenses/ExpensesDialogs.jsx');
 const styles = read('../public/css/expenses-classic-inline.css');
 const page = read('../app/expenses/page.jsx');
 
-test('only the Cash out Add Expense modal gets the squared flush-to-bottom finish', () => {
-  assert.match(dialogs, /function ClassicModal\(\{ title, onClose, children, compact = false, bottomSheet = false, flushBottom = false \}\)/);
+test('modern expense, Cash In and Settlement modals share the squared flush-to-bottom finish', () => {
+  assert.match(dialogs, /function ClassicModal\(\{ title, onClose, children, compact = false, bottomSheet = false, flushBottom = false, badgeIcon = "money-add-badge", badgeTone = "expense" \}\)/);
   assert.match(dialogs, /<ClassicModal title="Add Expense" onClose=\{\(\) => setStep\("order"\)\} flushBottom>/);
   assert.match(styles, /\.ex-modal-box--flush-bottom\s*\{[^}]*border-radius:\s*28px 28px 0 0/s);
 });
@@ -16,7 +16,7 @@ test('only the Cash out Add Expense modal gets the squared flush-to-bottom finis
 test('Choose Order fills the bottom edge and has a centered floating cash-out icon', () => {
   assert.match(dialogs, /<div className="ex-modal-sheet-scroll">\{modalContent\}<\/div>/);
   assert.match(dialogs, /<ClassicExpenseIcon name="arrow-up-right" size=\{28\}\/>/);
-  assert.match(dialogs, /<ClassicModal title="Choose Order" onClose=\{onClose\} compact bottomSheet>/);
+  assert.match(dialogs, /<ClassicModal title="Cash Out" onClose=\{onClose\} compact bottomSheet>/);
   assert.match(styles, /\.ex-modal-box--bottom-sheet\s*\{[^}]*border-radius:\s*28px 28px 0 0;/s);
   assert.match(styles, /\.ex-modal-box--bottom-sheet \.ex-modal-sheet-icon--cash-out\s*\{[^}]*position:\s*absolute;[^}]*top:\s*-28px;[^}]*left:\s*50%;[^}]*width:\s*56px;[^}]*height:\s*56px;/s);
   // The global animation on direct modal children must not override the badge's
@@ -28,7 +28,7 @@ test('Choose Order fills the bottom edge and has a centered floating cash-out ic
 
 test('Add Expense uses a full-width bottom sheet with floating Add Money, without an order preview', () => {
   assert.doesNotMatch(dialogs, /className="order-preview-card order-preview-card--inline order-preview-card--expense"/);
-  assert.match(dialogs, /<span className="ex-modal-expense-icon" aria-hidden="true"><ClassicExpenseIcon name="money-add-badge" size=\{28\}\/><\/span>/);
+  assert.match(dialogs, /<span className=\{`ex-modal-expense-icon ex-modal-expense-icon--\$\{badgeTone\}`\} aria-hidden="true"><ClassicExpenseIcon name=\{badgeIcon\} size=\{28\}\/><\/span>/);
   assert.match(dialogs, /<div className="ex-modal-expense-scroll">\{modalContent\}<\/div>/);
   assert.match(styles, /\.ex-modal--flush-bottom\s*\{[^}]*width:\s*100vw;[^}]*padding:\s*12px 0 0;/s);
   assert.match(styles, /\.ex-modal-box--flush-bottom\s*\{[^}]*width:\s*100%;[^}]*max-width:\s*none;/s);
@@ -40,5 +40,5 @@ test('backend order linking still receives every selected order (visual summary 
   assert.match(dialogs, /selectedOrderIds: isManual \? \[\] : selectedOrders\.flatMap/);
   assert.match(dialogs, /selectedOrderKeys: isManual \? \[\] : selectedOrders\.map/);
   assert.match(dialogs, /orderKeys: draft\.selectedOrderKeys/);
-  assert.match(page, /expenses-classic-inline\.css\?v=v442-funds-horizontal-orders-down/);
+  assert.match(page, /expenses-classic-inline\.css\?v=v443-unified-expense-forms/);
 });

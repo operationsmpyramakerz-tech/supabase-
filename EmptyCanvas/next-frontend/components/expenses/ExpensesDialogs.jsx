@@ -245,16 +245,16 @@ function Modal({ title, subtitle, onClose, children, footer, wide = false }) {
   );
 }
 
-function ClassicModal({ title, onClose, children, compact = false, bottomSheet = false, flushBottom = false }) {
+function ClassicModal({ title, onClose, children, compact = false, bottomSheet = false, flushBottom = false, badgeIcon = "money-add-badge", badgeTone = "expense" }) {
   const modalContent = <>
     <h3 className="ex-modal-title">{title}</h3>
     {children}
   </>;
   return (
     <div className={`ex-modal${bottomSheet ? " ex-modal--bottom-sheet" : ""}${flushBottom ? " ex-modal--flush-bottom" : ""}`} style={{ display: "flex" }} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <section className={`ex-modal-box${compact ? " ex-modal-box--compact" : ""}${bottomSheet ? " ex-modal-box--bottom-sheet" : ""}${flushBottom ? " ex-modal-box--flush-bottom" : ""}`} role="dialog" aria-modal="true" aria-label={title} onMouseDown={(event) => event.stopPropagation()}>
+      <section className={`ex-modal-box${compact ? " ex-modal-box--compact" : ""}${bottomSheet ? " ex-modal-box--bottom-sheet" : ""}${flushBottom ? ` ex-modal-box--flush-bottom ex-modal-box--${badgeTone}` : ""}`} role="dialog" aria-modal="true" aria-label={title} onMouseDown={(event) => event.stopPropagation()}>
         {bottomSheet ? <span className="ex-modal-sheet-icon ex-modal-sheet-icon--cash-out" aria-hidden="true"><ClassicExpenseIcon name="arrow-up-right" size={28}/></span> : null}
-        {flushBottom ? <span className="ex-modal-expense-icon" aria-hidden="true"><ClassicExpenseIcon name="money-add-badge" size={28}/></span> : null}
+        {flushBottom ? <span className={`ex-modal-expense-icon ex-modal-expense-icon--${badgeTone}`} aria-hidden="true"><ClassicExpenseIcon name={badgeIcon} size={28}/></span> : null}
         {bottomSheet ? <div className="ex-modal-sheet-scroll">{modalContent}</div> : flushBottom ? <div className="ex-modal-expense-scroll">{modalContent}</div> : modalContent}
       </section>
     </div>
@@ -586,7 +586,6 @@ function ExpenseOrderMultiSelect({ value = [], onChange, options = [] }) {
           </button>;
         }) : <div className="order-select__status">No matching orders.</div>}
       </div>
-      <div className="expense-orders-menu__footer"><span>Select multiple orders</span><button type="button" onClick={() => setOpen(false)}>Done</button></div>
     </div>, document.body,
   ) : null;
 
@@ -602,20 +601,48 @@ function ExpenseOrderMultiSelect({ value = [], onChange, options = [] }) {
 
 function ClassicFileField({ files, onChange, required = false, hint = "Upload receipt screenshots (JPG/PNG)." }) {
   const inputRef = useRef(null);
-  const names = files.length ? files.map((file) => file?.name).filter(Boolean).join(", ") : "No file chosen";
+  const [previews, setPreviews] = useState([]);
+  useEffect(() => {
+    const items = files.map((file) => ({ file, url: URL.createObjectURL(file) }));
+    setPreviews(items);
+    return () => items.forEach((item) => URL.revokeObjectURL(item.url));
+  }, [files]);
+  const onSelect = (event) => {
+    const added = Array.from(event.target.files || []);
+    // Selecting more files adds to the current screenshots instead of deleting them.
+    onChange([...files, ...added].filter((file, index, all) =>
+      all.findIndex((item) => item.name === file.name && item.size === file.size && item.lastModified === file.lastModified) === index
+    ));
+    event.target.value = ""; // allow the same file to be re-selected after removal
+  };
   return (
-    <div>
+    <div className="expense-upload-field">
       <ClassicFieldLabel icon="image">Screenshot <span className={required ? "req-text" : "opt-tag"}>({required ? "Required" : "Optional"})</span></ClassicFieldLabel>
-      <div className={`upload-control${required ? " is-required" : ""}`}>
-        <input ref={inputRef} className="upload-input" type="file" accept="image/*" multiple onChange={(event) => onChange(Array.from(event.target.files || []))}/>
-        <div className="upload-row">
-          <button type="button" className="upload-btn" onClick={() => inputRef.current?.click()}><ClassicExpenseIcon name="upload" size={18}/><span>Upload screenshot</span></button>
-          <span className="upload-filename" title={names}>{names}</span>
-        </div>
+      <div className={`upload-control expense-upload-control${required ? " is-required" : ""}`}>
+        <input ref={inputRef} className="upload-input" type="file" accept="image/*" multiple onChange={onSelect}/>
+        <button type="button" className="expense-upload-button" onClick={() => inputRef.current?.click()}>
+          <span className="expense-upload-button__icon"><ClassicExpenseIcon name="upload" size={22}/></span>
+          <span className="expense-upload-button__copy"><strong>{files.length ? "Add more screenshots" : "Upload screenshots"}</strong><small>Choose photos from your device</small></span>
+          <span className="expense-upload-button__plus"><ClassicExpenseIcon name="plus-circle" size={21}/></span>
+        </button>
+        {previews.length ? <div className="expense-upload-previews" aria-label="Selected screenshots">
+          {previews.map(({ file, url }, index) => <div className="expense-upload-preview" key={`${file.name}-${file.size}-${file.lastModified}-${index}`}>
+            <img className="expense-upload-preview__image" src={url} alt={`Preview of ${file.name}`}/>
+            <div className="expense-upload-preview__details"><strong title={file.name}>{file.name}</strong><span>{(file.size / 1024 / 1024).toFixed(2)} MB · Image {index + 1}</span></div>
+            <button type="button" className="expense-upload-preview__remove" aria-label={`Remove ${file.name}`} onClick={() => onChange(files.filter((_, i) => i !== index))}><ClassicExpenseIcon name="x" size={17}/></button>
+          </div>)}
+        </div> : null}
       </div>
-      <small className={`help${required ? " is-emphasis" : ""}`}>{hint}</small>
+      <small className={`help${required ? " is-emphasis" : ""}`}>{hint} · Up to 6 images.</small>
     </div>
   );
+}
+
+function ExpenseCurrencyInput({ value, onChange, label }) {
+  return <div className="expense-currency-field">
+    <input type="number" inputMode="decimal" min="0" step="0.01" className="ex-input expense-currency-field__input" value={value} onChange={onChange} aria-label={label}/>
+    <span className="expense-currency-field__unit" aria-hidden="true">EGP</span>
+  </div>;
 }
 
 function ModernSelect({ value, onChange, options = [], placeholder = "Select…", searchable = false, searchPlaceholder = "Search…", emptyText = "No options available" }) {
@@ -706,12 +733,12 @@ function CashInModal({ options, onClose, onSaved, notify }) {
   };
 
   return (
-    <ClassicModal title="Add Cash In" onClose={onClose}>
+    <ClassicModal title="Add Cash In" onClose={onClose} flushBottom badgeIcon="arrow-down-left" badgeTone="cash-in">
       <ClassicFieldLabel icon="calendar">Date <span className="req-star">*</span></ClassicFieldLabel>
       <input type="date" className="ex-input" value={form.date} onChange={update("date")}/>
 
       <ClassicFieldLabel icon="plus-circle">Cash in <span className="req-star">*</span></ClassicFieldLabel>
-      <input type="number" min="0" step="0.01" className="ex-input" value={form.amount} onChange={update("amount")}/>
+      <ExpenseCurrencyInput value={form.amount} onChange={update("amount")} label="Amount in EGP"/>
 
       <ClassicFieldLabel icon="tag">Funds Type <span className="req-star">*</span></ClassicFieldLabel>
       <ClassicSelect
@@ -723,6 +750,7 @@ function CashInModal({ options, onClose, onSaved, notify }) {
         options={typeOptions}
         placeholder="Select funds type..."
         ariaLabel="Cash in funds types"
+        compactFundsCards
       />
 
       <ClassicFieldLabel icon="user">Payment by <span className="req-star">*</span></ClassicFieldLabel>
@@ -737,7 +765,7 @@ function CashInModal({ options, onClose, onSaved, notify }) {
       {isTransfer ? <ClassicFileField files={files} onChange={setFiles} required hint="Upload the transfer screenshot (JPG/PNG)."/> : null}
 
       <div className="ex-modal-actions">
-        <button type="button" className="ex-btn ex-primary" onClick={submit} disabled={busy}>{busy ? "Saving..." : "Submit"}</button>
+        <button type="button" className="ex-btn ex-dark" onClick={submit} disabled={busy}>{busy ? "Saving..." : "Submit"}</button>
         <button type="button" className="ex-btn ex-danger" onClick={onClose} disabled={busy}>Close</button>
       </div>
     </ClassicModal>
@@ -893,7 +921,7 @@ function CashOutModal({ fundsTypes, orderOptions, destinationPeople = [], ownCar
           </p>
         </> : <>
           <ClassicFieldLabel icon="minus-circle">Cash out <span className="req-text">(Required)</span></ClassicFieldLabel>
-          <input type="number" min="0" step="0.01" className="ex-input" value={form.amount} onChange={update("amount")}/>
+          <ExpenseCurrencyInput value={form.amount} onChange={update("amount")} label="Amount in EGP"/>
         </>}
 
         <ClassicFileField
@@ -921,7 +949,7 @@ function CashOutModal({ fundsTypes, orderOptions, destinationPeople = [], ownCar
   }
 
   return (
-    <ClassicModal title="Choose Order" onClose={onClose} compact bottomSheet>
+    <ClassicModal title="Cash Out" onClose={onClose} compact bottomSheet>
 
       <ClassicFieldLabel icon="file-text">Orders <span className="req-star">*</span></ClassicFieldLabel>
       <ExpenseOrderMultiSelect value={scopeIds} onChange={setScopeIds} options={scopeOptions}/>
@@ -945,10 +973,14 @@ function CashOutModal({ fundsTypes, orderOptions, destinationPeople = [], ownCar
 
       {drafts.length ? <div className="expense-drafts">
         <div className="expense-drafts__header"><span className="expense-drafts__title">Added expenses</span><span className="expense-drafts__count">{drafts.length}</span></div>
-        <div className="expense-drafts__list">{drafts.map((draft) => <div className="expense-draft-card" key={draft.id}>
-          <div className="expense-draft-card__main"><div className="expense-draft-card__title">{draft.fundsType}</div><div className="expense-draft-card__meta">{[draft.reason, [draft.from, draft.to].filter(Boolean).join(draft.from && draft.to ? " → " : " ")].filter(Boolean).join(" • ") || "Ready to save"}</div></div>
-          <div className="expense-draft-card__value">{typeKey(draft.fundsType) === "owncar" ? money(ownCarCostForKilometers(draft.kilometer, ownCarRate)) : money(draft.amount)}</div>
-          <button type="button" className="expense-draft-card__remove" onClick={() => setDrafts((current) => current.filter((item) => item.id !== draft.id))} aria-label="Remove expense">×</button>
+        <div className="expense-drafts__list">{drafts.map((draft) => <div className="expense-draft-card expense-draft-card--route" key={draft.id}>
+          <div className="expense-draft-card__route">
+            <div className="expense-draft-card__stop"><small>From</small><strong dir="auto">{text(draft.from) || "—"}</strong></div>
+            <span className="expense-draft-card__route-arrow" aria-hidden="true"><ClassicExpenseIcon name="arrow-right" size={18}/></span>
+            <div className="expense-draft-card__stop"><small>To</small><strong dir="auto">{text(draft.to) || "—"}</strong></div>
+          </div>
+          <div className="expense-draft-card__bottom"><span className="expense-draft-card__cost-label">Cost</span><strong className="expense-draft-card__cost">{new Intl.NumberFormat("en-EG", { maximumFractionDigits: 2 }).format(typeKey(draft.fundsType) === "owncar" ? ownCarCostForKilometers(draft.kilometer, ownCarRate) : number(draft.amount))}<small> EGP</small></strong></div>
+          <button type="button" className="expense-draft-card__remove" onClick={() => setDrafts((current) => current.filter((item) => item.id !== draft.id))} aria-label="Remove expense"><ClassicExpenseIcon name="x" size={17}/></button>
         </div>)}</div>
       </div> : null}
 
@@ -981,7 +1013,7 @@ function SettleModal({ onClose, onSaved, notify }) {
     finally { setBusy(false); }
   };
   return (
-    <ClassicModal title="Settle my account" onClose={onClose}>
+    <ClassicModal title="Settle my account" onClose={onClose} flushBottom badgeIcon="check-circle" badgeTone="settlement">
       <ClassicFieldLabel icon="calendar">Date <span className="req-star">*</span></ClassicFieldLabel>
       <input type="date" className="ex-input" value={form.date} onChange={update("date")}/>
 
@@ -1001,6 +1033,7 @@ function SettleModal({ onClose, onSaved, notify }) {
         }))}
         placeholder="Select funds type..."
         ariaLabel="Settlement funds types"
+        compactFundsCards
       />
 
       <ClassicFieldLabel icon="user">Settled by <span className="req-star">*</span></ClassicFieldLabel>
@@ -1014,7 +1047,7 @@ function SettleModal({ onClose, onSaved, notify }) {
       {isTransfer ? <ClassicFileField files={files} onChange={setFiles} required hint="Upload the transfer screenshot (JPG/PNG)."/> : null}
 
       <div className="ex-modal-actions">
-        <button type="button" className="ex-btn ex-primary" onClick={submit} disabled={busy}>{busy ? "Saving..." : "Save settlement"}</button>
+        <button type="button" className="ex-btn ex-dark" onClick={submit} disabled={busy}>{busy ? "Saving..." : "Save settlement"}</button>
         <button type="button" className="ex-btn ex-danger" onClick={onClose} disabled={busy}>Close</button>
       </div>
     </ClassicModal>

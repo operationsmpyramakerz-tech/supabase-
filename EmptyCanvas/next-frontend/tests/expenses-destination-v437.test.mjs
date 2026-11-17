@@ -11,7 +11,7 @@ const migration = src("../2026-11-16-expenses-destination-v437.sql");
 
 // The new required field belongs in the first wizard step, immediately after Date.
 test("Choose Order shows required Destination after Date with a single-select team-member dropdown", () => {
-  const dateLabel = dialogs.indexOf('<ClassicFieldLabel icon="calendar">Date <span className="req-star">*</span></ClassicFieldLabel>', dialogs.indexOf('<ClassicModal title="Choose Order"'));
+  const dateLabel = dialogs.indexOf('<ClassicFieldLabel icon="calendar">Date <span className="req-star">*</span></ClassicFieldLabel>', dialogs.indexOf('<ClassicModal title="Cash Out"'));
   const destinationLabel = dialogs.indexOf('<ClassicFieldLabel icon="user">Destination <span className="req-star">*</span></ClassicFieldLabel>', dateLabel);
   const nextButton = dialogs.indexOf('className="ex-btn ex-dark ex-btn--block ex-add-money"', dateLabel);
   assert.ok(dateLabel > 0 && destinationLabel > dateLabel && nextButton > destinationLabel);

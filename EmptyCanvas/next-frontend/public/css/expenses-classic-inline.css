@@ -3631,3 +3631,120 @@ html[data-theme="dark"] .funds-select__menu--compact .funds-select__card--compac
   background: #3b2b20;
   border-color: #fb923c;
 }
+
+
+/* V443 — Unified expenses bottom sheets, balanced spacing, preview uploads and route drafts. */
+body.expenses-page .ex-modal-box--bottom-sheet .ex-modal-title,
+body.expenses-page .ex-modal-box--flush-bottom .ex-modal-title {
+  margin: 0 0 23px;
+  color: #111827;
+  font-size: clamp(23px, 5.4vw, 29px);
+  font-weight: 850;
+  line-height: 1.24;
+  letter-spacing: -.035em;
+  text-align: center;
+}
+/* Uploaded screenshots: a single tidy action followed by an independent card per file. */
+body.expenses-page .expense-upload-field { margin: 0 0 10px; }
+body.expenses-page .expense-upload-control { width: 100%; }
+body.expenses-page .expense-upload-button {
+  width: 100%; min-height: 68px; display: flex; align-items: center; gap: 13px;
+  padding: 11px 14px; background: #f8fafc; border: 1.5px dashed #b9c5d5;
+  border-radius: 17px; color: #111827; text-align: left; cursor: pointer;
+  box-shadow: none; transition: border-color .15s, background .15s;
+}
+body.expenses-page .expense-upload-button:hover,
+body.expenses-page .expense-upload-button:focus-visible { border-color: #f97316; background: #fff7ed; outline: none; }
+body.expenses-page .expense-upload-button__icon {
+  width: 44px; height: 44px; flex: 0 0 44px; display: grid; place-items: center;
+  border-radius: 13px; color: #0f172a; background: #fff; border: 1px solid #e2e8f0;
+}
+body.expenses-page .expense-upload-button__copy { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 2px; }
+body.expenses-page .expense-upload-button__copy strong { color: #101828; font-size: 14px; font-weight: 850; }
+body.expenses-page .expense-upload-button__copy small { color: #64748b; font-size: 11px; font-weight: 600; }
+body.expenses-page .expense-upload-button__plus { color: #e56a18; display: grid; place-items: center; flex: 0 0 22px; }
+body.expenses-page .expense-upload-previews { display: flex; flex-direction: column; gap: 9px; margin-top: 12px; }
+body.expenses-page .expense-upload-preview {
+  display: flex; gap: 12px; align-items: center; min-width: 0;
+  padding: 9px; background: #fff; border: 1px solid #e5eaf0; border-radius: 15px;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, .04);
+}
+body.expenses-page .expense-upload-preview__image {
+  width: 58px; height: 58px; flex: 0 0 58px; display: block; object-fit: cover;
+  border-radius: 10px; background: #f1f5f9;
+}
+body.expenses-page .expense-upload-preview__details { display: flex; flex: 1; flex-direction: column; min-width: 0; gap: 5px; }
+body.expenses-page .expense-upload-preview__details strong { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: #111827; font-size: 13px; font-weight: 800; }
+body.expenses-page .expense-upload-preview__details span { color: #64748b; font-size: 11px; font-weight: 600; }
+body.expenses-page .expense-upload-preview__remove {
+  width: 34px; height: 34px; flex: 0 0 34px; display: grid; place-items: center;
+  background: #fff1f2; border: 1px solid #ffe4e6; border-radius: 11px; color: #e11d48; cursor: pointer;
+}
+body.expenses-page .expense-upload-preview__remove:hover { background: #ffe4e6; }
+body.expenses-page .expense-upload-field .help { margin-top: 8px; font-size: 11px; line-height: 1.4; }
+/* Numeric input keeps its real numeric value; the currency label is only visual. */
+body.expenses-page .expense-currency-field { position: relative; width: 100%; }
+body.expenses-page .expense-currency-field__input { padding-right: 75px !important; }
+body.expenses-page .expense-currency-field__unit {
+  position: absolute; right: 17px; top: 0; bottom: 1rem;
+  display: flex; align-items: center; color: #9aa5b5; font-size: 13px; font-weight: 800;
+  letter-spacing: .035em; pointer-events: none;
+}
+/* Route / cost pending drafts: no reason, order number or redundant badges. */
+body.expenses-page .expense-draft-card--route {
+  display: grid; grid-template-columns: minmax(0, 1fr) 33px; gap: 9px 12px;
+  position: relative; width: 100%; padding: 13px;
+  border: 1px solid #e4e8ef; border-radius: 16px; background: #fff;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, .045);
+}
+body.expenses-page .expense-draft-card--route .expense-draft-card__route {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center;
+  gap: 9px; grid-column: 1; min-width: 0;
+}
+body.expenses-page .expense-draft-card__stop { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+body.expenses-page .expense-draft-card__stop small { font-size: 10px; font-weight: 750; color: #94a3b8; text-transform: uppercase; letter-spacing: .05em; }
+body.expenses-page .expense-draft-card__stop strong { font-size: 13px; font-weight: 850; color: #111827; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+body.expenses-page .expense-draft-card__route-arrow { display: grid; place-items: center; color: #f97316; padding-top: 11px; }
+body.expenses-page .expense-draft-card__bottom {
+  grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center;
+  border-top: 1px solid #f1f3f6; padding-top: 11px; margin-top: 1px;
+}
+body.expenses-page .expense-draft-card__cost-label { color: #64748b; font-size: 12px; font-weight: 700; }
+body.expenses-page .expense-draft-card__cost { color: #0f172a; font-size: 18px; font-weight: 900; font-variant-numeric: tabular-nums; }
+body.expenses-page .expense-draft-card__cost small { color: #94a3b8; font-size: 11px; font-weight: 800; }
+body.expenses-page .expense-draft-card--route .expense-draft-card__remove {
+  grid-row: 1; grid-column: 2; align-self: start; width: 33px; height: 33px;
+  border: 1px solid #fee2e2; background: #fff1f2; color: #dc2626; margin: 0;
+}
+body.expenses-page .expense-draft-card--route .expense-draft-card__remove:hover { background: #fee2e2; }
+/* Buttons have a consistent black/red system palette, not the old blue primary. */
+body.expenses-page .ex-modal-box--flush-bottom .ex-modal-actions .ex-btn { min-height: 45px; border-radius: 13px; font-size: 13px; font-weight: 800; }
+body.expenses-page .ex-modal-box--flush-bottom .ex-modal-actions .ex-dark { background: #101114; color: #fff; }
+body.expenses-page .ex-modal-box--flush-bottom .ex-modal-actions .ex-danger { background: #ef4444; color: #fff; }
+@media (max-width: 768px) {
+  body.expenses-page .ex-modal-box--bottom-sheet .ex-modal-sheet-scroll,
+  body.expenses-page .ex-modal-box--flush-bottom .ex-modal-expense-scroll {
+    padding-top: 50px;
+  }
+  body.expenses-page .ex-modal-box--flush-bottom .ex-modal-expense-icon--cash-in { background: #16a34a; box-shadow: 0 16px 30px rgba(22,163,74,.18); }
+  body.expenses-page .ex-modal-box--flush-bottom .ex-modal-expense-icon--settlement { background: #111827; box-shadow: 0 16px 30px rgba(15,23,42,.18); }
+  body.expenses-page .ex-modal-box--bottom-sheet .ex-modal-title,
+  body.expenses-page .ex-modal-box--flush-bottom .ex-modal-title { margin-bottom: 20px; }
+}
+@media (min-width: 769px) {
+  /* The shared centered desktop modal shows the same status badge without overlapping the backdrop. */
+  body.expenses-page .ex-modal-box--flush-bottom .ex-modal-expense-icon { display: none; }
+}
+@media (max-width: 380px) {
+  body.expenses-page .expense-upload-button { gap: 9px; padding: 9px; }
+  body.expenses-page .expense-upload-preview__image { width: 49px; height: 49px; flex-basis: 49px; }
+  body.expenses-page .expense-draft-card--route { padding: 10px; }
+}
+html[data-theme="dark"] body.expenses-page .expense-upload-button,
+html[data-theme="dark"] body.expenses-page .expense-upload-preview,
+html[data-theme="dark"] body.expenses-page .expense-draft-card--route { background: #1b2636; border-color: #39485c; }
+html[data-theme="dark"] body.expenses-page .expense-upload-button__icon { background: #273447; border-color: #39485c; color: #f8fafc; }
+html[data-theme="dark"] body.expenses-page .expense-upload-button__copy strong,
+html[data-theme="dark"] body.expenses-page .expense-upload-preview__details strong,
+html[data-theme="dark"] body.expenses-page .expense-draft-card__stop strong,
+html[data-theme="dark"] body.expenses-page .expense-draft-card__cost { color: #f8fafc; }
