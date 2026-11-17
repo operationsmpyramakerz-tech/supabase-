@@ -243,18 +243,25 @@ function compactMoney(value) {
   return money(amount);
 }
 
-function groupTransactions(items) {
+function groupTransactions(items, { byDestination = false } = {}) {
   const groups = new Map();
   for (const item of Array.isArray(items) ? items : []) {
     const reason = displayReason(item);
     const date = text(item?.date);
-    const key = `${date}__${lower(reason)}`;
-    if (!groups.has(key)) groups.set(key, { key, date, reason, items: [], orders: new Map(), cashIn: 0, cashOut: 0, kilometers: 0, created: transactionTime(item) });
+    // All Expenses must not present two different destinations as one ticket.
+    const destinationName = text(item?.destinationUserName);
+    const destinationId = text(item?.destinationUserId);
+    const destinationKey = destinationId ? ["id", destinationId] : ["name", lower(destinationName)];
+    const key = byDestination ? JSON.stringify([date, lower(reason), destinationKey]) : `${date}__${lower(reason)}`;
+    if (!groups.has(key)) groups.set(key, { key, date, reason, destinationName, items: [], orders: new Map(), cashIn: 0, cashOut: 0, kilometers: 0, created: transactionTime(item) });
     const group = groups.get(key);
     group.items.push(item);
     group.cashIn += number(item?.cashIn);
     group.cashOut += number(item?.cashOut);
     group.kilometers += number(item?.kilometer);
+    if (byDestination && destinationName && (!group.destinationName || transactionTime(item) >= group.created)) {
+      group.destinationName = destinationName;
+    }
     group.created = Math.max(group.created, transactionTime(item));
     for (const order of Array.isArray(item?.orders) ? item.orders : []) {
       const orderKey = text(order?.key || order?.trackingGroupId || order?.orderId || order?.label);
@@ -361,7 +368,7 @@ function shouldHideExpenseGroupReason(group) {
   });
 }
 
-function ExpenseTicket({ group, onScreenshots, compact = false, canViewOrderReceipts = true }) {
+function ExpenseTicket({ group, onScreenshots, compact = false, canViewOrderReceipts = true, showDestination = false }) {
   const total = groupAmount(group);
   const rows = [...(Array.isArray(group?.items) ? group.items : [])].sort((a, b) => transactionTime(a) - transactionTime(b));
   const hideReason = shouldHideExpenseGroupReason(group);
@@ -369,8 +376,18 @@ function ExpenseTicket({ group, onScreenshots, compact = false, canViewOrderRece
   const hasManualReasonOrder = hasOrders && group.orders.some((order) => ["manualreason", "otherreason", "manual"].includes(typeKey(order?.orderType)) || typeKey(order?.label) === "otherreason");
   return <article className={`expense-ticket${compact ? " expense-ticket--compact" : ""}`}>
     <div className="expense-ticket__top">
+      {showDestination ? <>
+        <div className="expense-ticket__destination-date">
+          <div className="expense-ticket__destination" title={group.destinationName || "No destination recorded"}>
+            <span className="expense-ticket__destination-icon"><ClassicExpenseIcon name="user" size={15}/></span>
+            <span className="expense-ticket__destination-copy"><span className="expense-ticket__destination-label">Destination</span><strong dir="auto">{group.destinationName || "—"}</strong></span>
+          </div>
+          <span className="expense-ticket__date">{formatDate(group.date, group.date || "No date")}</span>
+        </div>
+        <div className="expense-ticket__destination-divider" aria-hidden="true"/>
+      </> : null}
       <div className={`expense-ticket__header-row expense-ticket__header-row--centered${hasOrders ? " expense-ticket__header-row--with-order" : ""}`}>
-        <div className="expense-ticket__meta"><span className="expense-ticket__date">{formatDate(group.date, group.date || "No date")}</span></div>
+        {!showDestination ? <div className="expense-ticket__meta"><span className="expense-ticket__date">{formatDate(group.date, group.date || "No date")}</span></div> : null}
         <div className="expense-ticket__header-side">{hasOrders ? <ExpenseOrderActions orders={group.orders} reasonLabel={group.reason} canViewOrderReceipts={canViewOrderReceipts}/> : !hideReason ? <div className="expense-ticket__reason expense-ticket__reason--label">{group.reason}</div> : null}</div>
       </div>
       {hasOrders && !hideReason && !hasManualReasonOrder ? <div className="expense-ticket__reason expense-ticket__reason--block expense-ticket__reason--centered">{group.reason}</div> : null}
@@ -387,13 +404,23 @@ function AllExpensesSheet({ items, lastSettledAt, onClose, onScreenshots, onExpo
   const boundary = lastSettledAt ? new Date(lastSettledAt).getTime() : Number.NaN;
   const recentItems = Number.isFinite(boundary) ? items.filter((item) => transactionTime(item) > boundary) : items;
   const pastItems = Number.isFinite(boundary) ? items.filter((item) => transactionTime(item) <= boundary) : [];
-  const recentGroups = groupTransactions(recentItems);
-  const pastGroups = showPast ? groupTransactions(pastItems) : [];
-  return <div id="allExpenses" className="ios-modal next-ios-modal-open" style={{ display: "flex" }} role="dialog" aria-modal="true" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><div className="ios-sheet" style={{ transform: "translateY(0)" }}><div className="ios-drag"/><h3 className="ex-modal-title" style={{ textAlign: "center" }}>All Expenses</h3><div className="next-all-expenses-sheet-actions">{onExport ? <button className="view-all-chip" type="button" onClick={onExport}>Export</button> : null}</div><div id="allExpensesList">
-    {recentGroups.length ? recentGroups.map((group) => <ExpenseTicket group={group} onScreenshots={onScreenshots} canViewOrderReceipts={canViewOrderReceipts} compact key={group.key}/>) : <div className="expenses-empty">Sorry, No data available</div>}
-    {showPast && pastGroups.length ? <><div className="expenses-separator"><span>Past expenses</span></div>{pastGroups.map((group) => <ExpenseTicket group={group} onScreenshots={onScreenshots} canViewOrderReceipts={canViewOrderReceipts} compact key={`past-${group.key}`}/>)}</> : null}
-    {pastItems.length ? <div className="past-expenses-wrapper"><button type="button" className="past-expenses-btn" onClick={() => setShowPast((current) => !current)}>{showPast ? "Hide past expenses" : "Show past expenses"}</button></div> : null}
-  </div><button className="next-all-expenses-close" type="button" onClick={onClose}>Close</button></div></div>;
+  const recentGroups = groupTransactions(recentItems, { byDestination: true });
+  const pastGroups = showPast ? groupTransactions(pastItems, { byDestination: true }) : [];
+  return <div id="allExpenses" className="ios-modal next-ios-modal-open all-expenses-bottom-sheet" style={{ display: "flex" }} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+    <section className="ios-sheet all-expenses-sheet" role="dialog" aria-modal="true" aria-labelledby="allExpensesTitle">
+      <span className="all-expenses-sheet__badge" aria-hidden="true"><ClassicExpenseIcon name="file-text" size={28}/></span>
+      <header className="all-expenses-sheet__header">
+        <h3 id="allExpensesTitle" className="ex-modal-title">All Expenses</h3>
+        <div className="next-all-expenses-sheet-actions">{onExport ? <button className="view-all-chip" type="button" onClick={onExport}>Export</button> : null}</div>
+      </header>
+      <div id="allExpensesList">
+        {recentGroups.length ? recentGroups.map((group) => <ExpenseTicket group={group} onScreenshots={onScreenshots} canViewOrderReceipts={canViewOrderReceipts} compact showDestination key={group.key}/>) : <div className="expenses-empty">Sorry, No data available</div>}
+        {showPast && pastGroups.length ? <><div className="expenses-separator"><span>Past expenses</span></div>{pastGroups.map((group) => <ExpenseTicket group={group} onScreenshots={onScreenshots} canViewOrderReceipts={canViewOrderReceipts} compact showDestination key={`past-${group.key}`}/>)}</> : null}
+        {pastItems.length ? <div className="past-expenses-wrapper"><button type="button" className="past-expenses-btn" onClick={() => setShowPast((current) => !current)}>{showPast ? "Hide past expenses" : "Show past expenses"}</button></div> : null}
+      </div>
+      <footer className="all-expenses-sheet__footer"><button className="next-all-expenses-close" type="button" onClick={onClose}>Close</button></footer>
+    </section>
+  </div>;
 }
 
 export default function ExpensesClient({ account, initialPayload = {}, initialTypes = [], cashInFromOptions = [], orderOptions = [], bootstrapWarnings = [] }) {

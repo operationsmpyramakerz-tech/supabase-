@@ -34,7 +34,7 @@ test('search stays at top, filters name and department, and avoids keyboard auto
   assert.match(picker, /document\.body/);
   assert.match(css, /\.expense-destination-menu__card/);
   assert.match(css, /\.expense-destination-menu__person/);
-  assert.match(page, /expenses-classic-inline\.css\?v=v444-expense-ticket-cards/);
+  assert.match(page, /expenses-classic-inline\.css\?v=v445-all-expenses-destination/);
 });
 
 test('menu opens directly against the field upper edge when phone has little room below', () => {

@@ -3781,3 +3781,157 @@ html[data-theme="dark"] body.expenses-page .expense-draft-card--ticket .expense-
 html[data-theme="dark"] body.expenses-page .expense-draft-card--ticket .expense-ticket__route-amount.is-negative { color: #fca5a5; }
 html[data-theme="dark"] body.expenses-page .expense-upload-preview > button.expense-upload-preview__remove,
 html[data-theme="dark"] body.expenses-page .expense-draft-card--ticket > button.expense-draft-card__remove { background: #3b202b; border-color: #663342; color: #fda4af; }
+
+/* V445 — All Expenses: full-width mobile bottom sheet and destination/date header. */
+body.expenses-page #allExpenses.all-expenses-bottom-sheet {
+  box-sizing: border-box;
+  align-items: flex-end !important;
+  justify-content: center !important;
+  padding: 44px 16px 0 !important;
+  overflow: hidden !important;
+}
+body.expenses-page #allExpenses .all-expenses-sheet {
+  position: relative;
+  box-sizing: border-box;
+  display: flex !important;
+  flex-direction: column !important;
+  width: min(100%, 640px);
+  max-width: 640px;
+  max-height: calc(100dvh - 44px) !important;
+  min-height: 0;
+  margin: 0 !important;
+  padding: 0 !important;
+  border-radius: 28px 28px 0 0 !important;
+  overflow: visible !important;
+  background: #fff;
+  box-shadow: 0 -14px 42px rgba(15, 23, 42, .18) !important;
+  transform: translateY(0);
+}
+body.expenses-page #allExpenses .all-expenses-sheet__badge {
+  position: absolute;
+  z-index: 3;
+  top: -28px;
+  left: 50%;
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  transform: translateX(-50%);
+  animation: none !important;
+  background: #111111;
+  color: #fff;
+  border-radius: 18px;
+  box-shadow: 0 16px 30px rgba(15, 23, 42, .18);
+  pointer-events: none;
+}
+body.expenses-page #allExpenses .all-expenses-sheet__header {
+  flex: 0 0 auto;
+  padding: 50px 20px 8px;
+  min-width: 0;
+}
+body.expenses-page #allExpenses .all-expenses-sheet__header .ex-modal-title {
+  margin: 0 0 16px;
+  text-align: center;
+  color: #111827;
+  font-size: clamp(23px, 5.4vw, 29px);
+  font-weight: 850;
+  line-height: 1.24;
+  letter-spacing: -.035em;
+}
+body.expenses-page #allExpenses .next-all-expenses-sheet-actions { margin: 0; }
+body.expenses-page #allExpenses .next-all-expenses-sheet-actions:empty { display: none; }
+body.expenses-page #allExpenses #allExpensesList {
+  box-sizing: border-box;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow-y: auto !important;
+  overflow-x: hidden;
+  padding: 4px 20px 8px !important;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+body.expenses-page #allExpenses .all-expenses-sheet__footer {
+  flex: 0 0 auto;
+  padding: 8px 20px max(24px, env(safe-area-inset-bottom, 0px));
+  background: inherit;
+}
+body.expenses-page #allExpenses .next-all-expenses-close {
+  margin: 0;
+  min-height: 44px;
+  border-radius: 14px;
+  background: #111111;
+  color: #fff;
+}
+body.expenses-page #allExpenses .expense-ticket__destination-date {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  direction: ltr;
+  min-width: 0;
+}
+body.expenses-page #allExpenses .expense-ticket__destination {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  text-align: left;
+}
+body.expenses-page #allExpenses .expense-ticket__destination-icon {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: #fff1e6;
+  color: #c2410c;
+}
+body.expenses-page #allExpenses .expense-ticket__destination-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+body.expenses-page #allExpenses .expense-ticket__destination-label { color: #64748b; font-size: .66rem; font-weight: 700; }
+body.expenses-page #allExpenses .expense-ticket__destination-copy strong {
+  color: #111827;
+  font-size: .8rem;
+  font-weight: 800;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+body.expenses-page #allExpenses .expense-ticket__destination-date .expense-ticket__date {
+  justify-self: end;
+  white-space: nowrap;
+  font-size: .74rem;
+  padding: .31rem .68rem;
+}
+body.expenses-page #allExpenses .expense-ticket__destination-divider {
+  width: 100%;
+  border-top: 1px dashed #d6dee8;
+  margin: 3px 0;
+}
+/* The receipt viewer is a sibling portal and must sit above View All. */
+body.expenses-page .expense-shots-modal.is-open { z-index: 100270; }
+@media (max-width: 768px) {
+  /* Override the old floating-window dock clearance in ui-redesign.css. */
+  body.expenses-page #allExpenses.all-expenses-bottom-sheet { padding: 44px 0 0 !important; }
+  body.expenses-page #allExpenses .all-expenses-sheet { width: 100% !important; max-width: none !important; }
+}
+@media (max-width: 380px) {
+  body.expenses-page #allExpenses .all-expenses-sheet__header,
+  body.expenses-page #allExpenses .all-expenses-sheet__footer { padding-inline: 15px; }
+  body.expenses-page #allExpenses #allExpensesList { padding-inline: 15px !important; }
+  body.expenses-page #allExpenses .expense-ticket__destination-date .expense-ticket__date { padding-inline: .45rem; }
+  body.expenses-page #allExpenses .expense-ticket__destination-icon { width: 26px; height: 26px; flex-basis: 26px; }
+}
+html[data-theme="dark"] body.expenses-page #allExpenses .all-expenses-sheet { background: #151d29; }
+html[data-theme="dark"] body.expenses-page #allExpenses .all-expenses-sheet__header .ex-modal-title { color: #f8fafc; }
+/* Existing All Expenses ticket surfaces stay white in both themes. */
+html[data-theme="dark"] body.expenses-page #allExpenses .expense-ticket__destination-copy strong { color: #111827; }
+html[data-theme="dark"] body.expenses-page #allExpenses .expense-ticket__destination-label { color: #64748b; }
+html[data-theme="dark"] body.expenses-page #allExpenses .expense-ticket__destination-date .expense-ticket__date { background: #f8fafc; color: #475569; border-color: #e2e8f0; }
+html[data-theme="dark"] body.expenses-page #allExpenses .next-all-expenses-close { background: #263447; }
