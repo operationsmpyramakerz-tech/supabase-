@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { expenseOrderLinks, expenseReasonExportPayload } from '../lib/expense-export-order-links.mjs';
+import { expenseShotEntries, expenseScreenshotShareLink } from '../lib/expense-public-share.mjs';
+const shareOptions = { secret: 'expense-test-secret-32-characters-minimum' };
 import { selectAuthorizedExpenseExportRows } from '../lib/expense-export-input-policy.mjs';
 
 const source = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
@@ -77,7 +79,7 @@ async function runExport(items, includeDestination) {
   const exp = source('../lib/expense-export-service.js');
   const helpers = exp.slice(exp.indexOf('function text('), exp.indexOf('function collectPdfBuffer('));
   const body = exp.slice(exp.indexOf('function numberFormat('), exp.indexOf('export async function renderExpenseExport('));
-  const render = vm.runInNewContext(helpers + body + '\nrenderExpenseExcel;', { ExcelJS, expenseOrderLinks, expenseReasonExportPayload, Date, Buffer });
+  const render = vm.runInNewContext(helpers + body + '\nrenderExpenseExcel;', { ExcelJS, expenseShotEntries, expenseScreenshotShareLink: (item, index, base) => expenseScreenshotShareLink(item, index, base, shareOptions), expenseOrderLinks: (item, base) => expenseOrderLinks(item, base, shareOptions), expenseReasonExportPayload: (item, base) => expenseReasonExportPayload(item, base, shareOptions), Date, Buffer });
   await render({ userName: 'Expenses — Test', baseUrl: 'https://erp.test', items, includeDestination });
   return ExcelJS.sheets[0];
 }
@@ -85,7 +87,7 @@ function columnFor(sheet, label) { return [...sheet.getRow(8).cells].find(([, ce
 
 test('users export adds destination without shifting order, amount or screenshot data incorrectly', async () => {
   const sheet = await runExport([
-    row('1', 'a', 'مدرسة ACIC', 137.5, { reason: 'ORD-129, ORD-130', orders: [{ orderId: 'ORD-129' }, { orderId: 'ORD-130' }], from: 'A', to: 'B', kilometer: 5, screenshots: [{ name: 'receipt.jpg', url: 'https://erp.test/receipt' }] }),
+    row('1', 'a', 'مدرسة ACIC', 137.5, { reason: 'ORD-129, ORD-130', ordersRaw: 'row-129,row-130', orders: [{ orderId: 'ORD-129' }, { orderId: 'ORD-130' }], from: 'A', to: 'B', kilometer: 5, screenshots: [{ name: 'receipt.jpg', url: 'https://erp.test/receipt' }] }),
     row('2', '', '', 0, { cashIn: 600 }),
   ], true);
   const cell = (r, label) => sheet.getRow(r).getCell(columnFor(sheet, label));
@@ -101,7 +103,7 @@ test('users export adds destination without shifting order, amount or screenshot
   assert.equal(cell(9, 'Cash Out').font.color.argb, 'FFDC2626');
   assert.equal(cell(10, 'Cash In').value, 600);
   assert.equal(cell(10, 'Cash In').font.color.argb, 'FF16A34A');
-  assert.match(cell(9, 'Screenshot 1').value.hyperlink, /expenseId=1&index=0/);
+  assert.match(cell(9, 'Screenshot 1').value.hyperlink, /expenseId=1&target=0&token=/);
   assert.equal(sheet.getCell('B4').value, 600);
   assert.equal(sheet.getCell('B5').value, 137.5);
   assert.equal(sheet.getCell('B6').value, 462.5);

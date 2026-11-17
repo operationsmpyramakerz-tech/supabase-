@@ -3,6 +3,7 @@ import "server-only";
 import PDFDocument from "pdfkit";
 import ExcelJS from "exceljs";
 import { expenseOrderLinks, expenseReasonExportPayload } from "./expense-export-order-links.mjs";
+import { expenseShotEntries, expenseScreenshotShareLink } from "./expense-public-share.mjs";
 import pdfPageNumbersModule from "./pdfPageNumbers";
 import pdfHeaderModule from "./pdfHeader";
 import pdfArabicSupportModule from "./pdfArabicSupport";
@@ -46,23 +47,7 @@ function formatDisplayDate(dateStr) {
   return parsed.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "2-digit" });
 }
 
-function expenseScreenshotEntries(item = {}) {
-  const shots = Array.isArray(item?.screenshots) ? item.screenshots : [];
-  const normalized = shots
-    .map((shot, index) => ({
-      name: text(shot?.name || shot?.filename || shot?.fileName) || `Screenshot ${index + 1}`,
-      url: text(shot?.url || shot?.href || shot?.publicUrl || shot?.public_url || shot?.signedUrl || shot?.signedURL || shot?.downloadUrl || shot?.downloadURL),
-    }))
-    .filter((shot) => shot.url);
-  if (normalized.length) return normalized;
-
-  const fallbackUrl = text(item?.screenshotUrl || item?.screenshot_url);
-  if (!fallbackUrl) return [];
-  return [{
-    name: text(item?.screenshotName || item?.screenshot_name) || "Screenshot",
-    url: fallbackUrl,
-  }];
-}
+function expenseScreenshotEntries(item = {}) { return expenseShotEntries(item); }
 
 function collectPdfBuffer(doc) {
   return new Promise((resolve, reject) => {
@@ -386,16 +371,12 @@ async function renderExpenseExcel({ userName, items, dateFrom, dateTo, baseUrl, 
       return order.hyperlink ? { text: order.text, hyperlink: order.hyperlink } : order.text;
     });
     const screenshots = expenseScreenshotEntries(item);
-    const expenseId = text(item?.id);
     const screenshotValues = Array.from({ length: maxScreenshotCount }, (_, index) => {
       const shot = screenshots[index] || null;
       if (!shot) return "";
-      const rawUrl = text(shot.url);
-      const hyperlink = expenseId
-        ? `${text(baseUrl).replace(/\/+$/, "")}/next/api/expenses/screenshot-direct?expenseId=${encodeURIComponent(expenseId)}&index=${index}`
-        : rawUrl;
-      if (!hyperlink) return "";
-      return { text: text(shot.name) || `Screenshot ${index + 1}`, hyperlink };
+      const hyperlink = expenseScreenshotShareLink(item, index, baseUrl);
+      const label = text(shot.name) || `Screenshot ${index + 1}`;
+      return hyperlink ? { text: label, hyperlink } : label;
     });
 
     const row = sheet.addRow([

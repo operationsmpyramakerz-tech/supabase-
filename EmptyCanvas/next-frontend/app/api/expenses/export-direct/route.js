@@ -29,7 +29,10 @@ function requiredPages(scope = "") {
 
 function requestOrigin(request) {
   try {
-    return new URL(request.url).origin;
+    const configured = text(process.env.ERP_EXPENSE_SHARE_PUBLIC_URL);
+    const url = new URL(configured || request.url);
+    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) return "";
+    return url.origin;
   } catch {
     return "";
   }

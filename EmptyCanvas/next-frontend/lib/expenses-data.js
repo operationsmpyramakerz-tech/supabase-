@@ -1188,6 +1188,14 @@ export async function deleteExpenseForAdmin(expenseId) {
 }
 
 
+// Internal lookup for the dedicated capability endpoint. The caller must
+// validate the signed identity before lookup and the stored fingerprint after it.
+export async function expenseForPublicShare(id) {
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(String(id || ""))) return null;
+  const row = await selectById(expensesTable(), id);
+  return row ? serializeExpense(row) : null;
+}
+
 export async function expenseScreenshotForId(expenseId, index = 0) {
   const id = text(expenseId);
   if (!id) {

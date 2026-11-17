@@ -6,45 +6,37 @@ import { expenseOrderLinks, expenseReasonExportPayload } from '../lib/expense-ex
 const source = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 const base = 'https://erp.test';
 
-test('two linked orders keep both labels and receive independent tracking links', () => {
-  const item = {
-    reason: 'ORD-147, ORD-138', ordersRaw: '1001,1002,2001',
-    orders: [{ orderId: 'ORD-147' }, { orderId: 'ORD-138' }],
-  };
-  const links = expenseOrderLinks(item, base);
-  assert.deepEqual(links.map(({ text }) => text), ['ORD-147', 'ORD-138']);
-  assert.equal(links[0].hyperlink, `${base}/next/orders/tracking?groupId=ord%3A147`);
-  assert.equal(links[1].hyperlink, `${base}/next/orders/tracking?groupId=ord%3A138`);
-  const reason = expenseReasonExportPayload(item, base);
+const options = { secret: 'expense-test-secret-32-characters-minimum' };
+const linked = (extra = {}) => ({ id:'expense-1', cashOut:100, reason:'ORD-147, ORD-138', ordersRaw:'1001,1002,2001', orders:[{orderId:'ORD-147'}, {orderId:'ORD-138'}], ...extra });
+const parse = href => new URL(href).searchParams;
+test('two linked orders keep both labels and receive independent signed public links', () => {
+  const item = linked();
+  const links = expenseOrderLinks(item, base, options);
+  assert.deepEqual(links.map(x=>x.text), ['ORD-147','ORD-138']);
+  assert.equal(new URL(links[0].hyperlink).pathname, '/next/share/expenses/order');
+  assert.equal(parse(links[0].hyperlink).get('target'), '147');
+  assert.equal(parse(links[1].hyperlink).get('target'), '138');
+  const reason = expenseReasonExportPayload(item, base, options);
   assert.equal(reason.text, 'ORD-147, ORD-138');
-  assert.equal(reason.hyperlink, `${base}/next/orders/receipt-viewer?ids=1001%2C1002%2C2001`);
+  assert.equal(parse(reason.hyperlink).get('target'), 'all');
+  assert.notEqual(parse(reason.hyperlink).get('token'), parse(links[0].hyperlink).get('token'));
 });
-
 test('duplicate component rows never duplicate exported order columns', () => {
-  const item = { orders: [{ orderId: 'ORD-147' }, { orderId: 'ORD-147' }, { orderId: 'ORD-138' }] };
-  assert.deepEqual(expenseOrderLinks(item, base).map((x) => x.text), ['ORD-147', 'ORD-138']);
+  assert.deepEqual(expenseOrderLinks(linked({orders:[{orderId:'ORD-147'},{orderId:'ORD-147'},{orderId:'ORD-138'}]}), base, options).map(x=>x.text), ['ORD-147','ORD-138']);
 });
-
-test('single legacy order and manual reason keep their original meaning', () => {
-  const one = expenseReasonExportPayload({ reason: 'ORD-123', orders: [{ orderId: 'ORD-123' }] }, base);
-  assert.equal(one.text, 'ORD-123');
-  assert.equal(one.hyperlink, `${base}/next/orders/tracking?groupId=ord%3A123`);
-  const manual = expenseReasonExportPayload({ reason: 'Printer repair - £75', orders: [{ orderId: 'Other reason' }] }, base);
-  assert.deepEqual(manual, { text: 'Printer repair - £75', hyperlink: '', links: [] });
+test('legacy label without verified component IDs stays text and manual reason is preserved', () => {
+  const one = expenseReasonExportPayload(linked({reason:'ORD-123',orders:[{orderId:'ORD-123'}],ordersRaw:''}), base, options);
+  assert.equal(one.text, 'ORD-123'); assert.equal(one.hyperlink, '');
+  assert.deepEqual(expenseReasonExportPayload({cashOut:75,reason:'Printer repair - £75',orders:[{orderId:'Other reason'}]},base,options), {text:'Printer repair - £75',hyperlink:'',links:[]});
 });
-
 test('unsafe or missing URL origins never create arbitrary hyperlinks', () => {
-  const item = { orders: [{ orderId: 'ORD-147' }], ordersRaw: '1001' };
-  assert.equal(expenseOrderLinks(item, 'javascript:alert(1)')[0].hyperlink, '');
-  assert.equal(expenseReasonExportPayload(item, 'javascript:alert(1)').hyperlink, '');
+  assert.equal(expenseOrderLinks(linked(), 'javascript:alert(1)', options)[0].hyperlink, '');
+  assert.equal(expenseReasonExportPayload(linked(), 'javascript:alert(1)', options).hyperlink, '');
 });
-
-test('reason keeps links for each order when component-row IDs are invalid or absent', () => {
-  const item = { orders: [{ orderId: 'ORD-147' }, { orderId: 'ORD-138' }], ordersRaw: '1001;drop' };
-  const reason = expenseReasonExportPayload(item, base);
-  assert.equal(reason.text, 'ORD-147, ORD-138');
-  assert.equal(reason.hyperlink, `${base}/next/orders/tracking?groupId=ord%3A147`);
-  assert.equal(reason.links.length, 2);
+test('invalid raw relation IDs never issue public order capabilities', () => {
+  const reason = expenseReasonExportPayload(linked({ordersRaw:'1001;drop'}), base, options);
+  assert.equal(reason.text, 'ORD-147, ORD-138'); assert.equal(reason.hyperlink, '');
+  assert.equal(reason.links.length, 2); assert.ok(reason.links.every(x=>!x.hyperlink));
 });
 
 test('the picker uses the shared Operations Orders wrench, separate manual button, and compact icon removal', () => {

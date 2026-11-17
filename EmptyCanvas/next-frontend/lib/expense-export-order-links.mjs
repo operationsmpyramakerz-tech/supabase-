@@ -1,54 +1,17 @@
-// Pure helpers for user-expense Excel links. Each distinct order gets one
-// independent Excel hyperlink; Excel doesn't support several URLs in one cell.
-const text = (value) => String(value ?? "").trim();
-
-function originFor(baseUrl) {
-  try {
-    const url = new URL(baseUrl);
-    return (url.protocol === "https:" || url.protocol === "http:") ? url.origin : "";
-  } catch { return ""; }
+import { expenseOrderNumbers, expenseOrderReference, expenseShareUrl } from './expense-public-share.mjs';
+const text = value => String(value ?? '').trim();
+// Each order column points to its own public detail page; Reason points to
+// the combined detail page. The signed target cannot be changed by recipients.
+export function expenseOrderLinks(item = {}, baseUrl = '', options) {
+  const reference = expenseOrderReference(item);
+  return expenseOrderNumbers(item).map(number => ({
+    text: `ORD-${number}`,
+    hyperlink: reference ? expenseShareUrl(baseUrl, item.id, 'order', number, reference.fingerprint, options) : '',
+  }));
 }
-
-function orderNumber(value) {
-  const raw = text(value);
-  const match = raw.match(/^ORD[-\s]?(\d+)$/i) || raw.match(/^ord:(\d+)$/i);
-  return match ? match[1] : "";
-}
-
-export function expenseOrderLinks(item = {}, baseUrl = "") {
-  const origin = originFor(baseUrl);
-  const orders = Array.isArray(item?.orders) ? item.orders : [];
-  const seen = new Set();
-  const links = [];
-  for (const order of orders) {
-    const number = orderNumber(order?.orderId || order?.label);
-    if (!number || seen.has(number)) continue;
-    seen.add(number);
-    links.push({
-      text: `ORD-${number}`,
-      hyperlink: origin ? `${origin}/next/orders/tracking?groupId=${encodeURIComponent(`ord:${number}`)}` : "",
-    });
-  }
-  return links;
-}
-
-export function expenseReasonExportPayload(item = {}, baseUrl = "") {
-  const links = expenseOrderLinks(item, baseUrl);
-  const fallback = text(item?.reason);
-  if (!links.length) return { text: fallback, hyperlink: "", links: [] };
-
-  // orders_raw is server-read data; for Cash Out it holds the physical order
-  // component IDs (not order numbers). Open all receipts with a single link.
-  const rawIds = text(item?.ordersRaw).split(",").map(text).filter(Boolean);
-  const ids = [...new Set(rawIds)];
-  const safeIds = ids.length <= 200 && ids.every((id) => /^[A-Za-z0-9_-]{1,128}$/.test(id));
-  const origin = originFor(baseUrl);
-  const combined = origin && safeIds && ids.length
-    ? `${origin}/next/orders/receipt-viewer?ids=${encodeURIComponent(ids.join(","))}`
-    : "";
-  return {
-    text: links.map((entry) => entry.text).join(", "),
-    hyperlink: combined || links[0]?.hyperlink || "",
-    links,
-  };
+export function expenseReasonExportPayload(item = {}, baseUrl = '', options) {
+  const links = expenseOrderLinks(item, baseUrl, options);
+  const reference = expenseOrderReference(item);
+  if (!links.length) return { text: text(item.reason), hyperlink: '', links: [] };
+  return { text: links.map(entry => entry.text).join(', '), hyperlink: reference ? expenseShareUrl(baseUrl, item.id, 'order', 'all', reference.fingerprint, options) : '', links };
 }
