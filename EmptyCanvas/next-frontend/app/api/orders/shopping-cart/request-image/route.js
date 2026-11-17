@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { getLegacyAccountGate } from "../../../../../lib/products-auth";
-import { featureGate } from "../../../../../lib/feature-permissions-server";
+import { orderActionGate } from "../../../../../lib/current-shopping-action-permissions.mjs";
 import { shoppingSourceAllowed } from "../../../../../lib/feature-permissions-registry";
 import { createProductImageUploadTicket } from "../../../../../lib/products-service";
 
 export const dynamic = "force-dynamic";
 export async function POST(request) {
-  const gate = featureGate(await getLegacyAccountGate(["Create New Order"]), "orders.shopping.submit");
+  const gate = orderActionGate(await getLegacyAccountGate(["Create New Order"]), "orders.shopping.submit");
   if (!gate.ok) return NextResponse.json({ ok: false, error: gate.error }, { status: gate.status || 403 });
   if (!shoppingSourceAllowed(gate.account, "components")) {
     return NextResponse.json({ ok: false, error: "Components permission is required to request a new product." }, { status: 403 });

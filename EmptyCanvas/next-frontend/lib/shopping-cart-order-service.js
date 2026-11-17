@@ -18,9 +18,11 @@ import { requireOrderRequestMetadata } from "./order-request-metadata.mjs";
 import { ensureProductAdditionRequestsTable, createProductAdditionRequests, cancelProductAdditionRequestsForOrderRows } from "./product-addition-requests-service";
 import { listTeamMembersLite } from "./team-members-service";
 import { loadRawOrderRowsByIds } from "./order-details-data";
-import { directPageMutationAccess, verifyPageAdminPasswordDirect } from "./order-action-auth";
+import { orderActionAllowed } from "./current-shopping-action-permissions.mjs";
 import { invalidateLegacyOperationsCaches } from "./operations-orders-data";
-import { resolveOrderScope, visibleOrderRow } from "./order-data-scope";
+import { resolveOrderScope } from "./order-data-scope";
+import { canViewMyOrderRow, legacyMyOrderOwnerMatches } from "./my-orders-owner-visibility.mjs";
+import { isCompleteOrderSelection } from "./order-action-selection.mjs";
 
 const EDIT_TOKEN_TTL_MS = 30 * 60 * 1000;
 const UNDO_TOKEN_TTL_MS = 30 * 1000;
@@ -34,10 +36,6 @@ function text(value) {
 
 function token(value) {
   return text(value).normalize("NFKC").toLowerCase().replace(/[^a-z0-9]/g, "");
-}
-
-function identityKey(value) {
-  return text(value).normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
 }
 
 function numberOrNull(value) {
@@ -81,30 +79,13 @@ function accountUsername(account = {}) {
   return text(account?.username || account?.name);
 }
 
-function sameOwnerName(left, right) {
-  const a = token(left);
-  const b = token(right);
-  if (!a || !b) return false;
-  return a === b || a.includes(b) || b.includes(a);
-}
-
 function rowOwnedByAccount(row = {}, account = {}) {
-  const memberId = accountMemberId(account);
-  const username = accountUsername(account);
-  const ownerId = text(valueFor(row, ["team_member_id", "team_members_id", "created_by_id", "owner_id"]));
-  const ownerName = text(valueFor(row, ["team_member_name", "Teams Members", "teams_members", "created_by_name", "created_by", "Created By"]));
-
-  if (ownerId && memberId) return ownerId === memberId;
-  if (ownerName && username) return sameOwnerName(ownerName, username);
-  // Historical imported rows did not always contain an owner id/name. The
-  // Current Orders read path already treats those rows as visible, so keep the
-  // same compatibility behavior here rather than making them impossible to edit.
-  return !ownerId && !ownerName;
+  return legacyMyOrderOwnerMatches(row, account);
 }
 
 function cleanIds(value = []) {
   const source = Array.isArray(value) ? value : [value];
-  return [...new Set(source.map((id) => text(id)).filter(Boolean))].slice(0, 500);
+  return [...new Set(source.map((id) => text(id)).filter(Boolean))];
 }
 
 function directError(message, status = 500, mutationStarted = false) {
@@ -157,7 +138,7 @@ function verifySignedPayload(signedValue = "", expectedScope = "", account = {})
   }
 
   const identity = text(payload?.uid);
-  const currentIdentity = identityKey(accountUsername(account)) || accountMemberId(account);
+  const currentIdentity = accountMemberId(account);
   if (!identity || !currentIdentity || identity !== currentIdentity) {
     throw directError("This order action does not belong to the current account.", 403);
   }
@@ -283,15 +264,21 @@ function rowResponse(row = {}, productId = "") {
   };
 }
 
-async function verifyOwnedRows(ids = [], account = {}) {
+async function verifyOwnedRows(ids = [], account = {}, { undo = false } = {}) {
   const rows = await loadRawOrderRowsByIds(ids);
   if (!Array.isArray(rows) || rows.length !== ids.length) throw directError("Orders not found.", 404);
   const byId = new Map(rows.map((row) => [text(row?.id), row]));
   const ordered = ids.map((id) => byId.get(id)).filter(Boolean);
   if (ordered.length !== ids.length) throw directError("Orders not found.", 404);
-  const scoped = await resolveOrderScope(account, "orders.my.edit");
-  if (ordered.some(row => scoped ? !visibleOrderRow(row, scoped) : !rowOwnedByAccount(row, account))) {
+  const scoped = undo ? null : await resolveOrderScope(account, "orders.my.edit");
+  if (ordered.some(row => undo ? !rowOwnedByAccount(row, account) : !canViewMyOrderRow(row, account, scoped))) {
     throw directError("Order is outside your permitted edit scope.", 403);
+  }
+  if (!undo) {
+    const numbers = [...new Set(ordered.map(row => text(row?.order_number)))];
+    if (numbers.length !== 1 || !/^\d+$/.test(numbers[0])) throw directError("Select one complete order.", 409);
+    const allRows = await select(orderTable(), { select: "id,order_number", order_number: `eq.${numbers[0]}`, limit: "501" });
+    if (!isCompleteOrderSelection(ids, ordered, allRows, { maxRows: 501 })) throw directError("Order components have changed. Refresh and select the complete order.", 409);
   }
   return ordered;
 }
@@ -299,22 +286,13 @@ async function verifyOwnedRows(ids = [], account = {}) {
 export async function initializeCurrentOrderEditDirect({
   account = {},
   orderIds = [],
-  adminPassword = "",
 } = {}) {
   if (!isSupabaseConfigured()) return null;
-  const access = directPageMutationAccess(account, "Current Orders");
-  if (access === null) return null;
-  if (!access) throw directError("Edit access is required for this action.", 403);
+  if (!orderActionAllowed(account, "orders.my.edit")) throw directError("Permission orders.my.edit is not allowed.", 403);
 
   const ids = cleanIds(orderIds);
-  if (!ids.length) throw directError("orderIds required", 400);
+  if (!ids.length || ids.length > 500) throw directError("Invalid order component count.", 400);
   if (!ids.every((id) => /^\d+$/.test(id))) return null;
-
-  const password = text(adminPassword);
-  if (!password) throw directError("adminPassword required", 400);
-  const passwordOk = await verifyPageAdminPasswordDirect(account, password, "Current Orders");
-  if (passwordOk === null) return null;
-  if (!passwordOk) throw directError("Invalid admin password", 401);
 
   const [rows, products] = await Promise.all([
     verifyOwnedRows(ids, account),
@@ -351,7 +329,7 @@ export async function initializeCurrentOrderEditDirect({
   const reason = text(draft.find((item) => item.reason)?.reason);
   const priorityLevel = text(valueFor(rows[0], ["priority_level", "Priority Level"])) || "Normal";
   const requestedDeliveryDate = text(valueFor(rows[0], ["requested_delivery_date", "Requested Delivery Date"])).slice(0, 10);
-  const uid = identityKey(accountUsername(account)) || accountMemberId(account);
+  const uid = accountMemberId(account);
   const editToken = signPayload({
     scope: "edit-order",
     uid,
@@ -450,7 +428,7 @@ async function createNewOrderDirect({ account = {}, products = [], orderType = "
   await invalidateLegacyOperationsCaches(account).catch(() => {});
 
   const items = createdRows.map((row, index) => rowResponse(row, cleanProducts[index]?.customProduct ? "" : cleanProducts[index]?.id));
-  const uid = identityKey(accountUsername(account)) || accountMemberId(account);
+  const uid = accountMemberId(account);
   const ids = items.map((item) => item.id).filter(Boolean);
   const undoToken = signPayload({
     scope: "undo-order",
@@ -480,7 +458,7 @@ async function createNewOrderDirect({ account = {}, products = [], orderType = "
 async function updateExistingOrderDirect({ account = {}, products = [], orderType = "", priorityLevel = "", requestedDeliveryDate = null, editToken = "" } = {}) {
   const signed = verifySignedPayload(editToken, "edit-order", account);
   const ids = cleanIds(signed?.ids);
-  if (!ids.length || !ids.every((id) => /^\d+$/.test(id))) throw directError("Edit session expired. Please reopen the order and try again.", 400);
+  if (!ids.length || ids.length > 500 || !ids.every((id) => /^\d+$/.test(id))) throw directError("Edit session expired. Please reopen the order and try again.", 400);
 
   const rows = await verifyOwnedRows(ids, account);
   const finalType = canonicalOrderType(orderType || signed?.orderType || rawOrderType(rows[0]));
@@ -601,6 +579,8 @@ export async function submitShoppingCartOrderDirect({
   editMode = false,
   editToken = "",
 } = {}) {
+  const key = editMode ? "orders.shopping.edit_submit" : "orders.shopping.submit";
+  if (!orderActionAllowed(account, key) || (editMode && !orderActionAllowed(account, "orders.my.edit"))) throw directError("Order submission is not permitted.", 403);
   if (!isSupabaseConfigured()) return null;
   if (editMode) {
     if (!text(editToken)) return null;
@@ -610,11 +590,12 @@ export async function submitShoppingCartOrderDirect({
 }
 
 export async function undoShoppingCartOrderDirect({ account = {}, undoToken = "" } = {}) {
+  if (!orderActionAllowed(account, "orders.shopping.undo")) throw directError("Permission orders.shopping.undo is not allowed.", 403);
   if (!isSupabaseConfigured() || !text(undoToken)) return null;
   const signed = verifySignedPayload(undoToken, "undo-order", account);
   const ids = cleanIds(signed?.ids);
-  if (!ids.length || !ids.every((id) => /^\d+$/.test(id))) throw directError("This order is no longer available to undo.", 404);
-  await verifyOwnedRows(ids, account);
+  if (!ids.length || ids.length > 500 || !ids.every((id) => /^\d+$/.test(id))) throw directError("This order is no longer available to undo.", 404);
+  await verifyOwnedRows(ids, account, { undo: true });
 
   let deleted;
   try {

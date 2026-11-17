@@ -27,10 +27,11 @@ function currentHarness(rows, { changedRows = null, savedRows = null, atomic = f
       if (atomicError) throw atomicError;
       return { ok: true, action, affected: ids.length };
     },
-    directPageMutationAccess: () => true,
+    orderActionAllowed: () => true,
+    resolveOrderScope: async () => ({ scope: "all" }),
+    canViewMyOrderRow: () => true,
     cleanCurrentActionIds: ids => ids.map(text),
     isSupabaseConfigured: () => true,
-    verifyPageAdminPasswordDirect: async () => true,
     loadRawOrderRowsByIds: async () => rows,
     updateByIds: async (_table, ids, data) => {
       calls.updates++;
@@ -50,40 +51,40 @@ function currentHarness(rows, { changedRows = null, savedRows = null, atomic = f
 
 test('Current Orders cannot re-archive already archived components', async () => {
   const { run, calls } = currentHarness([{ id: '1', status: 'Archive' }]);
-  await assert.rejects(run({ action: 'archive', orderIds: ['1'], adminPassword: 'p' }), { status: 409 });
+  await assert.rejects(run({ action: 'archive', orderIds: ['1'] }), { status: 409 });
   assert.equal(calls.updates, 0);
 });
 
 test('Current Orders cannot restore non-archived or mixed-state orders', async () => {
   const { run, calls } = currentHarness([{ id: '1', status: 'Archive' }, { id: '2', status: 'Shipped' }]);
-  await assert.rejects(run({ action: 'unarchive', orderIds: ['1', '2'], adminPassword: 'p' }), { status: 409 });
+  await assert.rejects(run({ action: 'unarchive', orderIds: ['1', '2'] }), { status: 409 });
   assert.equal(calls.updates, 0);
 });
 
 test('Current Orders archive/restore updates exactly the selected components', async () => {
   const arch = currentHarness([{ id: '1', status: 'Shipping' }, { id: '2', status: 'Shipping' }]);
-  const result = await arch.run({ action: 'archive', orderIds: ['1', '2'], adminPassword: 'p' });
+  const result = await arch.run({ action: 'archive', orderIds: ['1', '2'] });
   assert.equal(result.status, 'Archive');
   assert.equal(arch.calls.updates, 1);
   const restore = currentHarness([{ id: '1', status: 'Archive' }, { id: '2', status: 'Archive' }]);
-  const restored = await restore.run({ action: 'unarchive', orderIds: ['1', '2'], adminPassword: 'p' });
+  const restored = await restore.run({ action: 'unarchive', orderIds: ['1', '2'] });
   assert.equal(restored.status, 'In progress');
 });
 
 test('Current Orders uses the atomic RPC, with NO fallback mutations when enabled', async () => {
   const arch = currentHarness([{ id: '1', status: 'Shipped' }], { atomic: true });
-  const result = await arch.run({ action: 'archive', orderIds: ['1'], adminPassword: 'p' });
+  const result = await arch.run({ action: 'archive', orderIds: ['1'] });
   assert.equal(result.source, 'supabase-atomic');
   assert.equal(arch.calls.atomics, 1);
   assert.equal(arch.calls.updates, 0);
   const del = currentHarness([{ id: '1', status: 'Shipped' }], { atomic: true });
-  assert.equal((await del.run({ action: 'delete', orderIds: ['1'], adminPassword: 'p' })).deleted, 1);
+  assert.equal((await del.run({ action: 'delete', orderIds: ['1'] })).deleted, 1);
   assert.equal(del.calls.atomics, 1);
   assert.equal(del.calls.deletes, 0);
   const unavailable = currentHarness([{ id: '1', status: 'Shipped' }], {
     atomic: true, atomicError: Object.assign(new Error('Missing RPC'), { status: 503 }),
   });
-  await assert.rejects(unavailable.run({ action: 'delete', orderIds: ['1'], adminPassword: 'p' }), { status: 503 });
+  await assert.rejects(unavailable.run({ action: 'delete', orderIds: ['1'] }), { status: 503 });
   assert.equal(unavailable.calls.deletes, 0);
 });
 
@@ -91,13 +92,13 @@ test('Current Orders rejects deleting only part of an existing order', async () 
   const { run, calls } = currentHarness([{ id: '1', status: 'Shipped' }], {
     savedRows: [{ id: '1', order_number: 117 }, { id: '2', order_number: 117 }],
   });
-  await assert.rejects(run({ action: 'delete', orderIds: ['1'], adminPassword: 'p' }), { status: 409 });
+  await assert.rejects(run({ action: 'delete', orderIds: ['1'] }), { status: 409 });
   assert.equal(calls.deletes, 0);
 });
 
 test('Current Orders reports partial updates instead of false success', async () => {
   const { run } = currentHarness([{ id: '1', status: 'Shipped' }, { id: '2', status: 'Shipped' }], { changedRows: [{ id: '1' }] });
-  await assert.rejects(run({ action: 'archive', orderIds: ['1', '2'], adminPassword: 'p' }), { status: 409 });
+  await assert.rejects(run({ action: 'archive', orderIds: ['1', '2'] }), { status: 409 });
 });
 
 function editHarness() {

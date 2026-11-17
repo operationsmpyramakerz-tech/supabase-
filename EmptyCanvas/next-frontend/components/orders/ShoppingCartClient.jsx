@@ -1110,7 +1110,7 @@ export default function ShoppingCartClient({
     await persistDraft([]);
   };
 
-  const canSubmit = editMode ? permissions.edit_submit !== false : permissions.submit !== false;
+  const canSubmit = editMode ? permissions.edit_submit === true : permissions.submit === true;
   const checkout = async () => {
     if (!canSubmit) return false;
     const cartMissing = !cart.length;
@@ -1418,7 +1418,7 @@ export default function ShoppingCartClient({
           key={submittedOrder.key}
           submission={submittedOrder}
           onDone={setSubmittedOrder}
-          onUndo={permissions.undo === false ? null : undoSubmittedOrder}
+          onUndo={permissions.undo === true ? undoSubmittedOrder : null}
         />
       ) : null}
       <Toast notice={notice} onClose={() => setNotice(null)} />

@@ -4,6 +4,7 @@ import ShoppingCartClient from "./ShoppingCartClient";
 import { getLegacyAccountGate } from "../../lib/products-auth";
 import { getDirectAccountGateFromSessionContext } from "../../lib/direct-session-account";
 import { featureGate } from "../../lib/feature-permissions-server";
+import { orderActionAllowed } from "../../lib/current-shopping-action-permissions.mjs";
 import { featureAllowed, shoppingSourceAllowed } from "../../lib/feature-permissions-registry";
 import { loadShoppingCartInitialData } from "../../lib/shopping-cart-data";
 
@@ -120,7 +121,7 @@ export default async function ShoppingCartPageServer({
     >
       <ShoppingCartClient
         key={`${flow}:${editMode ? "edit" : "new"}:${editKey}`}
-        permissions={{ ...Object.fromEntries(["view", "submit", "edit_submit", "undo"].map(action => [action, featureAllowed(gate.account, `orders.shopping.${action}`)])), components: shoppingSourceAllowed(gate.account, "components"), kits: shoppingSourceAllowed(gate.account, "kits") }}
+        permissions={{ ...Object.fromEntries(["view", "submit", "edit_submit", "undo"].map(action => [action, action === "view" ? featureAllowed(gate.account, `orders.shopping.${action}`) : orderActionAllowed(gate.account, `orders.shopping.${action}`) && (action !== "edit_submit" || orderActionAllowed(gate.account, "orders.my.edit"))])), components: shoppingSourceAllowed(gate.account, "components"), kits: shoppingSourceAllowed(gate.account, "kits") }}
         initialOrderTypes={initial.orderTypes}
         initialComponents={initial.components}
         initialTags={initial.tagsCatalog}

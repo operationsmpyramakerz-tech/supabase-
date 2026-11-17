@@ -42,35 +42,10 @@ const ORDER_TYPE_FILTERS = [
 ];
 
 const ACTIONS = {
-  edit: {
-    title: "Edit order",
-    description: "Enter admin password to edit this order.",
-    button: "Continue",
-    endpoint: `${DIRECT_API_BASE}/orders/current/edit-direct`,
-    icon: "edit-2",
-  },
-  archive: {
-    title: "Archive order",
-    description: "Enter admin password to move this order to the Archive tab.",
-    button: "Archive",
-    endpoint: `${DIRECT_API_BASE}/orders/current/mutations-direct`,
-    icon: "archive",
-  },
-  unarchive: {
-    title: "UnArchive order",
-    description: "Enter admin password to restore this order from Archive.",
-    button: "UnArchive",
-    endpoint: `${DIRECT_API_BASE}/orders/current/mutations-direct`,
-    icon: "rotate-ccw",
-  },
-  delete: {
-    title: "Delete order",
-    description: "Enter admin password to permanently delete this order.",
-    button: "Delete",
-    endpoint: `${DIRECT_API_BASE}/orders/current/mutations-direct`,
-    icon: "trash-2",
-    danger: true,
-  },
+  edit: { endpoint: `${DIRECT_API_BASE}/orders/current/edit-direct` },
+  archive: { endpoint: `${DIRECT_API_BASE}/orders/current/mutations-direct` },
+  unarchive: { endpoint: `${DIRECT_API_BASE}/orders/current/mutations-direct` },
+  delete: { endpoint: `${DIRECT_API_BASE}/orders/current/mutations-direct` },
 };
 
 const STATUS_COLORS = {
@@ -625,9 +600,9 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
   const completeTypes = useCompleteOrderTypeCounts({ endpoint: `${DIRECT_API_BASE}/orders/current/paged-summary`, tab, query });
   const [sortMode, setSortMode] = useState("latest");
   const [selected, setSelected] = useState(null);
-  const [actionState, setActionState] = useState(null);
   const [actionError, setActionError] = useState("");
   const [busy, setBusy] = useState(false);
+  const actionInFlight = useRef(false);
   const [notice, setNotice] = useState("");
   const [reasonView, setReasonView] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState(null);
@@ -829,10 +804,12 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
   }
 
   function closeOrderDetails() {
+    if (actionInFlight.current) return;
     cancelOrderOpenTimer("My Orders");
     ++openRequestRef.current; // prevent a late response from reopening a closed dialog
     setOpeningGroup(null);
     setSelected(null);
+    setActionError("");
   }
 
   function prefetchOrderDetails(group, hover = false) {
@@ -842,25 +819,24 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
   }
 
   function beginAction(action, group) {
-    if (permissions?.[action] === false || !orderCardAllows(scopePolicy, action, group)) return;
+    if (actionInFlight.current || !ACTIONS[action] || permissions?.[action] !== true || !orderCardAllows(scopePolicy, action, group)) return;
     setActionError("");
-    setActionState({ action, group });
+    if (action === "delete") {
+      setDeleteConfirm({ group });
+      return;
+    }
+    void submitAction(action, group);
   }
 
-  async function runProtectedAction(action, group, password) {
+  async function runProtectedAction(action, group) {
     const config = ACTIONS[action];
     const response = await fetch(config.endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ action, orderIds: group.orderIds, adminPassword: password }),
+      body: JSON.stringify({ action, orderIds: group.orderIds }),
     });
     const data = await response.json().catch(() => ({}));
-    if (response.status === 401) {
-      const error = new Error("Wrong password. Please try again.");
-      error.status = 401;
-      throw error;
-    }
     if (!response.ok) {
       const error = new Error(data?.error || `Failed to ${action} order.`);
       error.status = response.status;
@@ -869,21 +845,13 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
     return data;
   }
 
-  async function submitAction(password) {
-    if (!actionState) return;
-    const { action, group } = actionState;
+  async function submitAction(action, group) {
+    if (actionInFlight.current) return;
+    actionInFlight.current = true;
     setActionError("");
-
-    if (action === "delete") {
-      setActionState(null);
-      setDeleteConfirm({ group, password });
-      return;
-    }
-
     setBusy(true);
     try {
-      const data = await runProtectedAction(action, group, password);
-
+      const data = await runProtectedAction(action, group);
       if (action === "edit") {
         const editKey = writeEditTransfer(data, group);
         const editUrl = new URL("/next/orders/new", window.location.origin);
@@ -893,47 +861,29 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
         navigateWithinApp(`${editUrl.pathname}${editUrl.search}`);
         return;
       }
-
-      // The mutation already succeeded. A failed list refresh must not prompt
-      // a second archive/restore request (or report a false save error).
-      setActionState(null);
+      setDeleteConfirm(null);
       setSelected(null);
+      // A saved mutation is successful even when the subsequent list refresh fails.
       try {
         await refreshOrders();
       } catch (refreshError) {
         console.warn("[my-orders] Saved; list refresh deferred:", refreshError?.message || refreshError);
       }
-      setNotice(action === "archive" ? "Order moved to Archive." : "Order restored from Archive.");
+      setNotice(action === "delete" ? "Order deleted successfully." : action === "archive" ? "Order moved to Archive." : "Order restored from Archive.");
       window.setTimeout(() => setNotice(""), 3500);
     } catch (error) {
+      if (error?.status === 401) { window.location.href = "/login?next=/next/orders"; return; }
       setActionError(error?.message || "The action could not be completed.");
     } finally {
+      actionInFlight.current = false;
       setBusy(false);
     }
   }
 
-  async function confirmDelete() {
-    if (!deleteConfirm?.group) return;
-    const { group, password } = deleteConfirm;
-    setBusy(true);
-    try {
-      await runProtectedAction("delete", group, password);
-      setDeleteConfirm(null);
-      setSelected(null);
-      try {
-        await refreshOrders();
-      } catch (refreshError) {
-        console.warn("[my-orders] Deleted; list refresh deferred:", refreshError?.message || refreshError);
-      }
-      setNotice("Order deleted successfully.");
-      window.setTimeout(() => setNotice(""), 3500);
-    } catch (error) {
-      setDeleteConfirm(null);
-      setActionState({ action: "delete", group });
-      setActionError(error?.message || "The order could not be deleted.");
-    } finally {
-      setBusy(false);
-    }
+  function confirmDelete() {
+    const group = deleteConfirm?.group;
+    if (!group || permissions?.delete !== true || !orderCardAllows(scopePolicy, "delete", group)) return;
+    void submitAction("delete", group);
   }
 
   async function exportOrder(options, group) {
@@ -1029,7 +979,7 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
 
       {creatorPreview ? <CurrentOrderCreatorPopover creator={creatorPreview} onClose={() => setCreatorPreview(null)} /> : null}
       <OrderDetailsLoadingOverlay group={openingGroup} onCancel={closeOrderDetails} variant="current" />
-      {(selected || actionState || deleteConfirm || reasonView) ? (
+      {(selected || deleteConfirm || reasonView) ? (
         <CurrentOrdersHeavyModals
           selected={selected}
           tab={tab}
@@ -1040,12 +990,9 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
           onExport={exportOrder}
           permissions={selected ? Object.fromEntries(Object.entries(permissions || {}).map(([action, permitted]) =>
             [action, permitted && orderCardAllows(scopePolicy, action, selected)])) : permissions}
-          actionState={actionState}
           actionError={actionError}
-          onCancelAction={() => { if (!busy) { setActionState(null); setActionError(""); } }}
-          onSubmitAction={submitAction}
           deleteConfirm={deleteConfirm}
-          onCancelDelete={() => { if (!busy) setDeleteConfirm(null); }}
+          onCancelDelete={() => { if (!busy) { setDeleteConfirm(null); setActionError(""); } }}
           onConfirmDelete={confirmDelete}
           reasonView={reasonView}
           onCloseReason={() => setReasonView("")}

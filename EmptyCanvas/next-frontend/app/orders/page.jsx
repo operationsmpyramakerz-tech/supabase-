@@ -3,6 +3,7 @@ import AppShell from "../../components/AppShell";
 import CurrentOrdersClient from "../../components/orders/CurrentOrdersClient";
 import { getLegacyAccountGate } from "../../lib/products-auth";
 import { featureGate } from "../../lib/feature-permissions-server";
+import { orderActionAllowed } from "../../lib/current-shopping-action-permissions.mjs";
 import { featureAllowed } from "../../lib/feature-permissions-registry";
 import { getDirectAccountGateFromSessionContext } from "../../lib/direct-session-account";
 import { loadCurrentOrdersInitialPage } from "../../lib/current-orders-data";
@@ -85,7 +86,9 @@ export default async function CurrentOrdersPage() {
           ["view_details", "orders.my.view_details"], ["edit", "orders.my.edit"], ["archive", "orders.my.archive"],
           ["unarchive", "orders.my.unarchive"], ["delete", "orders.my.delete"],
           ["export", "orders.my.export"],
-        ].map(([action, key]) => [action, featureAllowed(gate.account, key)]))}
+        ].map(([action, key]) => [action, ["edit", "archive", "unarchive", "delete"].includes(action)
+          ? orderActionAllowed(gate.account, key)
+          : featureAllowed(gate.account, key)]))}
       />
     </AppShell>
   );

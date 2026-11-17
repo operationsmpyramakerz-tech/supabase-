@@ -33,7 +33,8 @@ test("2Q3 current orders archive, restore, delete check complete order and scope
   assert.ok(action.includes('isCompleteOrderSelection(ids, rows, savedRows)'));
   assert.ok(action.indexOf('isCompleteOrderSelection(ids, rows, savedRows)') < action.indexOf('await updateByIds(tableName(), ids'));
   assert.ok(action.indexOf('isCompleteOrderSelection(ids, rows, savedRows)') < action.indexOf('await deleteByIds(tableName(), ids'));
-  assert.ok(action.indexOf('visibleOrderRow(row, actionScope)') < action.indexOf('await updateByIds(tableName(), ids'));
+  assert.ok(action.indexOf('canViewMyOrderRow(row, account, actionScope)') >= 0);
+  assert.ok(action.indexOf('canViewMyOrderRow(row, account, actionScope)') < action.indexOf('await updateByIds(tableName(), ids'));
   assert.ok(action.includes('deleted.length !== ids.length'));
   assert.doesNotMatch(action, /cleanCurrentActionIds\([^)]*\)\.slice/);
   assert.ok(code.includes('if (!ids.length || ids.length > 1000)'));

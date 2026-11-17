@@ -50,9 +50,9 @@ test('2P4B scoped upload and receive writes cannot exceed the original module Vi
 test('2P4B receive status uses its own API permission and scoped data guard', () => {
   const api = read('app/api/orders/current/update-received-direct/route.js');
   const data = read('lib/current-orders-data.js');
-  assert.ok(api.includes('featureGate(gate, "orders.my.update_received")'));
+  assert.ok(api.includes('orderActionGate(gate, "orders.my.update_received")'));
   assert.ok(data.includes('resolveOrderScope(account, "orders.my.update_received")'));
-  assert.ok(api.indexOf('featureGate(gate, "orders.my.update_received")') < api.indexOf('markCurrentOrderReceivedDirect({'));
+  assert.ok(api.indexOf('orderActionGate(gate, "orders.my.update_received")') < api.indexOf('markCurrentOrderReceivedDirect({'));
 });
 
 test('2P4B Operations delivery enforces receipt upload before any mutation or external file upload', () => {

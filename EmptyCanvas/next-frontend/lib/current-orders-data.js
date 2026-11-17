@@ -11,8 +11,8 @@ import { consumeOrderSummaryWindows, loadOrderRowsByNumbers, scanOrderNumberCand
 import { applyOrderSearchPlan, canUseOrderSearchText, createOrderSearchPlan, noteOrderSearchTextError } from "./order-search-hotpath";
 import { canUseOrderCandidateRpc, loadOrderCandidateNumbersRpc, noteOrderCandidateRpcError } from "./order-candidate-rpc";
 import { measurePerformance, recordPerformanceSample } from "./performance-profiler";
-import { directPageMutationAccess, verifyPageAdminPasswordDirect } from "./order-action-auth";
-import { resolveOrderScope, visibleOrderRow } from "./order-data-scope";
+import { orderActionAllowed } from "./current-shopping-action-permissions.mjs";
+import { resolveOrderScope } from "./order-data-scope";
 import { canViewMyOrderRow } from "./my-orders-owner-visibility.mjs";
 import { isCompleteOrderSelection } from "./order-action-selection.mjs";
 
@@ -504,9 +504,7 @@ export async function loadCurrentOrderDetails({ account = {}, orderIds = [], tim
 }
 
 export async function markCurrentOrderReceivedDirect({ account = {}, orderPageId = "" } = {}) {
-  const access = directPageMutationAccess(account, "Current Orders");
-  if (access === null) return null;
-  if (!access) throw directCurrentMutationError("Edit access is required for this action.", 403);
+  if (!orderActionAllowed(account, "orders.my.update_received")) throw directCurrentMutationError("Permission orders.my.update_received is not allowed.", 403);
   if (!isSupabaseConfigured()) return null;
   const id = text(orderPageId);
   if (!id) throw directCurrentMutationError("Missing orderPageId", 400);
@@ -516,12 +514,10 @@ export async function markCurrentOrderReceivedDirect({ account = {}, orderPageId
   if (!Array.isArray(rows) || !rows.length) throw directCurrentMutationError("Order not found", 404);
 
   const receiveScope = await resolveOrderScope(account, "orders.my.update_received");
-  if (receiveScope && rows.some(row => !visibleOrderRow(row, receiveScope))) {
+  if (rows.some(row => !canViewMyOrderRow(row, account, receiveScope))) {
     throw directCurrentMutationError("Order is outside your permitted data scope.", 403);
   }
-  // Preserve the legacy endpoint semantics: Current Orders page access is the
-  // authorization boundary for marking a row Received. Do not add an owner-only
-  // restriction here because supervisors historically used this endpoint too.
+  // Without an explicit Own/Team/All scope, keep Current Orders ownership.
   await updateById(tableName(), id, { status: "Received" });
   await invalidateLegacyOperationsCaches(account).catch(() => {});
   return { success: true, status: "Received", source: "supabase-direct" };
@@ -543,27 +539,18 @@ export async function performCurrentOrdersProtectedAction({
   account = {},
   action = "",
   orderIds = [],
-  adminPassword = "",
 } = {}) {
   const cleanAction = text(action).toLowerCase().replace(/[_\s]+/g, "-");
   if (!["archive", "unarchive", "delete"].includes(cleanAction)) {
     throw directCurrentMutationError("Unsupported Current Orders action.", 400);
   }
 
-  const mutationAccess = directPageMutationAccess(account, "Current Orders");
-  if (mutationAccess === null) return null;
-  if (!mutationAccess) throw directCurrentMutationError("Edit access is required for this action.", 403);
+  if (!orderActionAllowed(account, `orders.my.${cleanAction}`)) throw directCurrentMutationError(`Permission orders.my.${cleanAction} is not allowed.`, 403);
 
   const ids = cleanCurrentActionIds(orderIds);
   if (!ids.length || ids.length > 1000) throw directCurrentMutationError("Invalid order component count", 400);
   // Legacy Notion ids remain on the compatibility path until the final cleanup.
   if (!ids.every((id) => /^\d+$/.test(id)) || !isSupabaseConfigured()) return null;
-
-  const pwd = text(adminPassword);
-  if (!pwd) throw directCurrentMutationError("adminPassword required", 400);
-  const passwordOk = await verifyPageAdminPasswordDirect(account, pwd, "Current Orders");
-  if (passwordOk === null) return null;
-  if (!passwordOk) throw directCurrentMutationError("Invalid admin password", 401);
 
   let rows;
   try {
@@ -587,13 +574,10 @@ export async function performCurrentOrdersProtectedAction({
   if (!isCompleteOrderSelection(ids, rows, savedRows)) {
     throw directCurrentMutationError("Order components have changed. Refresh and select the complete order.", 409);
   }
-  // Legacy actions run unchanged; scoped profiles require a second, explicit
-  // row-level authorization after loading the selected components.
-  if (account?.featureAccess?.grants?.["orders.my.__scoped"]?.allowed === true) {
-    const actionScope = await resolveOrderScope(account, `orders.my.${cleanAction}`);
-    if (actionScope && rows.some(row => !visibleOrderRow(row, actionScope))) {
-      throw directCurrentMutationError("Order is outside your permitted data scope.", 403);
-    }
+  // The explicit action grant does not grant access to another user's data.
+  const actionScope = await resolveOrderScope(account, `orders.my.${cleanAction}`);
+  if (rows.some(row => !canViewMyOrderRow(row, account, actionScope))) {
+    throw directCurrentMutationError("Order is outside your permitted data scope.", 403);
   }
 
   if (cleanAction === "archive" || cleanAction === "unarchive") {

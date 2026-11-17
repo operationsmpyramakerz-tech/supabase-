@@ -163,8 +163,8 @@ test('2Q4A: Operations and My Orders direct mutations check the requested action
   assert.ok(ops.indexOf('const permission = featureGate(') < ops.indexOf('await assertOrderIdsInScope('));
   assert.ok(ops.indexOf('await assertOrderIdsInScope(') < ops.indexOf('await performOperationsProtectedAction('));
   assert.ok(mine.includes('delete: "orders.my.delete"'));
-  assert.ok(mine.includes('const permission = featureGate(gate, requiredPermission)'));
-  assert.ok(mine.indexOf('const permission = featureGate(') < mine.indexOf('await performCurrentOrdersProtectedAction('));
+  assert.ok(mine.includes('const permission = orderActionGate(gate, requiredPermission)'));
+  assert.ok(mine.indexOf('const permission = orderActionGate(') < mine.indexOf('await performCurrentOrdersProtectedAction('));
 });
 
 test('2Q4A: feature grants refresh the profile version on gated requests before trusting cache', () => {

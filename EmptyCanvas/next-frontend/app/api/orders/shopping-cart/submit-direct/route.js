@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getLegacyAccountGate } from "../../../../../lib/products-auth";
-import { featureGate } from "../../../../../lib/feature-permissions-server";
+import { orderActionGate } from "../../../../../lib/current-shopping-action-permissions.mjs";
 import { shoppingSourceAllowed } from "../../../../../lib/feature-permissions-registry";
 import { assertShoppingCartSources } from "../../../../../lib/shopping-cart-source-policy.mjs";
 import { getKit } from "../../../../../lib/proposal-kit-service";
@@ -22,12 +22,12 @@ function noStore(payload, init = {}) {
 export async function POST(request) {
   const body = await request.json().catch(() => ({}));
   const key = body?.editMode === true ? "orders.shopping.edit_submit" : "orders.shopping.submit";
-  const gate = featureGate(await getLegacyAccountGate(["Create New Order"]), key);
+  const gate = orderActionGate(await getLegacyAccountGate(["Create New Order"]), key);
   if (!gate.ok) {
     return noStore({ success: false, message: gate.error || "Authentication required." }, { status: gate.status || 503 });
   }
   if (body?.editMode === true) {
-    const editPermission = featureGate(gate, "orders.my.edit");
+    const editPermission = orderActionGate(gate, "orders.my.edit");
     if (!editPermission.ok) return noStore({ success: false, message: editPermission.error }, { status: editPermission.status || 403 });
   }
 

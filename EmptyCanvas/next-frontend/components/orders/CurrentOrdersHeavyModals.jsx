@@ -9,43 +9,10 @@ import { groupOrderItems, OrderSortButton } from "./OrderGrouping";
 import ProgressiveOrderGroups from "./ProgressiveOrderGroups";
 import OrderComponentSearch, { matchesOrderComponentSearch } from "./OrderComponentSearch";
 import { MaintenanceComponentCards } from "./MaintenanceComponentCards";
-import { DeleteConfirmDialog, DeleteVerificationDialog } from "../shared/SystemDeleteDialogs";
+import { DeleteConfirmDialog } from "../shared/SystemDeleteDialogs";
 import { hasOutstandingOrderItem } from "../../lib/order-partial-delivery.mjs";
 
 const OrderDownloadModal = dynamic(() => import("./OrderDownloadModal"), { ssr: false });
-
-const DIRECT_API_BASE = "/next/api";
-const ACTIONS = {
-  edit: {
-    title: "Edit order",
-    description: "Enter admin password to edit this order.",
-    button: "Continue",
-    endpoint: `${DIRECT_API_BASE}/orders/current/edit-direct`,
-    icon: "edit-2",
-  },
-  archive: {
-    title: "Archive order",
-    description: "Enter admin password to move this order to the Archive tab.",
-    button: "Archive",
-    endpoint: `${DIRECT_API_BASE}/orders/current/mutations-direct`,
-    icon: "archive",
-  },
-  unarchive: {
-    title: "UnArchive order",
-    description: "Enter admin password to restore this order from Archive.",
-    button: "UnArchive",
-    endpoint: `${DIRECT_API_BASE}/orders/current/mutations-direct`,
-    icon: "rotate-ccw",
-  },
-  delete: {
-    title: "Delete order",
-    description: "Enter admin password to permanently delete this order.",
-    button: "Delete",
-    endpoint: `${DIRECT_API_BASE}/orders/current/mutations-direct`,
-    icon: "trash-2",
-    danger: true,
-  },
-};
 
 const STATUS_COLORS = {
   "under-supervision": { bg: "#FFEDD5", fg: "#9A3412", bd: "#FED7AA" },
@@ -292,7 +259,7 @@ function ProgressTrack({ value }) {
   );
 }
 
-function OrderDetailsModal({ group, tab, busy, onClose, onAction, onReason, onExport, permissions }) {
+function OrderDetailsModal({ group, tab, busy, onClose, onAction, onReason, onExport, permissions, actionError }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const [sortMode, setSortMode] = useState("product-tag");
   const [downloadOpen, setDownloadOpen] = useState(false);
@@ -401,20 +368,22 @@ function OrderDetailsModal({ group, tab, busy, onClose, onAction, onReason, onEx
       <div className="co-modal-dialog" role="dialog" aria-modal="true" aria-label={`${group.orderIdLabel} details`}>
         <span className="co-modal-type-badge" style={{ "--co-order-type-accent": typeMeta.accent, "--co-order-type-accent-dark": typeMeta.accentDark }} aria-hidden="true"><ClassicOrderIcon name={typeMeta.icon} /></span>
         {hasMenuAction ? <div className="co-modal-more" ref={moreRef}>
-          <button type="button" className="co-modal-more-btn" aria-label="Order actions" aria-haspopup="menu" aria-expanded={moreOpen} onClick={() => setMoreOpen((state) => !state)}><span className="co-modal-more-dots" aria-hidden="true">⋮</span></button>
+          <button type="button" className="co-modal-more-btn" aria-label="Order actions" aria-haspopup="menu" aria-expanded={moreOpen} disabled={busy} onClick={() => setMoreOpen((state) => !state)}><span className="co-modal-more-dots" aria-hidden="true">⋮</span></button>
           {moreOpen ? (
             <div className="co-modal-more-panel" role="menu" aria-label="Order actions">
-              {!archived && canUseMenu("edit") ? <button type="button" className="co-modal-more-item" onClick={() => menuAction("edit")}><ClassicOrderIcon name="edit-2" /><span>Edit</span></button> : null}
-              {!archived && canUseMenu("archive") ? <button type="button" className="co-modal-more-item" onClick={() => menuAction("archive")}><ClassicOrderIcon name="archive" /><span>Archive</span></button> : null}
-              {archived && canUseMenu("unarchive") ? <button type="button" className="co-modal-more-item" onClick={() => menuAction("unarchive")}><ClassicOrderIcon name="rotate-ccw" /><span>UnArchive</span></button> : null}
-              {canUseMenu("delete") ? <button type="button" className="co-modal-more-item co-modal-more-item--danger" onClick={() => menuAction("delete")}><ClassicOrderIcon name="trash-2" /><span>Delete</span></button> : null}
+              {!archived && canUseMenu("edit") ? <button type="button" className="co-modal-more-item" disabled={busy} onClick={() => menuAction("edit")}><ClassicOrderIcon name="edit-2" /><span>Edit</span></button> : null}
+              {!archived && canUseMenu("archive") ? <button type="button" className="co-modal-more-item" disabled={busy} onClick={() => menuAction("archive")}><ClassicOrderIcon name="archive" /><span>Archive</span></button> : null}
+              {archived && canUseMenu("unarchive") ? <button type="button" className="co-modal-more-item" disabled={busy} onClick={() => menuAction("unarchive")}><ClassicOrderIcon name="rotate-ccw" /><span>UnArchive</span></button> : null}
+              {canUseMenu("delete") ? <button type="button" className="co-modal-more-item co-modal-more-item--danger" disabled={busy} onClick={() => menuAction("delete")}><ClassicOrderIcon name="trash-2" /><span>Delete</span></button> : null}
             </div>
           ) : null}
         </div> : null}
-        <button type="button" className="co-modal-close" onClick={onClose} aria-label="Close order details" />
+        <button type="button" className="co-modal-close" disabled={busy} onClick={onClose} aria-label="Close order details" />
 
         <div className="co-modal-header"><div className="co-modal-head-left"><div className="co-modal-status">{headerTitle}</div><div className="co-modal-status-sub" hidden /></div></div>
         <div className="co-modal-scroll-region">
+        {busy ? <p role="status" className="co-submodal-error" style={{color:"inherit"}}>Working…</p> : null}
+        {actionError ? <p className="co-submodal-error" role="alert">{actionError}</p> : null}
         <div className="next-current-order-modal-summary" aria-label="Order summary">
           <div><span>Created Date</span><strong>{formatDate(orderCreatedDate(group))}</strong></div>
           <div><span>Delivery Date</span><strong>{formatDate(orderDeliveryDate(group))}</strong></div>
@@ -489,42 +458,6 @@ function OrderDetailsModal({ group, tab, busy, onClose, onAction, onReason, onEx
   );
 }
 
-function PasswordModal({ state, busy, error, onCancel, onSubmit }) {
-  const [password, setPassword] = useState("");
-  useEffect(() => setPassword(""), [state?.action, state?.group?.key]);
-  useEffect(() => {
-    if (!state) return undefined;
-    const onKey = (event) => { if (event.key === "Escape" && !busy) onCancel(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [state, busy, onCancel]);
-  if (!state) return null;
-  const config = ACTIONS[state.action];
-  if (state.action === "delete") {
-    return <DeleteVerificationDialog title={`Delete ${state.group?.orderIdLabel || "order"}`} password={password} onPasswordChange={setPassword} busy={busy} error={error} onCancel={onCancel} onSubmit={onSubmit} />;
-  }
-  return (
-    <div className="co-submodal-overlay is-open req-edit-modal" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onCancel(); }}>
-      <form className="co-submodal-dialog req-edit-dialog" role="dialog" aria-modal="true" onSubmit={(event) => { event.preventDefault(); onSubmit(password); }}>
-        <button type="button" className="co-submodal-close" onClick={onCancel} aria-label="Close admin password dialog" />
-        <div className="co-submodal-header req-edit-header">
-          <div className={`req-edit-icon ${config.danger ? "req-edit-icon--danger" : ""}`} aria-hidden="true"><ClassicOrderIcon name={config.icon || "shield"} /></div>
-          <div><div className="co-submodal-title">{config.title}</div><div className="co-submodal-sub">{config.description}</div></div>
-        </div>
-        <div className="co-submodal-body">
-          <label className="co-submodal-label" htmlFor="current-order-admin-password">Admin password</label>
-          <input id="current-order-admin-password" className="co-submodal-input" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoFocus autoComplete="current-password" placeholder="••••••••" disabled={busy} />
-          <div className="co-submodal-error" role="alert" aria-live="polite">{error}</div>
-        </div>
-        <div className="co-submodal-actions">
-          <button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button>
-          <button type="submit" className={`ro-action-btn ${config.danger ? "ro-action-btn--danger" : "ro-action-btn--dark"}`} disabled={busy || !password.trim()}>{busy ? "Working…" : config.button}</button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
 function RejectedReasonModal({ reason, onClose }) {
   if (!reason) return null;
   return (
@@ -539,13 +472,14 @@ function RejectedReasonModal({ reason, onClose }) {
   );
 }
 
-function DeleteConfirmationModal({ state, busy, onCancel, onConfirm }) {
+function DeleteConfirmationModal({ state, busy, error, onCancel, onConfirm }) {
   if (!state) return null;
   const count = state.group?.items?.length || state.group?.orderIds?.length || 1;
   return <DeleteConfirmDialog
     title={`Delete ${state.group?.orderIdLabel || "order"}?`}
     message={`You’re going to permanently delete this order and its ${count} saved component${count === 1 ? "" : "s"}. This action cannot be undone.`}
     busy={busy}
+    error={error}
     onCancel={onCancel}
     onConfirm={onConfirm}
   />;
@@ -560,10 +494,7 @@ export default function CurrentOrdersHeavyModals({
   onReason,
   onExport,
   permissions,
-  actionState,
   actionError,
-  onCancelAction,
-  onSubmitAction,
   deleteConfirm,
   onCancelDelete,
   onConfirmDelete,
@@ -581,16 +512,11 @@ export default function CurrentOrdersHeavyModals({
         onReason={onReason}
         onExport={onExport}
         permissions={permissions}
+        actionError={deleteConfirm ? "" : actionError}
       /> : null}
-      <PasswordModal
-        state={actionState}
-        busy={busy}
-        error={actionError}
-        onCancel={onCancelAction}
-        onSubmit={onSubmitAction}
-      />
       <DeleteConfirmationModal
         state={deleteConfirm}
+        error={actionError}
         busy={busy}
         onCancel={onCancelDelete}
         onConfirm={onConfirmDelete}

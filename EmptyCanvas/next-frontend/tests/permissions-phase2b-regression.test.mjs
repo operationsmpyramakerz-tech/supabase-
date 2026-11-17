@@ -22,20 +22,21 @@ test('My Orders routes independently check operations before writes', () => {
   for(const [action,key] of Object.entries({archive:'orders.my.archive',unarchive:'orders.my.unarchive',delete:'orders.my.delete'})) {
     assert.ok(mutation.includes(`${action}: "${key}"`));
   }
-  assert.ok(mutation.indexOf('const permission = featureGate') < mutation.indexOf('performCurrentOrdersProtectedAction({'));
+  assert.ok(mutation.indexOf('const permission = orderActionGate') < mutation.indexOf('performCurrentOrdersProtectedAction({'));
   const init = file('../app/api/orders/current/edit-direct/route.js');
-  assert.ok(init.includes('featureGate(gate, "orders.my.edit")'));
-  assert.ok(init.indexOf('featureGate(gate') < init.indexOf('initializeCurrentOrderEditDirect({'));
+  assert.ok(init.includes('orderActionGate(gate, "orders.my.edit")'));
+  assert.ok(init.indexOf('orderActionGate(gate') < init.indexOf('initializeCurrentOrderEditDirect({'));
   const submit = file('../app/api/orders/shopping-cart/submit-direct/route.js');
   assert.ok(submit.includes('if (body?.editMode === true)'));
-  assert.ok(submit.includes('featureGate(gate, "orders.my.edit")'));
+  assert.ok(submit.includes('orderActionGate(gate, "orders.my.edit")'));
   const received = file('../app/api/orders/current/update-received-direct/route.js');
-  assert.ok(received.includes('featureGate(gate, "orders.my.update_received")'));
+  assert.ok(received.includes('orderActionGate(gate, "orders.my.update_received")'));
 });
 
 test('My Orders client hides unauthorized destructive menu items and download', () => {
   const modal = file('../components/orders/CurrentOrdersHeavyModals.jsx');
-  for(const action of ['edit','archive','unarchive','delete','export']) assert.ok(modal.includes(`may("${action}")`));
+  for(const action of ['edit','archive','unarchive','delete']) assert.ok(modal.includes(`canUseMenu("${action}")`));
+  assert.ok(modal.includes('may("export")'));
   assert.ok(modal.includes('{hasMenuAction ? <div className="co-modal-more"'));
   assert.ok(file('../app/orders/page.jsx').includes('permissions={Object.fromEntries('));
 });

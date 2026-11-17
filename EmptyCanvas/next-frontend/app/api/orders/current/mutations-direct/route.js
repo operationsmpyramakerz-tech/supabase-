@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDirectAccountGate } from "../../../../../lib/products-auth";
-import { featureGate } from "../../../../../lib/feature-permissions-server";
+import { orderActionGate } from "../../../../../lib/current-shopping-action-permissions.mjs";
 import { performCurrentOrdersProtectedAction } from "../../../../../lib/current-orders-data";
 
 export const dynamic = "force-dynamic";
@@ -41,7 +41,7 @@ export async function POST(request) {
     unarchive: "orders.my.unarchive",
     delete: "orders.my.delete",
   }[action];
-  const permission = featureGate(gate, requiredPermission);
+  const permission = orderActionGate(gate, requiredPermission);
   if (!permission.ok) return noStore({ error: permission.error }, { status: permission.status || 403 });
 
   try {
@@ -49,7 +49,6 @@ export async function POST(request) {
       account: gate.account,
       action,
       orderIds: body?.orderIds,
-      adminPassword: body?.adminPassword,
     });
     if (result) return noStore(result);
     return noStore(
