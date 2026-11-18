@@ -1,4 +1,5 @@
 "use client";
+import {preparingDisplayCode} from "../../lib/preparing-display-code.mjs";
 import StageExportDialog from "./StageExportDialog";
 import {useEffect,useMemo,useRef,useState} from "react";
 import {createPortal} from "react-dom";
@@ -84,9 +85,9 @@ export default function ProjectProductionReceiving({projectId,projectName,allowe
  async function reload(){const v=await request(`/production?projectId=${encodeURIComponent(projectId)}&scope=${boxView ? "boxes" : "receiving"}`);setData(v);setLoading(false);return v;}
  useEffect(()=>{let active=true;request(`/production?projectId=${encodeURIComponent(projectId)}&scope=${boxView ? "boxes" : "receiving"}`).then(v=>{if(active){setData(v);setLoading(false);}}).catch(e=>{if(active){setError(e.message);setLoading(false);}});return()=>{active=false;};},[projectId]);
  const named=useMemo(()=>{const m=new Map();for(const h of [...data.handoffs].reverse()){if(!h.received_by_id&&!h.received_by_name)continue;if(!m.has(h.item_id))m.set(h.item_id,new Map());const person={id:h.received_by_id||h.received_by_name,name:h.received_by_name||"Recorded receiver",photoUrl:h.received_by_photo_url||""};m.get(h.item_id).set(person.id,person);}return m;},[data.handoffs]);
- const rows=useMemo(()=>data.items.map(r=>{const editors=[...(named.get(r.id)?.values()||[])];return {...r,name:r.product_name,code:r.product_id,required_qty:n(r.required_qty)*Math.max(1,n(data.schoolsCount)),receivedBy:editors.map(p=>p.name),editors};}),[data.items,data.schoolsCount,named]);
+ const rows=useMemo(()=>data.items.map(r=>{const editors=[...(named.get(r.id)?.values()||[])];return {...r,name:r.product_name,code:preparingDisplayCode(r),required_qty:n(r.required_qty)*Math.max(1,n(data.schoolsCount)),receivedBy:editors.map(p=>p.name),editors};}),[data.items,data.schoolsCount,named]);
  const kits=useMemo(()=>warehouseGroups(rows,data.kitGroups),[rows,data.kitGroups]);
- const shown=useMemo(()=>warehouseGroups(filterProductionReceivingRows(rows.filter(r=>`${r.name} ${r.code}`.toLowerCase().includes(search.toLowerCase())),filter),data.kitGroups),[rows,data.kitGroups,search,filter]);
+ const shown=useMemo(()=>warehouseGroups(filterProductionReceivingRows(rows.filter(r=>`${r.name} ${r.code} ${r.product_id}`.toLowerCase().includes(search.toLowerCase())),filter),data.kitGroups),[rows,data.kitGroups,search,filter]);
  const filterOptions=useMemo(()=>[
   {value:"available",label:"Available to Receive",hint:"Warehouse stock awaiting Operations",count:rows.filter(r=>n(r.availableToProduction)>0).length},
   {value:"not-received",label:"Not Received",hint:"No Operations handover recorded",count:rows.filter(r=>n(r.productionReceived)===0).length},

@@ -26,7 +26,7 @@ async function schoolRows(table,fields,id,order,maximum){
 export async function preparingReconciliation(schoolId){
  serviceOnly();const id=(await school(schoolId)).id;
  const [components,shipments,lines,returns,replacements,audit]=await Promise.all([
-  schoolRows("erp_preparing_components","id,school_id,product_name,planned_qty",id,"item_order.asc",1000),
+  schoolRows("erp_preparing_components","id,school_id,product_id,product_name,planned_qty",id,"item_order.asc",1000),
   schoolRows("erp_preparing_shipments","id,school_id,carton_label,status,receipt_reference,updated_at",id,"created_at.asc",2000),
   schoolRows("erp_preparing_shipment_lines","shipment_id,school_id,component_id,packed_qty,received_qty",id,"shipment_id.asc,component_id.asc",10000),
   schoolRows("erp_preparing_delivery_returns","*",id,"created_at.desc",2000),

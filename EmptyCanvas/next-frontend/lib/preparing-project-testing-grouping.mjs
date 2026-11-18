@@ -1,4 +1,5 @@
 // Shared, side-effect-free helpers for project testing, grouping and printable exports.
+import {preparingDisplayCode} from "./preparing-display-code.mjs";
 const number=value=>Number(value)||0;
 export function testingRemaining(row){return Math.max(0,number(row?.projectTotalRequired??row?.required)-number(row?.tested));}
 export const TESTING_EXPORT_COLUMNS=[
@@ -39,7 +40,7 @@ export function testingGroups(items=[],kitGroups=[]){
 export function testingExportValue(row,key,blank=false){
  if(key==="signature")return "";
  if(key==="name")return row.name||"";
- if(key==="code")return row.code||"";
+ if(key==="code")return preparingDisplayCode(row);
  if(key==="required")return String(number(row.required));
  if(blank)return ""; // Never print live test results or identities on physical blank forms.
  if(key==="remaining")return String(testingRemaining(row));

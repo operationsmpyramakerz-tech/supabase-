@@ -1,4 +1,5 @@
 "use client";
+import {preparingDisplayCode} from "../../lib/preparing-display-code.mjs";
 import StageFilterTabs from "./StageFilterTabs";
 import StageQuantityInput from "./StageQuantityInput";
 import {useEffect,useMemo,useRef,useState} from "react";
@@ -109,7 +110,7 @@ export default function ProjectProductionIntake({projectId,projectName,canTest,e
  },[projectId]);
  const totals=useMemo(()=>testingCoverageTotals(data.items||[]),[data.items]);
  const shown=useMemo(()=>(data.items||[])
-  .filter(r=>`${r.name||""} ${r.code||""}`.toLowerCase().includes(search.trim().toLowerCase()))
+  .filter(r=>`${r.name||""} ${preparingDisplayCode(r)} ${r.code||""}`.toLowerCase().includes(search.trim().toLowerCase()))
   .filter(r=>filter==="pending"?testingCoverage(r).remaining>0:filter==="received"?testingCoverage(r).tested>0:true),
  [data.items,search,filter]);
  const allGroups=useMemo(()=>testingGroups(data.items,data.kitGroups),[data.items,data.kitGroups]);
@@ -266,7 +267,7 @@ export default function ProjectProductionIntake({projectId,projectName,canTest,e
       <div className={`pr-intake-component-main pr-intake-cols--${filter}`}>
        <div className="pr-intake-component-product">
         <ComponentThumbnail row={r} onOpen={showPreview}/>
-        <div className="pr-pt-name"><strong title={r.code?`Product code: ${r.code}`:undefined}>{r.name}</strong>{r.code&&<small>{r.code}</small>}{r.mismatch&&<small className="pr-pt-warning">Historical testing exceeds received quantity; review before continuing.</small>}</div>
+        <div className="pr-pt-name"><strong title={preparingDisplayCode(r)?`Product code: ${preparingDisplayCode(r)}`:undefined}>{r.name}</strong>{preparingDisplayCode(r)&&<small>{preparingDisplayCode(r)}</small>}{r.mismatch&&<small className="pr-pt-warning">Historical testing exceeds received quantity; review before continuing.</small>}</div>
        </div>
        {filter!=="pending"&&<div className="pr-intake-cell"><span>Required</span><strong>{pretty(coverage.required)}</strong></div>}
        {filter==="pending"&&<div className="pr-intake-cell"><span>Remaining</span><strong>{isEditing&&/^(0|[1-9]\d*)$/.test(String(v.tested??""))?pretty(Math.max(0,coverage.required-Number(v.tested))):pretty(coverage.remaining)}</strong></div>}

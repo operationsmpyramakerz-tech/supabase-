@@ -1,3 +1,4 @@
+import {enrichPreparingDisplayCodes} from "../../../../lib/preparing-display-code-server";
 import { NextResponse } from "next/server";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
 import { featureGate } from "../../../../lib/feature-permissions-server";
@@ -13,7 +14,7 @@ const getBody = async request => { const data = await request.json().catch(()=>n
 
 export async function GET(request) {
   const gate = await access("view"); if (!gate.ok) return denied(gate);
-  try { const schoolId=new URL(request.url).searchParams.get("schoolId"); return respond({ok:true,...await preparingComponents(schoolId)}); }
+  try { const schoolId=new URL(request.url).searchParams.get("schoolId"); return respond({ok:true,...await enrichPreparingDisplayCodes(await preparingComponents(schoolId))}); }
   catch(error) { return failure(error); }
 }
 export async function POST(request) {

@@ -1,4 +1,5 @@
 // Warehouse presentation only. Each physical stock ledger remains one row per product.
+import {preparingDisplayCode} from "./preparing-display-code.mjs";
 import {testingGroups} from "./preparing-project-testing-grouping.mjs";
 const qty=v=>Number(v)||0;
 export const WAREHOUSE_COLUMNS=[
@@ -19,14 +20,14 @@ export function filterWarehouseReceivingRows(rows,filter="all"){
 }
 export function warehouseGroups(rows=[],kitGroups=[]){
  return testingGroups(rows.map(row=>({
-  ...row,name:row.product_name,code:row.product_id,required:qty(row.required_qty),
+  ...row,name:row.product_name,code:preparingDisplayCode(row),required:qty(row.required_qty),
   sourceKits:Array.isArray(row.source_kits)?row.source_kits:[],
  })),kitGroups);
 }
 export function warehouseExportValue(row,key,blank=false){
  if(key==="signature")return "";
  if(key==="name")return row.name||"";
- if(key==="code")return row.code||"";
+ if(key==="code")return preparingDisplayCode(row);
  if(key==="required")return String(qty(row.required));
  if(key==="tested")return String(qty(row.tested));
  if(blank)return "";

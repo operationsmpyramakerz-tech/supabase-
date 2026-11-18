@@ -1,4 +1,5 @@
 "use client";
+import {preparingDisplayCode} from "../../lib/preparing-display-code.mjs";
 import StageFilterTabs from "./StageFilterTabs";
 import PreparingSelect from "./PreparingSelect";
 import {useEffect,useMemo,useRef,useState} from "react";
@@ -145,11 +146,11 @@ export default function ProjectBoxDistribution({projectId,rows,kitGroups,request
  const openBoxLabels=()=>{setExpandedBoxKit(boxGroups.find(g=>g.cartons.length)?.name||boxGroups[0]?.name||"");setBoxesOpen(true);};
  const liveCartons=useMemo(()=>new Map((data?.cartons||[]).filter(c=>c.status!=="cancelled").map(c=>[c.id,c])),[data]);
  const packedByComponent=useMemo(()=>{const map=new Map();for(const line of data?.lines||[]){if(!liveCartons.has(line.carton_id))continue;const k=`${norm(line.product_id)}\u0000${norm(line.product_name)}`;map.set(k,(map.get(k)||0)+count(line.packed_qty));}return map;},[data,liveCartons]);
- const items=useMemo(()=>rows.map(r=>({...r,packedQty:packedByComponent.get(`${norm(r.product_id)}\u0000${norm(r.product_name)}`)||0})).map(r=>({...r,unpacked:Math.max(0,count(r.productionReceived)-r.packedQty),name:r.product_name,code:r.product_id})),[rows,packedByComponent]);
+ const items=useMemo(()=>rows.map(r=>({...r,packedQty:packedByComponent.get(`${norm(r.product_id)}\u0000${norm(r.product_name)}`)||0})).map(r=>({...r,unpacked:Math.max(0,count(r.productionReceived)-r.packedQty),name:r.product_name,code:preparingDisplayCode(r)})),[rows,packedByComponent]);
  // Only items with real unpacked Production stock belong in the packing queue.
  // Fully packed items remain in the carton records and Box History.
  const filteredItems=useMemo(()=>filterBoxDistributionRows(items,filter),[items,filter]);
- const groups=useMemo(()=>warehouseGroups(filteredItems.filter(r=>`${r.name} ${r.code}`.toLowerCase().includes(search.toLowerCase())),kitGroups),[filteredItems,kitGroups,search]);
+ const groups=useMemo(()=>warehouseGroups(filteredItems.filter(r=>`${r.name} ${r.code} ${r.product_id}`.toLowerCase().includes(search.toLowerCase())),kitGroups),[filteredItems,kitGroups,search]);
  const filterOptions=useMemo(()=>[
   {value:"available",label:"Available to Pack",hint:"Units waiting to be boxed",count:items.filter(r=>r.unpacked>0&&r.productionReceived>0).length},
   {value:"packed",label:"Packed",hint:"Components with at least one unit in an active box",count:items.filter(r=>r.packedQty>0).length},
@@ -269,11 +270,11 @@ export default function ProjectBoxDistribution({projectId,rows,kitGroups,request
       {!manifestTargets.length ? <section className="pr-kit-plan-intro">
         <strong>Packing plan not started</strong>
         <p>Open Box Distribution, choose a component and select one or more schools. The system will create identical requirements for each Kit label automatically and distribute your saved quantity equally. Individual Box editing has been disabled.</p>
-        {inspectedLines.length>0&&<div className="pr-school-kit-lines">{inspectedLines.map(l=><div key={l.id}><span>{l.product_name}</span><strong>{l.packed_qty} packed</strong></div>)}</div>}
+        {inspectedLines.length>0&&<div className="pr-school-kit-lines">{inspectedLines.map(l=><div key={l.id}><span>{l.product_name}{preparingDisplayCode(l)&&<small style={{display:"block",overflowWrap:"anywhere"}}>{preparingDisplayCode(l)}</small>}</span><strong>{l.packed_qty} packed</strong></div>)}</div>}
       </section> : <>
        <p className="pr-school-kit-help">Equal school Kit manifest · Required / Packed / Remaining (read-only)</p>
        <div className="pr-school-kit-lines pr-kit-target-lines">{manifestTargets.map(t=>{const packed=count(inspectedLines.find(l=>same(l,t))?.packed_qty);return <div key={t.id} className="pr-kit-target-line">
-         <span className="pr-kit-target-name"><strong>{t.product_name}</strong><small>{t.product_id||"Component"}</small></span>
+         <span className="pr-kit-target-name"><strong>{t.product_name}</strong><small>{preparingDisplayCode(t)||"Component"}</small></span>
          <span className="pr-kit-target-numbers"><span>Required <b>{t.expected_qty}</b></span><span>Packed <b>{packed}</b></span><span>Remaining <b>{Math.max(0,count(t.expected_qty)-packed)}</b></span></span>
        </div>;})}</div>
        {inspectedLines.some(l=>!manifestTargets.some(t=>same(l,t)))&&<p className="pr-wr-inline-error">Unexpected packed component found. Unpack it before completing this Kit.</p>}
@@ -282,7 +283,7 @@ export default function ProjectBoxDistribution({projectId,rows,kitGroups,request
       </>}
     </> : <>
       <p className="pr-school-kit-help">Packed contents ({inspectedLines.length} item types)</p>
-      {inspectedLines.length?<div className="pr-school-kit-lines">{inspectedLines.map(l=><div key={l.id}><span>{l.product_name}</span><strong>{l.packed_qty}</strong></div>)}</div>:<p className="pr-box-labels-empty">No components have been packed into this Kit yet.</p>}
+      {inspectedLines.length?<div className="pr-school-kit-lines">{inspectedLines.map(l=><div key={l.id}><span>{l.product_name}{preparingDisplayCode(l)&&<small style={{display:"block",overflowWrap:"anywhere"}}>{preparingDisplayCode(l)}</small>}</span><strong>{l.packed_qty}</strong></div>)}</div>:<p className="pr-box-labels-empty">No components have been packed into this Kit yet.</p>}
     </>}
     <footer className="pr-label-print-actions">{inspectedBox.generated_kit_label&&<a className="pr-primary" href={`/next/api/projects-preparing/label-print?kind=kit&id=${encodeURIComponent(inspectedBox.id)}&projectId=${encodeURIComponent(projectId)}`} target="_blank" rel="noopener noreferrer" title="Download a printable PDF with the permanent QR code">↓ Download Kit Label + QR</a>}<button type="button" className="pr-secondary" onClick={()=>setInspectBoxId("")}>Close</button></footer>
    </section></div>}

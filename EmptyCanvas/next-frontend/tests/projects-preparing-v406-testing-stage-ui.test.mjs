@@ -67,7 +67,7 @@ test('testing media enrichment is GET-only, preserves actual quantities and reta
  assert.match(server,/export async function projectTestingPresentationOverview\(value\)/);
  assert.match(server,/getProductsList\(\)\.catch\(\(\)=>\[\]\)/);
  assert.match(server,/getTeamMemberPublicProfile\(person\.id\)\.catch\(\(\)=>null\)/);
- assert.match(server,/return \{\.\.\.row,imageUrls,testedBy:uniquePeople\}/);
+ assert.match(server,/return \{\.\.\.row,displayCode:resolveDisplayCode\(row\.code,row\.name\),imageUrls,testedBy:uniquePeople\}/);
  assert.match(server,/export async function productionIntakeOverview\(value\)/);
  assert.match(server,/export async function recordProjectTesting\(body,account\)/);
 });

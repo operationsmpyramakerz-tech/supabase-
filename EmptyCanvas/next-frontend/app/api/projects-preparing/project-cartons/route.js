@@ -1,3 +1,4 @@
+import {enrichPreparingDisplayCodes} from "../../../../lib/preparing-display-code-server";
 import { preparingStageAllowed, preparingStageReadable } from "../../../../lib/preparing-stage-access";
 import { requirePreparingTabWrite } from "../../../../lib/preparing-tab-write-server";
 import { NextResponse } from "next/server";
@@ -13,7 +14,7 @@ const gate=async permission=>featureGate(await getDirectAccountGate(["Projects P
 const failed=e=>{console.error("[preparing:project-cartons]",e?.details||e);return reply({ok:false,error:e?.message||"Project carton request failed."},Number(e?.status)||500);};
 async function bodyOf(req){const v=await req.json().catch(()=>null);if(!v || typeof v!=="object"||Array.isArray(v)){const e=new Error("Invalid JSON payload.");e.status=400;throw e;}return v;}
 export async function GET(req){const auth=await gate("view");if(!auth.ok)return reply({ok:false,error:auth.error||"Access denied"},auth.status||403);const params=new URL(req.url).searchParams;const scope=params.get("scope")==="boxes"?"boxes":"cartons";if(!preparingStageReadable(auth.account,scope))return reply({ok:false,error:`${scope} stage access is not allowed.`},403);
-  try{const workspace=await projectCartonWorkspace(params.get("projectId"));
+  try{const workspace=await enrichPreparingDisplayCodes(await projectCartonWorkspace(params.get("projectId")),["components","lines","kitTargets"]);
     if(scope==="cartons"){
       const legacy=new Set(workspace.cartons.filter(c=>!c.generated_kit_label).map(c=>c.id));
       // The new outer cartons and their ready physical Kits are returned only

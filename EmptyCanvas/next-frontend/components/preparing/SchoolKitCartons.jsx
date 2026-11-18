@@ -1,4 +1,5 @@
 "use client";
+import {preparingDisplayCode} from "../../lib/preparing-display-code.mjs";
 
 import {useEffect,useMemo,useRef,useState} from "react";
 import StageFilterTabs from "./StageFilterTabs";
@@ -220,7 +221,7 @@ export default function SchoolKitCartons({projectId,projectName,stageRecords=[],
               {cKits.map(kit=><details key={kit.id} className="pr-school-cartons-kit-details">
                 <summary><strong>{kit.carton_label}</strong><small>{kit.kit_name} · {kitContents(kit).length} component types</small></summary>
                 <div className="pr-school-cartons-components"><div className="pr-school-cartons-components-head"><span>Component</span><span>Quantity</span></div>
-                  {kitContents(kit).map(item=><div className="pr-school-cartons-component" key={item.id}><span>{item.product_name}</span><strong>{item.packed_qty} / {item.expected_qty}</strong></div>)}
+                  {kitContents(kit).map(item=><div className="pr-school-cartons-component" key={item.id}><span>{item.product_name}{preparingDisplayCode(item)&&<small style={{display:"block",overflowWrap:"anywhere"}}>{preparingDisplayCode(item)}</small>}</span><strong>{item.packed_qty} / {item.expected_qty}</strong></div>)}
                 </div>
               </details>)}
               <p className="pr-carton-v410-qr-note">Kit content is verified and locked. Anyone with the printed carton QR link can view its packing list without signing in; protect the physical label.</p>

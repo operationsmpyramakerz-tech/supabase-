@@ -1,4 +1,5 @@
 "use client";
+import {preparingDisplayCode} from "../../lib/preparing-display-code.mjs";
 
 import {useEffect,useMemo,useState} from "react";
 import PreparingSelect from "./PreparingSelect";
@@ -71,7 +72,7 @@ export default function ProjectMasterComponents({project,proposals,allowed,reque
 
  const visibleGroups=useMemo(()=>{
   const term=search.trim().toLowerCase();
-  return groups.map(group=>({...group,items:!term||group.kitName.toLowerCase().includes(term)?group.items:group.items.filter(({row})=>`${row.product_name} ${row.product_id}`.toLowerCase().includes(term))}))
+  return groups.map(group=>({...group,items:!term||group.kitName.toLowerCase().includes(term)?group.items:group.items.filter(({row})=>`${row.product_name} ${preparingDisplayCode(row)} ${row.product_id}`.toLowerCase().includes(term))}))
    .filter(group=>!term||group.kitName.toLowerCase().includes(term)||group.items.length>0);
  },[groups,search]);
 
@@ -128,7 +129,7 @@ export default function ProjectMasterComponents({project,proposals,allowed,reque
          <div className="pr-kit-group-rows">
           {shownItems.map(({row,qty,kit})=><div key={row.id} className="pr-kit-group-row-shell">
            <div className="pr-kit-group-row">
-            <div className="pr-pbom-name"><strong>{row.product_name}</strong></div>
+            <div className="pr-pbom-name"><strong>{row.product_name}</strong>{preparingDisplayCode(row)&&<small style={{overflowWrap:"anywhere"}}>{preparingDisplayCode(row)}</small>}</div>
             <div className="pr-pbom-qty"><span>Kit Qty / School</span>{editor?.kind==="update"&&editor.row?.id===row.id&&editor.group.key===group.key?<input className="pr-pbom-inline-qty" type="number" aria-label={`Kit quantity for ${row.product_name}`} min="1" max="1000000000" step="1" value={quantity} disabled={busy} onChange={e=>setQuantity(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();saveEditor();}else if(e.key==="Escape"){setEditor(null);}}} autoFocus/>:<b>{fmt(qty)}</b>}</div>
             <div className="pr-pbom-qty"><span>Total Required · {schoolCount} {schoolCount===1?"school":"schools"}</span><b>{fmt(editor?.kind==="update"&&editor.row?.id===row.id&&editor.group.key===group.key&&Number.isSafeInteger(Number(quantity))&&Number(quantity)>0?projectRequired(Number(quantity),schoolCount):projectRequired(qty,schoolCount))}</b></div>
             {allowed&&kit&&<div className="pr-pbom-row-actions">{editor?.kind==="update"&&editor.row?.id===row.id&&editor.group.key===group.key?<><button type="button" className="pr-primary" disabled={busy} onClick={saveEditor}>{busy?"Saving…":"Save"}</button><button type="button" className="pr-secondary" disabled={busy} onClick={()=>setEditor(null)}>Cancel</button></>:<><button type="button" className="pr-secondary" disabled={busy} onClick={()=>changeQuantity(group,{row,qty})}>Edit Qty</button><button type="button" className="pr-pbom-delete" disabled={busy} onClick={()=>{setEditor(null);setConfirm({group,row});}}>Remove</button></>}</div>}

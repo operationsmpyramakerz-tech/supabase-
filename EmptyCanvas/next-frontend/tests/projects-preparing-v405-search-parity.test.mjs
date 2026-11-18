@@ -38,5 +38,5 @@ test('header-style expanding pill retains filters/history/download and mobile be
  assert.match(css,/@media\(max-width:800px\)\s*\{[\s\S]*?\.pr-intake-v401 \.pr-intake-search-control\.is-open/);
  assert.match(component,/setTab\(tab==="history"\?"testing":"history"\)/);
  assert.match(component,/setShowExport\(true\)/);
- assert.match(component,/\.filter\(r=>`\$\{r\.name\|\|""\} \$\{r\.code\|\|""\}`\.toLowerCase\(\)\.includes\(search\.trim\(\)\.toLowerCase\(\)\)\)/);
+ assert.match(component,/\.filter\(r=>`\$\{r\.name\|\|""\} \$\{preparingDisplayCode\(r\)\} \$\{r\.code\|\|""\}`\.toLowerCase\(\)\.includes\(search\.trim\(\)\.toLowerCase\(\)\)\)/);
 });

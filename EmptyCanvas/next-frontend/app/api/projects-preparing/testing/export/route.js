@@ -1,4 +1,5 @@
 import { preparingStageReadGate } from "../../../../../lib/preparing-stage-access";
+import {enrichPreparingDisplayCodes} from "../../../../../lib/preparing-display-code-server";
 import PDFDocument from "pdfkit";
 import {getDirectAccountGate} from "../../../../../lib/products-auth";
 import {featureGate} from "../../../../../lib/feature-permissions-server";
@@ -22,7 +23,7 @@ export async function POST(request){
   if(!Array.isArray(columns)||!columns.length||columns.length>TESTING_EXPORT_COLUMNS.length||new Set(columns).size!==columns.length
    ||columns.some(key=>typeof key!=="string"||!labels[key])||!columns.includes("name"))return reply("Choose valid export columns including Component.",400);
   if(typeof body.blank!=="boolean")return reply("Invalid export mode.",400);
-  const data=await projectTestingOverview(body.projectId);
+  const data=await enrichPreparingDisplayCodes(await projectTestingOverview(body.projectId));
   const visible=new Set(Array.isArray(body.groupKeys)?body.groupKeys:[]);
   if(visible.size>150||[...visible].some(key=>typeof key!=="string"||key.length>200))return reply("Invalid Kit selection.",400);
   const groups=testingGroups(data.items||[],data.kitGroups||[]).filter(g=>!visible.size||visible.has(g.key));

@@ -1,4 +1,5 @@
 "use client";
+import {preparingDisplayCode} from "../../lib/preparing-display-code.mjs";
 import PreparingSelect from "./PreparingSelect";
 import { useEffect, useMemo, useState } from "react";
 import { componentTotals } from "../../lib/preparing-workflow";
@@ -38,7 +39,7 @@ export default function ComponentsManifest({ schoolId, proposalName, allowed, re
   }, [schoolId]);
   const totals=useMemo(()=>componentTotals(items),[items]);
   const shown=useMemo(()=>items.filter(item=>{
-    const q=`${item.product_name} ${kitNames(item.source_kits)} ${item.product_id}`.toLowerCase();
+    const q=`${item.product_name} ${kitNames(item.source_kits)} ${preparingDisplayCode(item)} ${item.product_id}`.toLowerCase();
     if (!q.includes(query.toLowerCase().trim())) return false;
     if (filter==="missing") return n(item.received_qty)<n(item.planned_qty);
     if (filter==="damaged") return n(item.damaged_qty)>0;
@@ -82,7 +83,7 @@ export default function ComponentsManifest({ schoolId, proposalName, allowed, re
       <div className="pr-qty-summary">{[["Required",totals.planned],["Received",totals.received],["Damaged",totals.damaged],["Prepared",totals.prepared],["Missing",totals.missing],["Usable shortage",totals.usableShortage]].map(([title,value])=><div key={title}><small>{title}</small><strong>{value}</strong></div>)}</div>
       <div className="pr-manifest-actions"><label className="pr-search"><input aria-label="Search components" placeholder="Search components or kit…" value={query} onChange={e=>setQuery(e.target.value)}/></label><PreparingSelect aria-label="Filter components" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">All items</option><option value="missing">Missing</option><option value="damaged">Damaged</option><option value="pending">Not fully prepared</option></PreparingSelect><button className="pr-secondary" onClick={exportCSV}>CSV</button></div>
       <div className="pr-component-list">{shown.map(row=>{const d=drafts[row.id]||initialDraft(row);const isEditing=editing===row.id;const missing=Math.max(0,n(row.planned_qty)-n(row.received_qty));const shortage=Math.max(0,n(row.planned_qty)-n(row.received_qty)+n(row.damaged_qty));return <div className="pr-component" key={row.id}>
-        <div className="pr-component-head"><div><strong>{row.product_name}</strong><small>{kitNames(row.source_kits)||"Direct proposal item"}</small></div><span className={shortage>0?"pr-component-short":"pr-component-ready"}>{shortage>0?`${shortage} to replenish`:"Usable stock sufficient"}</span></div>
+        <div className="pr-component-head"><div><strong>{row.product_name}</strong>{preparingDisplayCode(row)&&<small>{preparingDisplayCode(row)}</small>}<small>{kitNames(row.source_kits)||"Direct proposal item"}</small></div><span className={shortage>0?"pr-component-short":"pr-component-ready"}>{shortage>0?`${shortage} to replenish`:"Usable stock sufficient"}</span></div>
         <div className="pr-component-values"><div><small>Required</small><b>{row.planned_qty}</b></div><div><small>Received</small><b>{row.received_qty}</b></div><div><small>Damaged</small><b>{row.damaged_qty}</b></div><div><small>Prepared</small><b>{row.prepared_qty}</b></div><div><small>Missing</small><b>{missing}</b></div></div>
         {row.notes && !isEditing && <p className="pr-component-note">{row.notes}</p>}
         {isEditing ? <div className="pr-component-editor"><div className="pr-component-inputs">{[["Received","received"],["Damaged","damaged"],["Prepared","prepared"]].map(([label,key])=><label key={key}>{label}<input aria-label={`${label} ${row.product_name}`} type="number" min="0" step="1" max="1000000" value={d[key]} onChange={e=>setDrafts(prev=>({...prev,[row.id]:{...d,[key]:e.target.value}}))}/></label>)}</div><label>Notes<textarea maxLength={1000} rows={2} value={d.notes} onChange={e=>setDrafts(prev=>({...prev,[row.id]:{...d,notes:e.target.value}}))}/></label><div className="pr-component-buttons"><button className="pr-secondary" disabled={busy} onClick={()=>{setEditing("");setDrafts(prev=>({...prev,[row.id]:initialDraft(row)}));}}>Cancel</button><button className="pr-primary" disabled={busy} onClick={()=>saveRow(row)}>{busy?"Saving…":"Save quantities"}</button></div></div> : allowed && <button className="pr-component-edit" disabled={busy} onClick={()=>setEditing(row.id)}>Update quantities</button>}

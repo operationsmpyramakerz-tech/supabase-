@@ -1,4 +1,5 @@
 import "server-only";
+import {preparingDisplayCodeResolver} from "./preparing-display-code.mjs";
 import {warehouseWorkspace} from "./preparing-warehouse";
 import {rpc} from "./supabase-rest";
 import {getProductsList} from "./products-service";
@@ -23,6 +24,7 @@ export async function warehousePresentationWorkspace(projectId){
   }
  }));
  const products=await productsPromise;
+ const resolveDisplayCode=preparingDisplayCodeResolver(products);
  const byProductId=new Map(),byDisplayCode=new Map(),byName=new Map();
  for(const product of Array.isArray(products)?products:[]){
   byProductId.set(productKey(product.id),product);
@@ -38,7 +40,7 @@ export async function warehousePresentationWorkspace(projectId){
    const valid=product&&productKey(product.name)===productKey(row.product_name);
    const main=valid?safePhoto(product.imageUrl):"";
    const attachments=valid?(product.attachments||[]).filter(file=>/^image\/(png|jpeg|gif|webp)$/i.test(String(file.type||""))||/\.(?:png|jpe?g|gif|webp)$/i.test(String(file.name||""))).map(file=>safePhoto(file.url)).filter(Boolean):[];
-   return {...row,imageUrls:[...new Set([main,...attachments].filter(Boolean))]};
+   return {...row,displayCode:resolveDisplayCode(row.product_id,row.product_name),imageUrls:[...new Set([main,...attachments].filter(Boolean))]};
   }),
  };
 }

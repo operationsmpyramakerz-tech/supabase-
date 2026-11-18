@@ -1,4 +1,5 @@
 import { preparingStageReadGate } from "../../../../../lib/preparing-stage-access";
+import {enrichPreparingDisplayCodes} from "../../../../../lib/preparing-display-code-server";
 import PDFDocument from "pdfkit";
 import {getDirectAccountGate} from "../../../../../lib/products-auth";
 import {featureGate} from "../../../../../lib/feature-permissions-server";
@@ -23,7 +24,7 @@ export async function POST(request){
   if(typeof body.blank!=="boolean")return reply("Invalid export mode.",400);
   const visible=new Set(Array.isArray(body.groupKeys)?body.groupKeys:[]);
   if(visible.size>150||[...visible].some(key=>typeof key!=="string"||key.length>200))return reply("Invalid Kit groups.",400);
-  const state=await warehouseWorkspace(body.projectId);
+  const state=await enrichPreparingDisplayCodes(await warehouseWorkspace(body.projectId));
   const count=state.schools.length;
   const items=warehouseReceivingBalances(warehouseTotals(state.items.map(r=>({...r,required_qty:projectRequired(Number(r.required_qty||0),count)})),state.receiptLines,state.allocations),state.testingBalances||[]);
   const members=new Map();

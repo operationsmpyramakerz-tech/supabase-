@@ -1,4 +1,5 @@
 import "server-only";
+import {preparingDisplayCodeResolver} from "./preparing-display-code.mjs";
 import { select, selectById, rpc } from "./supabase-rest";
 import { testingRemaining } from "./preparing-project-testing-grouping.mjs";
 import { randomUUID } from "node:crypto";
@@ -59,6 +60,7 @@ export async function projectTestingPresentationOverview(value){
   for(let i=worker;i<photoIds.length;i+=6){const person=photoIds[i];const profile=await getTeamMemberPublicProfile(person.id).catch(()=>null);if(profile)profiles.set(String(person.id),safePhoto(profile.photoUrl));}
  }));
  const products=await productsPromise;
+ const resolveDisplayCode=preparingDisplayCodeResolver(products);
  const byProductId=new Map(),byDisplayCode=new Map(),byProductName=new Map();
  for(const product of products){
   byProductId.set(productKey(product.id),product);
@@ -72,7 +74,7 @@ export async function projectTestingPresentationOverview(value){
   const attachmentImages=matches?(product.attachments||[]).filter(file=>/^image\/(png|jpeg|gif|webp)$/i.test(String(file.type||""))||/\.(?:png|jpe?g|gif|webp)$/i.test(String(file.name||""))).map(file=>safePhoto(file.url)).filter(Boolean):[];
   const imageUrls=[...new Set([photo,...attachmentImages].filter(Boolean))];
   const uniquePeople=[...new Map((row.testedBy||[]).filter(person=>person?.id&&person?.name&&String(person.id)!=="migration-v388").map(person=>[String(person.id),{id:String(person.id),name:String(person.name),photoUrl:profiles.get(String(person.id))||""}])).values()];
-  return {...row,imageUrls,testedBy:uniquePeople};
+  return {...row,displayCode:resolveDisplayCode(row.code,row.name),imageUrls,testedBy:uniquePeople};
  })};
 }
 
@@ -96,6 +98,7 @@ export async function productionIntakeOverview(value){
   for(let i=worker;i<photoIds.length;i+=6){const person=photoIds[i];const profile=await getTeamMemberPublicProfile(person.id).catch(()=>null);if(profile)profiles.set(String(person.id),safePhoto(profile.photoUrl));}
  }));
  const products=await productsPromise;
+ const resolveDisplayCode=preparingDisplayCodeResolver(products);
  const byProductId=new Map(),byDisplayCode=new Map(),byProductName=new Map();
  for(const product of products){
   byProductId.set(productKey(product.id),product);
@@ -111,7 +114,7 @@ export async function productionIntakeOverview(value){
   const attachmentImages=matches?(product.attachments||[]).filter(file=>/^image\/(png|jpeg|gif|webp)$/i.test(String(file.type||""))||/\.(?:png|jpe?g|gif|webp)$/i.test(String(file.name||""))).map(file=>safePhoto(file.url)).filter(Boolean):[];
   const imageUrls=[...new Set([photo,...attachmentImages].filter(Boolean))];
   const uniquePeople=[...new Map(row.testedBy.filter(person=>person?.id&&person?.name&&String(person.id)!=="migration-v388").map(person=>[String(person.id),{id:String(person.id),name:String(person.name),photoUrl:profiles.get(String(person.id))||""}])).values()];
-  return {...row,imageUrls,testedBy:uniquePeople};
+  return {...row,displayCode:resolveDisplayCode(row.code,row.name),imageUrls,testedBy:uniquePeople};
  })};
 }
 export async function recordProductionIntake(body,account){

@@ -1,3 +1,4 @@
+import {enrichPreparingDisplayCodes} from "../../../../lib/preparing-display-code-server";
 import { NextResponse } from "next/server";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
 import { featureGate } from "../../../../lib/feature-permissions-server";
@@ -12,7 +13,7 @@ const failed = error => {console.error("[preparing:shipments]",error?.details ||
 async function bodyOf(request) {const value=await request.json().catch(()=>null);if (!value || typeof value!=="object" || Array.isArray(value)) {const error=new Error("Invalid JSON payload");error.status=400;throw error;}return value;}
 export async function GET(request) {
   const gate=await access("view");if (!gate.ok)return denied(gate);
-  try{return reply({ok:true,...await preparingShipments(new URL(request.url).searchParams.get("schoolId"))});}
+  try{return reply({ok:true,...await enrichPreparingDisplayCodes(await preparingShipments(new URL(request.url).searchParams.get("schoolId")),["components"])});}
   catch(error){return failed(error);}
 }
 export async function POST(request) {

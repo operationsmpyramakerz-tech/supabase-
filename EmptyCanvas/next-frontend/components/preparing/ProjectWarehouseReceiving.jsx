@@ -1,4 +1,5 @@
 "use client";
+import {preparingDisplayCode} from "../../lib/preparing-display-code.mjs";
 import StageExportDialog from "./StageExportDialog";
 import StageFilterTabs from "./StageFilterTabs";
 import StageQuantityInput from "./StageQuantityInput";
@@ -101,7 +102,7 @@ export default function ProjectWarehouseReceiving({projectId,projectName,canRece
   return result;
  },[state.receipts,state.receiptLines]);
  const totals=useMemo(()=>summaries.reduce((sum,row)=>({required:sum.required+number(row.required_qty),accepted:sum.accepted+row.accepted,damaged:sum.damaged+row.damaged,allocated:sum.allocated+row.allocated,available:sum.available+row.available,tested:sum.tested+row.tested,readyToReceive:sum.readyToReceive+row.readyToReceive}),{required:0,accepted:0,damaged:0,allocated:0,available:0,tested:0,readyToReceive:0}),[summaries]);
- const shown=useMemo(()=>filterWarehouseReceivingRows(summaries.filter(row=>`${row.product_name} ${row.product_id}`.toLowerCase().includes(search.toLowerCase().trim())),filter),[summaries,search,filter]);
+ const shown=useMemo(()=>filterWarehouseReceivingRows(summaries.filter(row=>`${row.product_name} ${preparingDisplayCode(row)} ${row.product_id}`.toLowerCase().includes(search.toLowerCase().trim())),filter),[summaries,search,filter]);
  // Export remains based on tested/returned components, not the new Stage 1 tab filter.
  const allGroups=useMemo(()=>warehouseGroups(summaries.filter(row=>number(row.tested)>0||number(row.accepted)>0),state.kitGroups),[summaries,state.kitGroups]);
  const shownGroups=useMemo(()=>warehouseGroups(shown,state.kitGroups),[shown,state.kitGroups]);
@@ -218,7 +219,7 @@ export default function ProjectWarehouseReceiving({projectId,projectName,canRece
       const pendingQuantity=active&&/^(0|[1-9]\d*)$/.test(String(editableDraft))?Math.max(0,row.tested-Number(editableDraft)):row.readyToReceive;
       return <article className={`pr-pt-row pr-intake-component pr-intake-item--${filter==="available"?"pending":filter}${active?" is-editing":""}`} key={`${group.key}-${row.id}`}>
        <div className={`pr-intake-component-main pr-intake-cols--${filter==="available"?"pending":filter}`}>
-        <div className="pr-intake-component-product"><ComponentThumbnail row={{...row,name:row.product_name}} onOpen={showPreview}/><div className="pr-pt-name"><strong title={row.product_id?`Product code: ${row.product_id}`:undefined}>{row.product_name}</strong>{row.product_id&&<small>{row.product_id}</small>}{row.accepted>row.tested&&<small className="pr-pt-warning">Historical returned quantity exceeds tested quantity; review this record.</small>}</div></div>
+        <div className="pr-intake-component-product"><ComponentThumbnail row={{...row,name:row.product_name}} onOpen={showPreview}/><div className="pr-pt-name"><strong title={preparingDisplayCode(row)?`Product code: ${preparingDisplayCode(row)}`:undefined}>{row.product_name}</strong>{preparingDisplayCode(row)&&<small>{preparingDisplayCode(row)}</small>}{row.accepted>row.tested&&<small className="pr-pt-warning">Historical returned quantity exceeds tested quantity; review this record.</small>}</div></div>
         {filter==="all"&&<div className="pr-intake-cell pr-warehouse-intake-count"><span>Production Received</span><strong>{pretty(row.productionIntakeReceived)}</strong><small>Tested: {pretty(row.tested)}</small></div>}
         {filter==="received"&&<div className="pr-intake-cell"><span>Tested</span><strong>{pretty(row.tested)}</strong></div>}
         {filter==="available"&&<div className="pr-intake-cell"><span>Ready to Return</span><strong>{pretty(pendingQuantity)}</strong></div>}

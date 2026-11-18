@@ -223,7 +223,7 @@ export async function preparingShipments(schoolId) {
   const [shipments,lines,components,allocations,returns,replacements] = await Promise.all([
     preparingSchoolRows(SHIPMENTS,id,{maximum:2000,label:"carton history"}),
     preparingSchoolRows(SHIPMENT_LINES,id,{order:"shipment_id.asc,component_id.asc",maximum:10000,label:"shipment lines"}),
-    preparingSchoolRows(COMPONENTS,id,{fields:"id,product_name,source_kits,planned_qty,prepared_qty,item_order",order:"item_order.asc",maximum:1000,label:"proposal items"}),
+    preparingSchoolRows(COMPONENTS,id,{fields:"id,product_id,product_name,source_kits,planned_qty,prepared_qty,item_order",order:"item_order.asc",maximum:1000,label:"proposal items"}),
     preparingSchoolRows(PROJECT_ALLOCATIONS,id,{fields:"shipment_id,status",order:"created_at.asc",maximum:2000,label:"project-linked batches"}),
     preparingSchoolRows(DELIVERY_RETURNS,id,{fields:"component_id,quantity",order:"created_at.asc",maximum:2000,label:"signed return ledger"}),
     preparingSchoolRows(REPLACEMENT_BATCHES,id,{fields:"shipment_id",order:"created_at.asc",maximum:2000,label:"replacement batches"}),
