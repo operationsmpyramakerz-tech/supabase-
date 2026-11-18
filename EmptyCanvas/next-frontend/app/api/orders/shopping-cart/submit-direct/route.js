@@ -1,4 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
+import { dispatchQueuedNotifications } from "../../../../../lib/notification-event-worker";
+import { rpc } from "../../../../../lib/supabase-rest";
 import { getLegacyAccountGate } from "../../../../../lib/products-auth";
 import { orderActionGate } from "../../../../../lib/current-shopping-action-permissions.mjs";
 import { shoppingSourceAllowed } from "../../../../../lib/feature-permissions-registry";
@@ -8,6 +10,7 @@ import { submitShoppingCartOrderDirect } from "../../../../../lib/shopping-cart-
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+export const maxDuration = 60;
 
 function noStore(payload, init = {}) {
   return NextResponse.json(payload, {
@@ -49,7 +52,26 @@ export async function POST(request) {
       editToken: body?.editToken,
       removedOrderRowIds: body?.removedOrderRowIds,
     });
-    if (result) return noStore(result);
+    if (result) {
+      // The database queued notices with the new order. Deliver only after
+      // the completed submission (including any custom catalog requests).
+      if (result.success && body?.editMode !== true) {
+        const ownerId = String(gate.account.teamMemberId || gate.account.userSupabaseId || gate.account.userId || gate.account.id || "");
+        const rowIds = (result.orderItems || []).map(item => String(item.orderPageId || "")).filter(Boolean);
+        after(async () => {
+          try {
+            await rpc("erp_release_order_supervision_notifications_v464", {
+              p_order_number: String(result.orderNumber), p_owner_id: ownerId, p_row_ids: rowIds,
+            }, { profileName: "notifications.order-supervision.release" });
+          } catch (error) {
+            console.warn("[notifications] New order approval release deferred:", error?.message);
+          }
+          await dispatchQueuedNotifications({ limit: 10, supervisionOnly: true }).catch((error) =>
+            console.warn("[notifications] New order approval delivery deferred:", error?.message));
+        });
+      }
+      return noStore(result);
+    }
     return noStore(
       { success: false, message: "Direct Supabase order submission is unavailable." },
       { status: 503 },

@@ -43,7 +43,7 @@ export async function getMemberDeliveryHistory(memberId) {
   if (!memberId) throw new Error("Authentication required");
   if (!await logReady()) return { installed: false, rows: [], totals: null };
   const id = String(memberId).slice(0, 120);
-  const [events, attempts] = await Promise.all([
+  const [events, attempts, supervisionEvents] = await Promise.all([
     select("erp_notification_events", {
       select: "id,title,category,status,attempts,created_at",
       recipient_id: `eq.${id}`, order: "created_at.desc", limit: "30",
@@ -52,7 +52,18 @@ export async function getMemberDeliveryHistory(memberId) {
       select: "event_id,channel,outcome,detail,provider,attempted_at,id",
       recipient_id: `eq.${id}`, order: "attempted_at.desc,id.desc", limit: "180",
     }, { profileName: "notifications.delivery.attempts" }),
+    select("erp_order_supervision_notification_events", {
+      select: "id,title,category,status,attempts,created_at,delivery_outcomes",
+      recipient_id: `eq.${id}`, order: "created_at.desc", limit: "30",
+    }, { profileName: "notifications.delivery.supervision" }).catch(() => []),
   ]);
-  const data = buildDeliveryHistory(Array.isArray(events) ? events : [], Array.isArray(attempts) ? attempts : []);
+  const supervision = Array.isArray(supervisionEvents) ? supervisionEvents : [];
+  const reviewAttempts = supervision.flatMap(event => Object.entries(event.delivery_outcomes || {}).map(([channel, entry]) => ({
+    event_id: event.id, channel, outcome: entry.outcome, detail: entry.detail,
+    provider: entry.provider, attempted_at: entry.attemptedAt,
+  })));
+  const merged = [...(Array.isArray(events) ? events : []), ...supervision]
+    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at)).slice(0, 30);
+  const data = buildDeliveryHistory(merged, [...(Array.isArray(attempts) ? attempts : []), ...reviewAttempts]);
   return { installed: true, ...data };
 }

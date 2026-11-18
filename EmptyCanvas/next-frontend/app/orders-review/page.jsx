@@ -24,7 +24,13 @@ function UnavailableState({ message, forbidden = false }) {
   );
 }
 
-export default async function OrdersReviewPage() {
+export default async function OrdersReviewPage({ searchParams } = {}) {
+  const params = await Promise.resolve(searchParams || {});
+  const rawOrder = typeof params.q === "string" ? params.q.trim() : "";
+  // A notification can be opened while Orders Review is already mounted.
+  // Remount its filter state for a different exact order number rather than
+  // leaving the previous tab/query active after same-page navigation.
+  const reviewLinkKey = /^ORD-\d+$/i.test(rawOrder) ? rawOrder.toUpperCase() : "review";
   // Phase 51 performance: the verified session gives us the reviewer identity
   // immediately. Refresh page permission and load the first review page in
   // parallel, but never render the payload unless the fresh gate allows it.
@@ -71,6 +77,7 @@ export default async function OrdersReviewPage() {
       bodyClass="order-modal-fit-screen orders-review-page"
     >
       <OrdersReviewClient
+        key={reviewLinkKey}
         initialOrders={orders}
         initialPageInfo={pageInfo}
         bootstrapWarnings={[]}

@@ -476,6 +476,8 @@ async function createNewOrderDirect({ account = {}, products = [], orderType = "
       sv_approval: null,
       product_tag: Array.isArray(product?.tags) ? (product.tags.map(text).find(Boolean) || null) : null,
       kit_tag: null,
+      // Bind new orders to the verified account, not a mutable display name.
+      team_member_id: accountMemberId(account) || null,
       team_member_name: creatorName,
       issue_description: item.issueDescription || null,
       supervisor: null,

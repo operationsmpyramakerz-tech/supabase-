@@ -774,6 +774,26 @@ function gateFromAccount(account, session, requiredPages = []) {
   };
 }
 
+// Notification eligibility is a read-only permission check, not a login or
+// session impersonation. Reuse the same page and feature rules as Orders Review.
+export async function canReceiveOrderReviewNotice(memberId) {
+  const id = text(memberId);
+  if (!id) return false;
+  const [member, pages, accessRows, featureAccess] = await Promise.all([
+    selectById(teamMembersTable(), id, { select: "id,name,is_active", profileName: "notifications.order-review.member" }),
+    listAppPages(),
+    select("team_member_page_access", {
+      select: MEMBER_ACCESS_COMPACT_SELECT, team_member_id: `eq.${id}`, limit: "1000",
+    }, { profileName: "notifications.order-review.page-access" }),
+    loadMemberFeatureAccess(id),
+  ]);
+  if (!member || member.is_active === false) return false;
+  const account = { id, teamMemberId: id, name: text(member.name),
+    pageAccess: { pages: directPageAccessRows(pages, accessRows) }, featureAccess };
+  return gateFromAccount(account, {}, ["Orders Review"]).ok
+    && featureAllowed(account, "orders.review.view");
+}
+
 export async function getDirectAccountGateFromSessionContext(context = {}, requiredPages = [], options = {}) {
   const memberId = text(
     context?.memberId

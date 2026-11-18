@@ -7,11 +7,14 @@ import { sendPushToMember } from "./push-notifications";
 import { saveNotificationForMember } from "./notifications-data";
 import { digestAvailable, eligibleForDigest, enqueueDigestEvent } from "./notification-digest";
 import { logNotificationDelivery } from "./notification-delivery-log";
+import { deliveryReason } from "./notification-delivery-utils";
+import { canReceiveOrderReviewNotice } from "./direct-session-account";
 
 // Event records are inserted atomically by Supabase triggers. The RPC claims
 // them with row locks and a temporary lease, preventing parallel cron/route
 // executions from delivering the same event at once.
 const EVENTS_TABLE = "erp_notification_events";
+const SUPERVISION_EVENTS_TABLE = "erp_order_supervision_notification_events";
 const MAX_ATTEMPTS = 5;
 const safe = (value, max = 500) => String(value ?? "").trim().slice(0, max);
 
@@ -33,7 +36,8 @@ async function claim(limit = 6) {
 function whereLease(event) {
   const id = encodeURIComponent(safe(event.id, 200));
   const token = encodeURIComponent(safe(event.lease_token, 80));
-  return `/${EVENTS_TABLE}?id=eq.${id}&lease_token=eq.${token}&status=eq.processing`;
+  const table = event._supervisionQueue === true ? SUPERVISION_EVENTS_TABLE : EVENTS_TABLE;
+  return `/${table}?id=eq.${id}&lease_token=eq.${token}&status=eq.processing`;
 }
 
 async function patchClaim(event, updates) {
@@ -47,9 +51,39 @@ async function patchClaim(event, updates) {
   Object.assign(event, updates);
 }
 
+// Keep the new queue's delivery history independent from any foreign key on
+// the older event-attempt table. Audit metadata never controls delivery.
+async function auditEvent(event, channel, outcome, reason = "", provider = "") {
+  if (event._supervisionQueue !== true) {
+    return logNotificationDelivery({ eventId: event.id, recipientId: event.recipient_id, channel, outcome, reason, provider });
+  }
+  const results = { ...(event.delivery_outcomes || {}), [channel]: {
+    outcome, detail: deliveryReason(reason), provider, attemptedAt: new Date().toISOString(),
+  } };
+  try { await patchClaim(event, { delivery_outcomes: results }); }
+  catch { console.warn("[notification-event] Supervision delivery audit deferred"); }
+}
+
 async function deliver(event) {
   const memberId = safe(event.recipient_id, 120);
   if (!memberId || !event.id) throw new Error("Invalid notification event recipient");
+  if (event._supervisionQueue === true) {
+    const current = await supabaseRequest("/rpc/erp_order_supervision_notice_current_v464", {
+      method: "POST", body: { p_id: event.id, p_lease_token: event.lease_token },
+      profileName: "notifications.order-supervision.current",
+    });
+    if (current !== true || !await canReceiveOrderReviewNotice(memberId)) {
+      const skipReason = "Order no longer awaiting approval or supervisor access revoked";
+      const outcomes = { ...(event.delivery_outcomes || {}) };
+      for (const channel of ["in_app", "push", "email"]) if (!event[`${channel}_done`]) {
+        outcomes[channel] = { outcome: "skipped", detail: skipReason, provider: "", attemptedAt: new Date().toISOString() };
+      }
+      await patchClaim(event, { status: "delivered", in_app_done: true, push_done: true, email_done: true,
+        delivered_at: new Date().toISOString(), lease_token: null, lease_until: null,
+        last_error: skipReason, delivery_outcomes: outcomes });
+      return;
+    }
+  }
   const { settings } = await getNotificationPreferences(memberId);
   const type = safe(event.category, 40);
   const notif = {
@@ -68,9 +102,7 @@ async function deliver(event) {
   const pushTag = reference
     ? `erp-${type}-${reference.replace(/\s+/g, "-").toLowerCase()}`
     : `erp-${event.id}`;
-  const audit = (channel, outcome, reason = "", provider = "") => logNotificationDelivery({
-    eventId: event.id, recipientId: memberId, channel, outcome, reason, provider,
-  });
+  const audit = (channel, outcome, reason = "", provider = "") => auditEvent(event, channel, outcome, reason, provider);
   if (!event.in_app_done) {
     if (allowsChannel(settings, type, "in_app")) {
       try {
@@ -165,12 +197,17 @@ async function recover(event, error) {
   const delayMinutes = Math.min(60, 2 ** attempts);
   const message = safe(error?.message || "Notification delivery error", 220);
   try {
+    if (exhausted && event._supervisionQueue === true) {
+      for (const channel of ["in_app", "push", "email"].filter(channel => !event[`${channel}_done`])) {
+        await auditEvent(event, channel, "failed", message);
+      }
+    }
     await patchClaim(event, {
       status: exhausted ? "failed" : "pending",
       next_attempt_at: new Date(Date.now() + delayMinutes * 60_000).toISOString(),
       lease_token: null, lease_until: null, last_error: message,
     });
-    if (exhausted) {
+    if (exhausted && event._supervisionQueue !== true) {
       await Promise.all(["in_app", "push", "email"].filter(channel => !event[`${channel}_done`]).map(channel =>
         logNotificationDelivery({ eventId: event.id, recipientId: event.recipient_id,
           channel, outcome: "failed", reason: message })
@@ -182,27 +219,39 @@ async function recover(event, error) {
   console.warn("[notification-event] Delivery deferred", message);
 }
 
-export async function dispatchQueuedNotifications({ limit = 6 } = {}) {
-  let batch;
-  try { batch = await claim(limit); }
-  catch (error) {
-    // The Phase-2 SQL must be installed first. Do not break order mutations,
-    // existing notifications, or the daily cron while deploying code.
-    const message = safe(error?.message || error, 200);
-    if (Number(error?.status) === 404 || /claim_erp_notification_events|erp_notification_events|schema cache/i.test(message)) {
-      return { ok: true, installed: false, processed: 0 };
+export async function dispatchQueuedNotifications({ limit = 6, supervisionOnly = false } = {}) {
+  // The supplementary queue is optional until the V464 SQL is installed.
+  // Keep the original queue's bounded work budget and isolate failures.
+  const size = Math.max(1, Math.min(20, Number(limit) || 6));
+  const events = [];
+  let installed = false;
+  let unexpectedError = null;
+  async function collect(pending, supervision) {
+    try {
+      const result = await pending;
+      installed = true;
+      if (Array.isArray(result)) events.push(...result.map(event => ({ ...event, _supervisionQueue: supervision })));
+    } catch (error) {
+      const message = safe(error?.message || error, 200);
+      const missing = Number(error?.status) === 404 || /PGRST202|PGRST205|schema cache|could not find the function/i.test(message);
+      if (!missing) {
+        unexpectedError ||= error;
+        console.warn("[notification-event] Queue claim deferred", message);
+      }
     }
-    throw error;
   }
-  const events = Array.isArray(batch) ? batch : [];
+  await collect(supabaseRequest("/rpc/erp_claim_order_supervision_notifications_v464", {
+    method: "POST", body: { p_limit: supervisionOnly ? size : Math.max(1, Math.floor(size / 2)) },
+    profileName: "notifications.order-supervision.claim",
+  }), true);
+  if (!supervisionOnly && events.length < size) await collect(claim(size - events.length), false);
+  if (!installed && unexpectedError) throw unexpectedError;
   let delivered = 0;
-  // Limit provider connections and complete each batch within Vercel's
-  // execution budget, instead of serially sending a dozen Gmail messages.
   for (let index = 0; index < events.length; index += 3) {
     await Promise.all(events.slice(index, index + 3).map(async (event) => {
       try { await deliver(event); delivered += 1; }
       catch (error) { await recover(event, error); }
     }));
   }
-  return { ok: true, installed: true, processed: events.length, delivered, deferred: events.length - delivered };
+  return { ok: true, installed, processed: events.length, delivered, deferred: events.length - delivered };
 }
