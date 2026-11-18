@@ -53,7 +53,7 @@ test('Box rows use the same kit cards, thumbnails and inline action without repl
 
 test('Box labels, packing history and export remain separate from receiving data',()=>{
  for(const token of ['openBoxLabels','Boxes Label','boxGroups','LabelSchoolsPicker','mode==="history"','Box Distribution History','onHistoryToggle','onDownload','onChanged={reload}']) assert.ok((boxes+parent).includes(token),token);
- for(const token of ['CSV · Values','CSV · Blank','PDF · Values','PDF · Blank','scope:isBoxTab?"boxes":"receiving"']) assert.ok(parent.includes(token),token);
+ for(const token of ['title="Export Box Distribution"','onCSV={exportCsv}','onPDF={exportPdf}','scope:isBoxTab?"boxes":"receiving"']) assert.ok(parent.includes(token),token);
  assert.match(route,/preparingStageReadable\(auth\.account,stage\)/);
  assert.match(route,/includeReceivers:stage==="production"/);
  assert.match(route,/\.\.\.data,handoffs:\[\]/);

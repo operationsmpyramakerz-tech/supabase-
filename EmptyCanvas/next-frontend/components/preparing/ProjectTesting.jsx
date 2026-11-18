@@ -1,4 +1,5 @@
 "use client";
+import StageExportDialog from "./StageExportDialog";
 import StageFilterTabs from "./StageFilterTabs";
 import StageQuantityInput from "./StageQuantityInput";
 import {useEffect,useMemo,useRef,useState} from "react";
@@ -160,7 +161,7 @@ export default function ProjectTesting({projectId,projectName,canTest,editTabs={
    const blob=await response.blob();
    const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=`project-testing-${blank?"blank":"results"}-${projectId}.pdf`;a.click();setTimeout(()=>URL.revokeObjectURL(url),3000);
    setShowExport(false);
-  }catch(e){setError(e?.message||"Unable to export PDF.");}finally{setExportBusy(false);}
+  }catch(e){throw new Error(e?.message||"Unable to export PDF.");}finally{setExportBusy(false);}
  }
  const toggleColumn=key=>{if(key==="name")return;setExportColumns(old=>old.includes(key)?old.filter(k=>k!==key):TESTING_EXPORT_COLUMNS.filter(c=>old.includes(c.key)||c.key===key).map(c=>c.key));};
  const toggleGroup=key=>{setExportGroups(old=>{
@@ -281,23 +282,8 @@ export default function ProjectTesting({projectId,projectName,canTest,editTabs={
     </section>
    </div>, document.body
   )}
-  {showExport&&<div className="pr-pt-export-overlay" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget&&!exportBusy)setShowExport(false);}}>
-   <section className="pr-pt-export-modal" role="dialog" aria-modal="true" aria-label="Export components testing">
-    <header className="pr-pt-export-head"><div><strong>Export Testing</strong><small>Choose columns, Kits and report format</small></div><button type="button" className="pr-secondary" disabled={exportBusy} onClick={()=>setShowExport(false)} aria-label="Close export">×</button></header>
-    <div className="pr-pt-export-body"><div className="pr-pt-export-summary">{exportColumns.length} columns selected <span aria-hidden="true">·</span> {exportGroups.length||allGroups.length} kit groups</div>
-     <div className="pr-pt-export-section-head"><strong>Columns</strong><button type="button" className="pr-pt-export-link" onClick={()=>setExportColumns(TESTING_EXPORT_COLUMNS.map(c=>c.key))}>Select all</button></div>
-     <div className="pr-pt-export-checks">{TESTING_EXPORT_COLUMNS.map(col=><label key={col.key} className="pr-pt-export-check"><input type="checkbox" checked={exportColumns.includes(col.key)} disabled={col.fixed} onChange={()=>toggleColumn(col.key)}/><span>{col.label}</span></label>)}</div>
-     <div className="pr-pt-export-section-head"><strong>Kit groups</strong><button type="button" className="pr-pt-export-link" onClick={()=>setExportGroups([])}>All Kits</button></div>
-     <div className="pr-pt-export-kits">{allGroups.map(group=><label key={group.key} className="pr-pt-export-check"><input type="checkbox" checked={!exportGroups.length||exportGroups.includes(group.key)} onChange={()=>toggleGroup(group.key)}/><span>{group.name}</span></label>)}</div>
-     <div className="pr-pt-export-info">Blank physical sheets include component names and required quantities; testing numbers, Tested By and Signature remain empty for handwriting.</div>
-    </div>
-    <footer className="pr-pt-export-actions">
-     <button type="button" className="pr-secondary" disabled={exportBusy} onClick={()=>exportCSV(false)}>CSV · Values</button>
-     <button type="button" className="pr-secondary" disabled={exportBusy} onClick={()=>exportCSV(true)}>CSV · Blank</button>
-     <button type="button" className="pr-secondary" disabled={exportBusy} onClick={()=>exportPDF(false)}>PDF · Values</button>
-     <button type="button" className="pr-primary" disabled={exportBusy} onClick={()=>exportPDF(true)}>{exportBusy?"Exporting…":"PDF · Blank sheet"}</button>
-    </footer>
-   </section>
-  </div>}
+  {showExport&&<StageExportDialog title="Export Testing" columnOptions={TESTING_EXPORT_COLUMNS} columns={exportColumns} groups={allGroups} groupKeys={exportGroups}
+   onSelectAllColumns={()=>setExportColumns(TESTING_EXPORT_COLUMNS.map(c=>c.key))} onToggleColumn={toggleColumn}
+   onSelectAllGroups={()=>setExportGroups([])} onToggleGroup={toggleGroup} busy={exportBusy} onClose={()=>setShowExport(false)} onCSV={exportCSV} onPDF={exportPDF}/>}
  </div>;
 }

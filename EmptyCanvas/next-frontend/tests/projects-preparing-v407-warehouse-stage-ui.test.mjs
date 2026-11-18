@@ -48,8 +48,7 @@ test('Warehouse component photos, user avatars, compact inline controls and full
  assert.match(stage,/createPortal\(/);
  assert.match(stage,/rowError\[row\.id\]/);
  assert.match(stage,/Return History/);
- assert.match(stage,/exportCSV\(true\)|exportCSV\(false\)/);
- assert.match(stage,/exportPDF\(true\)|exportPDF\(false\)/);
+ assert.match(stage,/onCSV=\{exportCSV\} onPDF=\{exportPDF\}/);
 });
 
 test('Stage 3 has one custom X in the collapsible global-style search; does not use native clear button',()=>{

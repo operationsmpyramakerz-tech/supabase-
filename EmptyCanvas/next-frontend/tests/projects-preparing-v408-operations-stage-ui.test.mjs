@@ -89,10 +89,8 @@ test('GET enriches both stage views with product images, while keeping private r
 test('Stage 4 History and export methods remain available in the new view',()=>{
  assert.match(stage,/tab==="receiving-history"&&<section/);
  assert.match(stage,/data\.handoffs\.map\(h=>/);
- assert.match(stage,/exportCsv\(false\)/);
- assert.match(stage,/exportCsv\(true\)/);
- assert.match(stage,/exportPdf\(false\)/);
- assert.match(stage,/exportPdf\(true\)/);
+ assert.match(stage,/<StageExportDialog title="Export Operations Receiving"/);
+ assert.match(stage,/onCSV=\{exportCsv\} onPDF=\{exportPdf\}/);
  assert.match(stage,/Saved successfully, but the updated balances could not be refreshed/);
  assert.match(source('app/projects-preparing/page.jsx'),/v408-operations-stage/);
 });

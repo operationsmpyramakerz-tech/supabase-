@@ -1,4 +1,5 @@
 "use client";
+import StageExportDialog from "./StageExportDialog";
 import StageFilterTabs from "./StageFilterTabs";
 import StageQuantityInput from "./StageQuantityInput";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -168,7 +169,7 @@ export default function ProjectWarehouseReceiving({projectId,projectName,canRece
    const resp=await fetch("/next/api/projects-preparing/warehouse/export",{method:"POST",headers:{"Content-Type":"application/json"},cache:"no-store",body:JSON.stringify({projectId,columns:exportColumns,groupKeys:exportGroups,blank})});
    if(!resp.ok){const data=await resp.json().catch(()=>({}));throw Error(data.error||"Unable to export warehouse PDF.");}
    const url=URL.createObjectURL(await resp.blob()),a=document.createElement("a");a.href=url;a.download=`warehouse-return-${blank?"blank":"values"}-${projectId}.pdf`;a.click();setTimeout(()=>URL.revokeObjectURL(url),3000);setShowExport(false);
-  }catch(e){setError(e.message);}finally{setExportBusy(false);}
+  }catch(e){throw new Error(e?.message||"Unable to export warehouse PDF.");}finally{setExportBusy(false);}
  }
  const toggleColumn=key=>{if(key==="name")return;setExportColumns(old=>old.includes(key)?old.filter(v=>v!==key):WAREHOUSE_COLUMNS.filter(c=>old.includes(c.key)||c.key===key).map(c=>c.key));};
  const toggleGroup=key=>setExportGroups(old=>{const all=allGroups.map(g=>g.key),current=old.length?old:all,updated=current.includes(key)?current.filter(k=>k!==key):all.filter(k=>current.includes(k)||k===key);return !updated.length?old:updated.length===all.length?[]:updated;});
@@ -264,11 +265,8 @@ export default function ProjectWarehouseReceiving({projectId,projectName,canRece
     </section>
    </div>,document.body
   )}
-  {showExport&&<div className="pr-pt-export-overlay" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget&&!exportBusy)setShowExport(false);}}><section className="pr-pt-export-modal" role="dialog" aria-modal="true" aria-label="Export warehouse return">
-   <header className="pr-pt-export-head"><div><strong>Export Warehouse Return</strong><small>Choose columns, Kits, and format</small></div><button type="button" className="pr-secondary" disabled={exportBusy} onClick={()=>setShowExport(false)}>×</button></header>
-   <div className="pr-pt-export-body"><div className="pr-pt-export-summary">{exportColumns.length} columns selected <span aria-hidden="true">·</span> {exportGroups.length||allGroups.length} kit groups</div><div className="pr-pt-export-section-head"><strong>Columns</strong><button type="button" className="pr-pt-export-link" onClick={()=>setExportColumns(WAREHOUSE_COLUMNS.map(c=>c.key))}>Select all</button></div><div className="pr-pt-export-checks">{WAREHOUSE_COLUMNS.map(c=><label key={c.key} className="pr-pt-export-check"><input type="checkbox" checked={exportColumns.includes(c.key)} disabled={c.fixed} onChange={()=>toggleColumn(c.key)}/><span>{c.label}</span></label>)}</div>
-   <div className="pr-pt-export-section-head"><strong>Kit groups</strong><button type="button" className="pr-pt-export-link" onClick={()=>setExportGroups([])}>All Kits</button></div><div className="pr-pt-export-kits">{allGroups.map(g=><label key={g.key} className="pr-pt-export-check"><input type="checkbox" checked={!exportGroups.length||exportGroups.includes(g.key)} onChange={()=>toggleGroup(g.key)}/><span>{g.name}</span></label>)}</div><div className="pr-pt-export-info">Blank forms keep tested quantities and component names; returned counts, user names, and signatures are empty for warehouse handover.</div></div>
-   <footer className="pr-pt-export-actions"><button className="pr-secondary" type="button" disabled={exportBusy} onClick={()=>exportCSV(false)}>CSV · Values</button><button className="pr-secondary" type="button" disabled={exportBusy} onClick={()=>exportCSV(true)}>CSV · Blank</button><button className="pr-secondary" type="button" disabled={exportBusy} onClick={()=>exportPDF(false)}>PDF · Values</button><button className="pr-primary" type="button" disabled={exportBusy} onClick={()=>exportPDF(true)}>PDF · Blank</button></footer>
-  </section></div>}
+  {showExport&&<StageExportDialog title="Export Warehouse Return" columnOptions={WAREHOUSE_COLUMNS} columns={exportColumns} groups={allGroups} groupKeys={exportGroups}
+   onSelectAllColumns={()=>setExportColumns(WAREHOUSE_COLUMNS.map(c=>c.key))} onToggleColumn={toggleColumn}
+   onSelectAllGroups={()=>setExportGroups([])} onToggleGroup={toggleGroup} busy={exportBusy} onClose={()=>setShowExport(false)} onCSV={exportCSV} onPDF={exportPDF}/>}
  </div>;
 }

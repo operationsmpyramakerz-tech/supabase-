@@ -22,7 +22,8 @@ test("testing no longer requires prior warehouse receipt",()=>{
  assert.match(sql,/Test Received must cover Passed and Failed quantities/);
  assert.match(view,/Tested/);
  assert.match(view,/Tested/);
- assert.match(view,/Tested By/);
+ assert.match(read("lib/preparing-project-testing-grouping.mjs"),/label:"Tested By"/);
+ assert.match(view,/columnOptions=\{TESTING_EXPORT_COLUMNS\}/);
 });
 test("the route validates actual user, one quantity delta and technician",()=>{
  assert.match(api,/actor=String\(account\?\.id/);

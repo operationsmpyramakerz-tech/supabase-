@@ -35,8 +35,7 @@ test('Warehouse retains receiving workflow and shows Download plus accessible hi
  assert.match(wh,/onClick=\{\(\)=>setShowExport\(true\)\}/);
  assert.match(wh,/onClick=\{\(\)=>saveReceipt\(row\)\}/);
  assert.doesNotMatch(wh,/allocateBatch/);
- assert.match(wh,/exportCSV\(true\)/);
- assert.match(wh,/exportPDF\(true\)/);
+ assert.match(wh,/onCSV=\{exportCSV\} onPDF=\{exportPDF\}/);
 });
 
 test('Search is transparent, status tabs replace filter, refresh removed, CSS version bumped',()=>{

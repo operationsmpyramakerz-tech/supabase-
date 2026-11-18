@@ -36,6 +36,6 @@ test("Project tool order and separate Production and Box screens, exports and sh
  assert.ok(main.indexOf('title:"Operations Receiving"')<main.indexOf('title:"Project Kit Cartons"'));
  assert.match(main,/showProduction &&/);assert.match(main,/showBoxDistribution &&/);
  assert.match(ui,/boxView\?"Box Distribution":"Operations Receiving"/);
- for(const label of ["CSV · Values","CSV · Blank","PDF · Values","PDF · Blank","Receiving History","Box History","Operations Received","Available to Receive"]){assert.ok(ui.includes(label),label);}
+ for(const label of ["onCSV={exportCsv}","onPDF={exportPdf}","Receiving History","Box History","Operations Received","Available to Receive"]){assert.ok(ui.includes(label),label);}
  for(const f of ["components/preparing/PreparingClient.jsx","components/preparing/ProjectProductionReceiving.jsx"]){const parsed=ts.createSourceFile(f,read(f),ts.ScriptTarget.Latest,true,ts.ScriptKind.JSX);assert.deepEqual(parsed.parseDiagnostics,[],f);}
 });

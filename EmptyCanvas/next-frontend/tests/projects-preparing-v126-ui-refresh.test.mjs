@@ -34,15 +34,16 @@ test('all Preparing native selects have been migrated to accessible controlled d
  assert.match(select,/createPortal/);
  assert.match(select,/onChange\?\.\(\{target:\{value:item.value,name\}\}\)/);
 });
-test('modern export modal shared between all three project reports',()=>{
+test('modern export modal shared between all four project reports',()=>{
  for(const f of ['ProjectTesting.jsx','ProjectWarehouseReceiving.jsx','ProjectProductionReceiving.jsx']) {
   const src=read(`components/preparing/${f}`);
-  assert.match(src,/pr-pt-export-summary/);
-  assert.match(src,/pr-pt-export-modal/);
-  assert.match(src,/pr-pt-export-actions/);
+  assert.match(src,/<StageExportDialog/);
  }
- assert.match(css,/\.pr-pt-export-check:has\(input:checked\)/);
- assert.match(css,/\.pr-pt-export-actions \{display:grid;grid-template-columns:repeat\(2/);
+ const dialog=read('components/preparing/StageExportDialog.jsx');
+ for(const token of ['exportStyles.summary','exportStyles.modal','exportStyles.footer','exportStyles.submit'])assert.ok(dialog.includes(token),token);
+ const styles=read('components/preparing/ProductionIntakeExport.module.css');
+ assert.match(styles,/\.modal \{ width: 100%;/);
+ assert.match(styles,/\.overlay \{ align-items: flex-end; padding: 40px 0 0;/);
 });
 test('kit cards have consistent SVG chevrons and expanded state',()=>{
  for(const f of ['ProjectTesting.jsx','ProjectWarehouseReceiving.jsx','ProjectProductionReceiving.jsx','ProjectBoxDistribution.jsx','ProjectMasterComponents.jsx']) {

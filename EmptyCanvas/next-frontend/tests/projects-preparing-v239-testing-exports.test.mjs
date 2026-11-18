@@ -43,9 +43,8 @@ test('PDF uses view feature-gate and trusted server overview, no client-supplied
 });
 test('Testing export modal supports selected columns, Kit group selection, printable PDF and CSV',()=>{
  const ui=src('components/preparing/ProjectTesting.jsx');
- assert.match(ui,/aria-label="Export components testing"/);
- assert.match(ui,/PDF · Blank sheet/);
- assert.match(ui,/CSV · Values/);
+ assert.match(ui,/<StageExportDialog title="Export Testing"/);
+ assert.match(ui,/onCSV=\{exportCSV\} onPDF=\{exportPDF\}/);
  assert.match(ui,/exportColumns/);
  assert.match(ui,/groupKeys:exportGroups/);
  assert.match(ui,/testingGroups\(shown,data.kitGroups\)/);
