@@ -28,3 +28,13 @@ export function operationsLegacyDestination(searchParams = {}) {
   const query = values.toString();
   return `${page.route.slice(5)}${query ? `?${query}` : ""}`;
 }
+
+// Resolve kind from the entire active order, not an arbitrary first row.
+// Blank legacy rows inherit an unambiguous type for presentation only.
+// Conflicting or unrecognized nonblank types are not guessed.
+export function operationsWorkspaceType(items = []) {
+  const raw = items.map(item => String(item?.orderType ?? item?.order_type ?? "").trim()).filter(Boolean);
+  const pages = raw.map(operationsPageForType);
+  if (!pages.length || pages.some(page => !page)) return null;
+  return pages.every(page => page.type === pages[0].type) ? pages[0] : null;
+}

@@ -21,8 +21,8 @@ export function operationsMatchesTab(group = {}, tab = "all") {
     case "delivered": return step === 4;
     case "remaining": return outstanding;
     case "received": return step < 5 && (step === 3 || Boolean(group.hasShipping)) && (Boolean(group.maintenance) || Boolean(group.hasShipping) || Boolean(group.hasReceived));
-    case "approved": return step === 2 && Boolean(group.hasApproved);
-    case "rejected": return step === 2 && Boolean(group.hasRejected);
+    case "approved": return step <= 2 && Boolean(group.hasApproved);
+    case "rejected": return step <= 2 && Boolean(group.hasRejected);
     default: return false;
   }
 }
@@ -38,4 +38,24 @@ export function operationsArrivedItemVisible({ stage = 1, received = 0, delivere
   if (Number(stage) !== 4) return false;
   const abs = (value) => Math.abs(Number(value) || 0);
   return abs(received) > 1e-9 || abs(delivered) > 1e-9 || abs(remaining) <= 1e-9;
+}
+
+// Deleted components in Edit Shopping Cart are retained as Archive rows.
+// They must not turn an otherwise active order into a fully archived order.
+// Keep all rows only when the entire order is archived. No database writes.
+export function operationsActiveOrderRows(items = [], stageOf) {
+  const active = items.filter(item => stageOf(item?.status) < 5);
+  return active.length ? active : items;
+}
+
+// Approval fields can be populated while the persisted workflow is still
+// Pending/Under Supervision (e.g. a generated withdrawal). The badge, tab,
+// and detail progress must use the same effective pre-shipping stage.
+export function operationsEffectiveApprovalStage(stage, hasApproved, hasRejected) {
+  const step = Number(stage) || 1;
+  return step === 1 && (hasApproved || hasRejected) ? 2 : step;
+}
+
+export function operationsApprovalRowMatches(stage, decision, tab) {
+  return Number(stage) < 3 && (tab === "approved" || tab === "rejected") && decision === tab;
 }

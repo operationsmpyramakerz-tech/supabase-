@@ -1,6 +1,6 @@
 "use client";
 
-import { operationsArrivedItemVisible, operationsHasOutstandingQuantity, operationsMatchesTab } from "../../lib/operations-remaining-status.mjs";
+import { operationsArrivedItemVisible, operationsHasOutstandingQuantity, operationsMatchesTab, operationsEffectiveApprovalStage, operationsApprovalRowMatches } from "../../lib/operations-remaining-status.mjs";
 import { orderCardAllows } from "../../lib/order-data-scope.mjs";
 import { OPERATIONS_STATUS_OPTIONS, normalizeOperationsStatuses, operationsMatchesStatuses } from "../../lib/operations-status-filter.mjs";
 import { isPartiallyDeliveredOrder } from "../../lib/order-partial-delivery.mjs";
@@ -307,10 +307,11 @@ function buildGroups(rows) {
     const counts = reasons.reduce((acc, reason) => acc.set(reason, (acc.get(reason) || 0) + 1), new Map());
     const reason = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "No reason";
     const summaryItem = group.items.find((item) => item?._summaryCard);
-    const stage = summaryItem ? (Number(summaryItem._groupStage) || statusIndex(summaryItem.status)) : Math.max(...group.items.map((item) => statusIndex(item?.status)), 1);
+    const rawStage = summaryItem ? (Number(summaryItem._groupStage) || statusIndex(summaryItem.status)) : Math.max(...group.items.map((item) => statusIndex(item?.status)), 1);
     const decisions = group.items.map(itemDecision);
     const hasApproved = summaryItem ? Boolean(summaryItem._groupHasApproved) : decisions.includes("approved");
     const hasRejected = summaryItem ? Boolean(summaryItem._groupHasRejected) : decisions.includes("rejected");
+    const stage = operationsEffectiveApprovalStage(rawStage, hasApproved, hasRejected);
     const hasRemaining = summaryItem ? Boolean(summaryItem._groupHasRemaining) : group.items.some((item) => Math.abs(remainingQuantity(item)) > 1e-9);
     const hasReceived = summaryItem ? Boolean(summaryItem._groupHasReceived) : group.items.some((item) => Math.abs(receivedQuantity(item)) > 1e-9);
     const hasShipping = group.items.some((item) => statusIndex(item?.status) === 3 && Math.abs(receivedQuantity(item)) > 1e-9);
@@ -365,7 +366,7 @@ function groupMatchesTab(group, tab) {
 
 function groupsForTab(groups, orders, tab) {
   if (tab === "approved" || tab === "rejected") {
-    const scopedRows = (Array.isArray(orders) ? orders : []).filter((item) => statusIndex(item?.status) === 2 && itemDecision(item) === tab);
+    const scopedRows = (Array.isArray(orders) ? orders : []).filter((item) => operationsApprovalRowMatches(statusIndex(item?.status), itemDecision(item), tab));
     return buildGroups(scopedRows);
   }
   return groups.filter((group) => groupMatchesTab(group, tab));

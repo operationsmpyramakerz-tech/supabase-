@@ -43,8 +43,8 @@ test('Status filter is forwarded to scoped API before pagination and remains on 
   assert.ok(loop.indexOf('resolveOrderScope') < loop.indexOf('operationsMatchesStatuses(groupMeta(items, true), selectedStatuses)'));
   assert.ok(loop.indexOf('operationsMatchesStatuses(groupMeta(items, true), selectedStatuses)') < loop.indexOf('outputGroups.push'));
   assert.match(loop, /rpcOptions: !searchPlan && !includeArchive/);
-  assert.match(loop, /forceRows: includeArchive/);
-  assert.match(loop, /cleanType.*orderTypeKey/);
+  assert.match(loop, /forceRows: true/);
+  assert.match(loop, /workspace\?\.type !== cleanType/);
 });
 test('Shared Preferences exposes optional multi-select toggles and a clear action', () => {
   const ui = read('components/orders/OrdersPreferencesControl.jsx');

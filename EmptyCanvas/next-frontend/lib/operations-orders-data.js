@@ -1,7 +1,8 @@
 import { operationsDeliveredTransferQuantity } from "./operations-delivered-transfer.mjs";
 import "server-only";
 import { normalizeOperationsStatuses, operationsMatchesStatuses } from "./operations-status-filter.mjs";
-import { operationsHasOutstandingQuantity, operationsMatchesTab } from "./operations-remaining-status.mjs";
+import { operationsHasOutstandingQuantity, operationsMatchesTab, operationsActiveOrderRows, operationsEffectiveApprovalStage, operationsApprovalRowMatches } from "./operations-remaining-status.mjs";
+import { operationsWorkspaceType } from "./operations-order-pages.mjs";
 import { validateWholeOperationsOrder } from "./operations-whole-order-policy.mjs";
 import { performAtomicOrderAction, useAtomicOrderActions } from "./order-atomic-actions";
 import { parseStrictImageDataUrl } from "./strict-upload-image.mjs";
@@ -386,7 +387,9 @@ function groupMeta(items = [], forCardFilter = false) {
       maintenance: orderTypeKey(summary.orderType) === "requestmaintenance",
     };
   }
-  const stage = Math.max(1, ...items.map((item) => statusIndex(item?.status)));
+  const hasApproved = items.some(item => decision(item) === "approved");
+  const hasRejected = items.some(item => decision(item) === "rejected");
+  const stage = operationsEffectiveApprovalStage(Math.max(1, ...items.map((item) => statusIndex(item?.status))), hasApproved, hasRejected);
   const hasRemaining = items.some((item) => {
     const stored = Number(item?.quantityRemaining ?? item?.quantity_remaining ?? 0) || 0;
     if (!forCardFilter) return Math.abs(stored) > 1e-9;
@@ -400,7 +403,7 @@ function groupMeta(items = [], forCardFilter = false) {
   const hasShipping = items.some((item) => statusIndex(item?.status) === 3 && Math.abs(Number(item?.quantityReceived ?? item?.quantity_received_by_operations ?? 0) || 0) > 1e-9);
   const rawType = text(items?.[0]?.orderType ?? items?.[0]?.order_type);
   const maintenance = orderTypeKey(rawType) === "requestmaintenance";
-  return { stage, hasRemaining, hasReceived, hasShipping, maintenance, hasApproved: items.some(item => decision(item) === "approved"), hasRejected: items.some(item => decision(item) === "rejected") };
+  return { stage, hasRemaining, hasReceived, hasShipping, maintenance, hasApproved, hasRejected };
 }
 
 function groupMatchesTab(items = [], tab = "all") {
@@ -408,7 +411,7 @@ function groupMatchesTab(items = [], tab = "all") {
   const summary = items.find((item) => item?._summaryCard);
   if (summary && summary._summaryTab === cleanTab) return true;
   if (cleanTab === "approved" || cleanTab === "rejected") {
-    return items.some((item) => statusIndex(item?.status) === 2 && decision(item) === cleanTab);
+    return items.some((item) => operationsApprovalRowMatches(statusIndex(item?.status), decision(item), cleanTab));
   }
   const meta = groupMeta(items);
   if (["all", "archive", "delivered", "remaining", "received"].includes(cleanTab)) {
@@ -421,7 +424,7 @@ function rowsForTab(items = [], tab = "all") {
   const cleanTab = String(tab || "all").trim().toLowerCase();
   if (items.some((item) => item?._summaryCard)) return items;
   if (cleanTab === "approved" || cleanTab === "rejected") {
-    return items.filter((item) => statusIndex(item?.status) === 2 && decision(item) === cleanTab);
+    return items.filter((item) => operationsApprovalRowMatches(statusIndex(item?.status), decision(item), cleanTab));
   }
   return items;
 }
@@ -480,7 +483,9 @@ function statusLogic(tab = "all") {
   // "In progress" while they are already in the Shipping step. Keep this
   // candidate query broad and let the exact normalized status decide below.
   if (cleanTab === "received") return null;
-  if (cleanTab === "approved" || cleanTab === "rejected") return ["status.ilike.*progress*", "status.ilike.*approved*"];
+  // Approval may be explicit even when status is Under Supervision/Pending.
+  // Evaluate the approval fields on the full active group, not raw status.
+  if (cleanTab === "approved" || cleanTab === "rejected") return null;
   return null;
 }
 
@@ -492,8 +497,9 @@ function logicalParams({ query = "", tab = "all", type = "all", searchMode = "fa
   const statusClauses = statusLogic(tab);
   if (statusClauses?.length) logicGroups.push(statusClauses);
 
-  const typeLabel = orderTypeLabel(type);
-  if (typeLabel) params.order_type = `ilike.*${typeLabel.replace(/[*%]/g, "")}*`;
+  // Legacy order types may differ in whitespace/punctuation or be absent on
+  // individual rows. Candidate discovery stays broad; exact normalized type
+  // matching happens once all components of the order have been loaded.
 
   if (logicGroups.length === 1) params.or = `(${logicGroups[0].join(",")})`;
   else if (logicGroups.length > 1) params.and = `(${logicGroups.map((clauses) => `or(${clauses.join(",")})`).join(",")})`;
@@ -713,8 +719,8 @@ export async function loadOperationsOrdersPage({
         searchMode: hasTextSearch ? (fastSearch ? "fast" : "legacy") : "",
         rpcOptions: !searchPlan && !includeArchive ? {
           context: "operations",
-          orderType: orderTypeLabel(type),
-          tab,
+          orderType: "",
+          tab: ["approved", "rejected"].includes(tab) ? "all" : tab,
         } : null,
         signal,
       });
@@ -760,7 +766,7 @@ export async function loadOperationsOrdersPage({
     const windowResult = await consumeOrderSummaryWindows({
       numbers: candidates.numbers,
       remainingGroups: safeLimit - outputGroups.length,
-      loadRows: (numbers, loadSignal) => rowsByNumbers(numbers, loadSignal, localSearchFallback, { tab, scoped: !!resolved, forceRows: includeArchive }),
+      loadRows: (numbers, loadSignal) => rowsByNumbers(numbers, loadSignal, localSearchFallback, { tab, scoped: !!resolved, forceRows: true }),
       profileName: "orders.operations.summary-window",
       signal,
       consumeRows: ({ numbers, rows }) => {
@@ -771,10 +777,16 @@ export async function loadOperationsOrdersPage({
         for (const orderNumber of numbers) {
           processedCandidates += 1;
           nextCursor = orderNumber;
-          const items = groups.get(orderNumber) || [];
-          if (!items.length) continue;
+          const allItems = groups.get(orderNumber) || [];
+          if (!allItems.length) continue;
+          // Scope was verified over ALL saved rows before this point. Never
+          // exclude an unauthorized row to make an order eligible.
+          let items = operationsActiveOrderRows(allItems, statusIndex);
+          const workspace = operationsWorkspaceType(items);
+          if (cleanType && cleanType !== "all" && workspace?.type !== cleanType) continue;
+          if (workspace) items = items.map(item => ({ ...item, orderType: workspace.label, orderTypeColor: orderTypeColor(workspace.label) }));
+          if (Number.isFinite(directSearch?.orderNumber) && orderNumber !== directSearch.orderNumber) continue;
           if (selectedStatuses.length ? !operationsMatchesStatuses(groupMeta(items, true), selectedStatuses) : !groupMatchesTab(items, tab)) continue;
-          if (cleanType && cleanType !== "all" && orderTypeKey(items[0]?.orderType || "") !== cleanType) continue;
           if (needle && !groupSearchText(items).includes(needle)) continue;
           outputGroups.push({ orderNumber, items: rowsForTab(items, tab) });
           matchedGroups += 1;

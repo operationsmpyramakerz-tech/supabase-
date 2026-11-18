@@ -43,7 +43,8 @@ test('type stays fixed during initial load, search, status change, pagination an
   const data = read('lib/operations-orders-data.js');
   assert.match(data,/loadOperationsOrdersInitialPage\(\{ account = \{\}, type = "all"/);
   assert.match(data,/loadOperationsOrdersPage\(\{ account, tab: "all", type, query: "", cursor: null, limit \}\)/);
-  assert.ok(data.indexOf('orderTypeKey(items[0]?.orderType || "") !== cleanType') < data.indexOf('outputGroups.push({ orderNumber, items: rowsForTab'));
+  const typeCheck = data.indexOf('workspace?.type !== cleanType');
+  assert.ok(typeCheck >= 0 && typeCheck < data.indexOf('outputGroups.push({ orderNumber, items: rowsForTab'));
 });
 
 test('status facets are scoped even when source has mixed types and multiple pages', async () => {
