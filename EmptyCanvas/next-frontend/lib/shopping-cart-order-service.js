@@ -24,7 +24,9 @@ import { resolveOrderScope } from "./order-data-scope";
 import { canViewMyOrderRow, legacyMyOrderOwnerMatches } from "./my-orders-owner-visibility.mjs";
 import { isCompleteOrderSelection } from "./order-action-selection.mjs";
 
-const EDIT_TOKEN_TTL_MS = 30 * 60 * 1000;
+// An edit is a working draft, not a short-lived undo operation. Each submit
+// still requires current authentication, action permissions and exact row scope.
+const EDIT_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 const UNDO_TOKEN_TTL_MS = 30 * 1000;
 
 function text(value) {
@@ -204,6 +206,29 @@ function pendingCartItem(row, request) {
     }, quantity);
   } catch (error) { throw directError(error.message, 409); }
   return { id, customProduct, quantity };
+}
+
+// A signed hash of the original database rows prevents a long-lived edit from
+// silently replacing another user's already-saved changes. Stable key/row order
+// makes the digest independent of PostgREST's JSON serialization order.
+function orderEditSnapshot(rows = []) {
+  function stable(value) {
+    if (Array.isArray(value)) return value.map(stable);
+    if (value && typeof value === "object") {
+      return Object.fromEntries(Object.keys(value).sort().map(key => [key, stable(value[key])]));
+    }
+    return value;
+  }
+  const ordered = [...rows].sort((a, b) => text(a?.id).localeCompare(text(b?.id)));
+  return crypto.createHash("sha256").update(JSON.stringify(stable(ordered))).digest("hex");
+}
+
+function assertEditSnapshot(signed, rows) {
+  // Previously issued 30-minute tokens have no snapshot; keep their original
+  // short validity only. All newly issued tokens carry the signed baseline.
+  if (signed.snapshot !== undefined && signed.snapshot !== orderEditSnapshot(rows)) {
+    throw directError("This order has changed since you opened it. Your draft is still saved. Review the latest order before submitting again.", 409);
+  }
 }
 
 // Every original order row must be retained or explicitly removed; a missing
@@ -391,6 +416,7 @@ export async function initializeCurrentOrderEditDirect({
     ids,
     orderNumber: Number.isFinite(orderNumber) ? orderNumber : null,
     orderType: canonicalOrderType(orderType),
+    snapshot: orderEditSnapshot(rows),
     exp: Date.now() + EDIT_TOKEN_TTL_MS,
   });
 
@@ -516,6 +542,7 @@ async function updateExistingOrderDirect({ account = {}, products = [], orderTyp
   if (!ids.length || ids.length > 500 || !ids.every((id) => /^\d+$/.test(id))) throw directError("Edit session expired. Please reopen the order and try again.", 400);
 
   const rows = await verifyOwnedRows(ids, account);
+  assertEditSnapshot(signed, rows);
   validateEditRowSelection(ids, Array.isArray(products) ? products : [], removedOrderRowIds);
   const originalType = canonicalOrderType(signed?.orderType || rawOrderType(rows[0]));
   const finalType = canonicalOrderType(orderType || originalType);
@@ -557,6 +584,9 @@ async function updateExistingOrderDirect({ account = {}, products = [], orderTyp
   const currentTeamMemberId = text(valueFor(rows[0], ["team_member_id", "team_members_id", "created_by_id", "owner_id"])) || null;
   const currentTeamMemberName = text(valueFor(rows[0], ["team_member_name", "Teams Members", "teams_members", "created_by_name", "created_by", "Created By"])) || accountUsername(account) || null;
   const createdTime = rawCreatedTime(rows[0]);
+  // Catalog lookup can take time; re-read authorization and rows immediately
+  // before the first mutation as well. No stale draft is silently rebased.
+  if (signed.snapshot !== undefined) assertEditSnapshot(signed, await verifyOwnedRows(ids, account));
   const updated = [];
   let mutationStarted = false;
 

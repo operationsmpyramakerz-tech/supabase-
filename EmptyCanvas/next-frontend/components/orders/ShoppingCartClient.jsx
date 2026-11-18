@@ -14,7 +14,9 @@ const OrderSubmissionBar = dynamic(() => import("./ShoppingCartDialogs").then((m
 
 const DEFAULT_ORDER_TYPES = ["Request Products", "Withdraw Products", "Request Maintenance"];
 const DIRECT_API_BASE = "/next/api";
-const EDIT_TRANSFER_TTL_MS = 30 * 60 * 1000;
+// Keep the edit transfer long enough to restore the account-scoped draft.
+// The server independently enforces the signed 24-hour authorization window.
+const EDIT_TRANSFER_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const CART_DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const TYPE_META = {
@@ -216,20 +218,27 @@ function readEditTransfer(editKey = "") {
   return null;
 }
 
-function clearEditTransfer() {
+function clearEditTransfer(editKey = "") {
+  if (!text(editKey)) return;
+  const exactKey = `shopping_cart:edit_payload:v2:${editKey}`;
   for (const storage of storageAreas()) {
     try {
-      const remove = [];
-      for (let index = 0; index < storage.length; index += 1) {
-        const storageKey = storage.key(index) || "";
-        if (
-          storageKey === "shopping_cart:edit_pending:v2" ||
-          storageKey === "shopping_cart:edit_target_type:v1" ||
-          storageKey.startsWith("shopping_cart:edit_payload:v2:") ||
-          storageKey.startsWith("shopping_cart:edit_fallback:v1:")
-        ) remove.push(storageKey);
+      const transfer = parseJson(storage.getItem(exactKey));
+      const pending = parseJson(storage.getItem("shopping_cart:edit_pending:v2"));
+      const remove = [exactKey];
+      // A different tab may be editing another order. Only clear this edit's
+      // transfer, never all saved transfers in the browser.
+      if (pending?.key === editKey) {
+        remove.push("shopping_cart:edit_pending:v2", "shopping_cart:edit_target_type:v1");
       }
-      remove.forEach((storageKey) => storage.removeItem(storageKey));
+      if (text(transfer?.editToken)) {
+        for (let index = 0; index < storage.length; index += 1) {
+          const storageKey = storage.key(index) || "";
+          if (storageKey.startsWith("shopping_cart:edit_fallback:v1:") &&
+              parseJson(storage.getItem(storageKey))?.editToken === transfer.editToken) remove.push(storageKey);
+        }
+      }
+      remove.forEach(storageKey => storage.removeItem(storageKey));
     } catch {}
   }
 }
@@ -268,11 +277,28 @@ function readCartDraft(options = {}) {
   return candidates[0] || null;
 }
 
-function writeCartDraft({ draftScope = "account", type = "", editMode = false, editKey = "", products = [], reason = "", priorityLevel = "", requestedDeliveryDate = "", editToken = "" } = {}) {
+// Restore only the draft belonging to this exact signed transfer, with all
+// original rows accounted for. Never infer a deletion from a missing row.
+function restoreEditDraft(transfer, draft) {
+  if (!draft) return null;
+  if (text(draft.editToken) !== text(transfer.editToken)) return null;
+  const items = normalizeDraft(draft.products);
+  const expected = new Set(transfer.products.map(item => text(item.orderRowId)));
+  const removed = Array.isArray(draft.removedOrderRowIds) ? draft.removedOrderRowIds.map(text) : [];
+  const accounted = [...items.map(item => item.orderRowId).filter(Boolean), ...removed];
+  if (!Array.isArray(draft.products) || items.length !== draft.products.length ||
+      accounted.length !== expected.size || new Set(accounted).size !== expected.size ||
+      accounted.some(id => !expected.has(id))) {
+    throw new Error("The saved edit draft is incomplete. No order changes were submitted. Reopen the order to start a new edit.");
+  }
+  return { ...draft, products: items, removedOrderRowIds: removed };
+}
+
+function writeCartDraft({ draftScope = "account", type = "", editMode = false, editKey = "", products = [], reason = "", priorityLevel = "", requestedDeliveryDate = "", editToken = "", removedOrderRowIds = [] } = {}) {
   const storageKey = cartDraftStorageKey({ draftScope, type, editMode, editKey });
   const cleanProducts = normalizeDraft(products);
   const stores = storageAreas();
-  if (!cleanProducts.length) {
+  if (!cleanProducts.length && !editMode) {
     for (const storage of stores) {
       try { storage.removeItem(storageKey); } catch {}
     }
@@ -287,6 +313,7 @@ function writeCartDraft({ draftScope = "account", type = "", editMode = false, e
     requestedDeliveryDate: safeDeliveryDate(requestedDeliveryDate),
     products: cleanProducts,
     editToken: editMode ? text(editToken) : "",
+    ...(editMode ? { removedOrderRowIds: [...removedOrderRowIds] } : {}),
   });
   let saved = false;
   for (const storage of stores) {
@@ -759,8 +786,9 @@ export default function ShoppingCartClient({
         priorityLevel: priorityValue,
         requestedDeliveryDate: deliveryDateValue,
         editToken: text(editTransfer?.editToken || activeEditTransfer?.editToken),
+        removedOrderRowIds: [...removedOrderRows.current],
       });
-      if (!saved && cleanItems.length) throw new Error("Browser storage is unavailable.");
+      if (!saved && (cleanItems.length || editMode)) throw new Error("Browser storage is unavailable.");
       if (!quiet) {
         setSaveState("Saved");
         window.setTimeout(() => setSaveState(""), 1300);
@@ -797,17 +825,21 @@ export default function ShoppingCartClient({
           throw new Error("The full order could not be loaded. Close edit mode and reopen the order.");
         }
         const transferReason = text(transfer.reason) || transferItems.find(item => item.reason)?.reason || "";
-        const patched = transferItems.map(item => ({ ...item, reason: item.reason || transferReason }));
-        removedOrderRows.current.clear();
+        const saved = restoreEditDraft(transfer, readCartDraft({ draftScope, type: cleanType, editMode, editKey }));
+        const patched = saved ? saved.products : transferItems.map(item => ({ ...item, reason: item.reason || transferReason }));
+        const nextReason = saved ? text(saved.reason) : transferReason;
+        const nextPriority = safePriority(saved ? saved.priorityLevel : transfer.priorityLevel);
+        const nextDeliveryDate = safeDeliveryDate(saved ? saved.requestedDeliveryDate : transfer.requestedDeliveryDate);
+        removedOrderRows.current = new Set(saved?.removedOrderRowIds || []);
         setActiveEditTransfer(transfer);
         setCart(patched);
-        setReason(isMaintenance(cleanType) ? "" : transferReason);
-        setPriorityLevel(safePriority(transfer.priorityLevel));
-        setRequestedDeliveryDate(safeDeliveryDate(transfer.requestedDeliveryDate));
-        await persistDraft(patched, cleanType, transferReason, {
+        setReason(isMaintenance(cleanType) ? "" : nextReason);
+        setPriorityLevel(nextPriority);
+        setRequestedDeliveryDate(nextDeliveryDate);
+        await persistDraft(patched, cleanType, nextReason, {
           quiet: true, editTransfer: transfer,
-          priorityValue: safePriority(transfer.priorityLevel),
-          deliveryDateValue: safeDeliveryDate(transfer.requestedDeliveryDate),
+          priorityValue: nextPriority,
+          deliveryDateValue: nextDeliveryDate,
         });
         return;
       }
@@ -922,7 +954,7 @@ export default function ShoppingCartClient({
         reasonTimer.current = null;
       }
       clearCartDraft({ draftScope, type: selectedType, editMode: true, editKey });
-      clearEditTransfer();
+      clearEditTransfer(editKey);
       navigateWithinApp("/next/orders");
       return;
     }
@@ -1056,6 +1088,13 @@ export default function ShoppingCartClient({
     setReason(value);
     if (text(value)) setValidationFeedback((current) => ({ ...current, reason: false }));
     if (reasonTimer.current) window.clearTimeout(reasonTimer.current);
+    // Local storage is synchronous: save edit text immediately so a reload or
+    // re-login cannot lose the last keystroke or replay a stale debounced cart.
+    if (editMode) {
+      reasonTimer.current = null;
+      void persistDraft(cart, selectedType, value, { quiet: true });
+      return;
+    }
     reasonTimer.current = window.setTimeout(() => {
       if (cart.length) persistDraft(cart, selectedType, value, { quiet: false });
     }, 550);
@@ -1065,14 +1104,14 @@ export default function ShoppingCartClient({
     const next = safePriority(value);
     setPriorityLevel(next);
     if (next) setValidationFeedback((current) => ({ ...current, priority: false }));
-    if (cart.length) void persistDraft(cart, selectedType, reason, { quiet: true, priorityValue: next });
+    if (cart.length || editMode) void persistDraft(cart, selectedType, reason, { quiet: true, priorityValue: next });
   };
 
   const updateDeliveryDate = (value) => {
     const next = safeDeliveryDate(value);
     setRequestedDeliveryDate(next);
     if (next) setValidationFeedback((current) => ({ ...current, deliveryDate: false }));
-    if (cart.length) void persistDraft(cart, selectedType, reason, { quiet: true, deliveryDateValue: next });
+    if (cart.length || editMode) void persistDraft(cart, selectedType, reason, { quiet: true, deliveryDateValue: next });
   };
 
   const clearCart = async () => {
@@ -1116,6 +1155,10 @@ export default function ShoppingCartClient({
     try {
       // Keep the current browser draft synchronized before submit so a failed
       // request can be retried after a refresh without relying on Express session state.
+      if (reasonTimer.current) {
+        window.clearTimeout(reasonTimer.current);
+        reasonTimer.current = null;
+      }
       await persistDraft(cart, selectedType, reason, { quiet: true });
       const response = await requestJson(`${DIRECT_API_BASE}/orders/shopping-cart/submit-direct`, {
         method: "POST",
@@ -1135,7 +1178,7 @@ export default function ShoppingCartClient({
         reasonTimer.current = null;
       }
       clearCartDraft({ draftScope, type: selectedType, editMode, editKey });
-      clearEditTransfer();
+      clearEditTransfer(editKey);
       setActiveEditTransfer(null);
       setCart([]);
       setReason("");

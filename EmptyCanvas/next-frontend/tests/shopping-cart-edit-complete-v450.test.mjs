@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
+import crypto from 'node:crypto';
 import { isCustomCartItem, validateProductAddition } from '../lib/product-addition-request-payload.mjs';
 const read = p => readFileSync(new URL(`../${p}`,import.meta.url),'utf8');
 const server = read('lib/shopping-cart-order-service.js');
@@ -12,7 +13,7 @@ const text=v=>String(v??'').trim();
 const directError=(message,status)=>Object.assign(new Error(message),{status});
 function serverContext(catalog, rows, pendingRequests = []){
  const writes=[]; const requests=[]; const deleted=[];
- const ctx={text,directError, Date, EDIT_TOKEN_TTL_MS:1800000, valueFor:(row,keys)=>keys.map(key=>row[key]).find(v=>v!==undefined)??null,
+ const ctx={text,directError, crypto, Date, EDIT_TOKEN_TTL_MS:86400000, valueFor:(row,keys)=>keys.map(key=>row[key]).find(v=>v!==undefined)??null,
   numberOrNull:v=>v==null?null:Number(v),canonicalOrderType:text, orderTypeKey:v=>text(v).toLowerCase().replace(/[^a-z0-9]/g,''),
   cleanIds:ids=>[...new Set(ids)],isSupabaseConfigured:()=>true,orderActionAllowed:()=>true,
   verifyOwnedRows:async()=>rows,getProductsList:async()=>catalog,accountMemberId:()=> '12',accountUsername:()=> 'Lab',signPayload:p=>p,
@@ -165,4 +166,90 @@ test('image upload endpoint enforces both edit permissions independently of the 
  grants.delete('orders.my.edit');assert.equal((await ctx.POST(req(true))).status,403);
  grants=new Set(['orders.shopping.submit']);assert.equal((await ctx.POST(req(true))).status,403);assert.equal((await ctx.POST(req(false))).status,200);
  components=false;assert.equal((await ctx.POST(req(false))).status,403);assert.equal(uploads,2);
+});
+
+test('A real signed edit token still saves after 31 minutes and after 23 hours; it expires after 24 hours', async()=>{
+ const rows=rowsFor(catalog);const {ctx,writes}=serverContext(catalog,rows);
+ let now=Date.parse('2026-11-18T08:00:00Z');
+ ctx.Date=class extends Date {static now(){return now;}};
+ ctx.sessionSigningSecret=()=> 'test-only-edit-signature-secret';ctx.Buffer=Buffer;
+ ctx.accountMemberId=a=>a.teamMemberId;
+ vm.runInNewContext(part(server,'function signingSecret()','// Names (including Arabic)'),ctx);
+ const account={teamMemberId:'12'};
+ const initial=await ctx.initializeCurrentOrderEditDirect({account,orderIds:rows.map(r=>r.id)});
+ const token=initial.editToken;const start=now;
+ const products=Array.from(initial.products,p=>({...p}));products[0].quantity=5;
+ const submit=(actor=account, t=token)=>ctx.updateExistingOrderDirect({account:actor,products,removedOrderRowIds:[],editToken:t});
+ now=start+31*60*1000;
+ assert.equal((await submit()).success,true);
+ now=start+23*60*60*1000;
+ assert.equal((await submit()).success,true);
+ const before=writes.length;
+ await assert.rejects(submit({teamMemberId:'13'}),{status:403});
+ await assert.rejects(submit(account,token.slice(0,-1)+'!'),{status:400});
+ now=start+24*60*60*1000+1;
+ await assert.rejects(submit(),{status:400});assert.equal(writes.length,before);
+ // A legacy short-lived token must not acquire a new long validity window.
+ const legacy=ctx.signPayload({scope:'edit-order',uid:'12',ids:rows.map(r=>r.id),exp:start+30*60*1000});
+ await assert.rejects(submit(account,legacy),{status:400});
+ const undo=ctx.signPayload({scope:'undo-order',uid:'12',exp:now+30000});
+ assert.equal(ctx.verifySignedPayload(undo,'undo-order',account).scope,'undo-order');
+ now+=30001;assert.throws(()=>ctx.verifySignedPayload(undo,'undo-order',account),{status:409});
+});
+
+test('Signed edit baseline detects changes to quantity, reason, status, received quantity and ownership before any mutation',async()=>{
+ const rows=rowsFor(catalog);const {ctx,writes}=serverContext(catalog,rows);
+ const initial=await ctx.initializeCurrentOrderEditDirect({orderIds:rows.map(r=>r.id)});
+ const baseline=initial.editToken;assert.match(baseline.snapshot,/^[0-9a-f]{64}$/);
+ ctx.verifySignedPayload=()=>baseline;
+ const submit=()=>ctx.updateExistingOrderDirect({products:initial.products,removedOrderRowIds:[],editToken:'signed'});
+ for (const patch of [{quantity_requested:999},{reason:'Other reason'},{status:'Delivered'},{quantity_received_by_operations:2},{team_member_id:'99'}]) {
+  const original=rows[0];rows[0]={...original,...patch};
+  await assert.rejects(submit(),{status:409});assert.equal(writes.length,0);rows[0]=original;
+ }
+ // Ignore JSON field ordering, not changes to real values.
+ const shuffled=Array.from(rows).reverse().map(row=>Object.fromEntries(Object.entries(row).reverse()));
+ assert.equal(ctx.orderEditSnapshot(shuffled),baseline.snapshot);
+ // A database change after initial validation but during catalog lookup is also rejected.
+ ctx.getProductsList=async()=>{rows[0]={...rows[0],reason:'Concurrent update'};return catalog;};
+ await assert.rejects(submit(),{status:409});assert.equal(writes.length,0);
+});
+
+test('Edit draft survives a reload after 30 minutes, including explicit removal, new component and metadata',()=>{
+ const c=clientContext(); const db=new Map();const storage={getItem:k=>db.get(k)||null,setItem:(k,v)=>db.set(k,v),removeItem:k=>db.delete(k)};
+ let now=Date.parse('2026-11-18T08:00:00Z');
+ Object.assign(c,{Date:class extends Date{static now(){return now;}},number:(v,f=0)=>Number(v)||f,key:v=>text(v).toLowerCase().replace(/[^a-z0-9]/g,''),storageAreas:()=>[storage],parseJson:v=>v?JSON.parse(v):null,safePriority:text,safeDeliveryDate:text,CART_DRAFT_TTL_MS:7*86400000,EDIT_TRANSFER_TTL_MS:7*86400000});
+ vm.runInNewContext(part(client,'function freshTransfer(','function readEditTransfer(')+part(client,'function readEditTransfer(','function clearEditTransfer(')+part(client,'function storageKeyPart(','function clearCartDraft('),c);
+ const options={draftScope:'12',type:'Request Products',editMode:true,editKey:'current-42'};
+ const transfer={editToken:'signed-token',products:[{id:'1',orderRowId:'101',quantity:1},{id:'2',orderRowId:'102',quantity:2}],ts:now};
+ storage.setItem('shopping_cart:edit_payload:v2:current-42',JSON.stringify(transfer));
+ const products=[{id:'1',orderRowId:'101',quantity:12},{id:'3',quantity:3}];
+ assert.equal(c.writeCartDraft({...options,products,removedOrderRowIds:['102'],editToken:transfer.editToken,reason:'Updated reason',priorityLevel:'Urgent',requestedDeliveryDate:'2026-11-24'}),true);
+ now+=31*60000;
+ const saved=c.restoreEditDraft(c.readEditTransfer(options.editKey),c.readCartDraft(options));
+ assert.equal(saved.products[0].quantity,12);assert.equal(saved.products[1].id,'3');assert.equal(saved.reason,'Updated reason');assert.equal(saved.priorityLevel,'Urgent');assert.equal(saved.requestedDeliveryDate,'2026-11-24');assert.deepEqual(Array.from(saved.removedOrderRowIds),['102']);
+ assert.equal(c.readCartDraft({...options,draftScope:'13'}),null);
+ assert.equal(c.readCartDraft({...options,editKey:'different'}),null);
+ assert.equal(c.restoreEditDraft(transfer,{...saved,editToken:'different'}),null);
+ assert.throws(()=>c.restoreEditDraft(transfer,{...saved,removedOrderRowIds:[]}),/incomplete/);
+ assert.throws(()=>c.restoreEditDraft(transfer,{...saved,removedOrderRowIds:['102','102']}),/incomplete/);
+ assert.equal(c.writeCartDraft({...options,products:[],removedOrderRowIds:['101','102'],editToken:transfer.editToken}),true);
+ assert.equal(c.restoreEditDraft(transfer,c.readCartDraft(options)).products.length,0);
+});
+
+test('Completing or cancelling one edit does not erase another tab’s transfer',()=>{
+ const db=new Map([
+  ['shopping_cart:edit_payload:v2:current-a',JSON.stringify({editToken:'a'})],
+  ['shopping_cart:edit_payload:v2:current-b',JSON.stringify({editToken:'b'})],
+  ['shopping_cart:edit_pending:v2',JSON.stringify({key:'current-b'})],
+  ['shopping_cart:edit_target_type:v1','Request Products'],
+  ['shopping_cart:edit_fallback:v1:default',JSON.stringify({editToken:'b'})],
+  ['shopping_cart:edit_fallback:v1:other',JSON.stringify({editToken:'a'})],
+ ]);
+ const storage={getItem:k=>db.get(k)||null,removeItem:k=>db.delete(k),get length(){return db.size;},key:i=>Array.from(db.keys())[i]};
+ const c={text,storageAreas:()=>[storage],parseJson:v=>v?JSON.parse(v):null};
+ vm.runInNewContext(part(client,'function clearEditTransfer(','function storageKeyPart('),c);
+ c.clearEditTransfer();assert.equal(db.size,6);
+ c.clearEditTransfer('current-a');assert.equal(db.has('shopping_cart:edit_payload:v2:current-a'),false);assert.equal(db.has('shopping_cart:edit_fallback:v1:other'),false);assert.equal(db.has('shopping_cart:edit_payload:v2:current-b'),true);assert.equal(db.has('shopping_cart:edit_pending:v2'),true);
+ c.clearEditTransfer('current-b');assert.equal(db.size,0);
 });
