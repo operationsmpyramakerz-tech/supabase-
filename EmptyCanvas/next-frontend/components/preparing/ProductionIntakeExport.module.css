@@ -67,10 +67,10 @@
 .error { background: var(--error-bg); color: var(--error-ink); padding: 8px 10px; border-radius: 8px; font-size: 12px; overflow-wrap: anywhere; max-height: 85px; overflow-y: auto; }
 :global(html[data-theme="dark"]) .modal { --surface: #20242b; --ink: #f5f5f5; --muted: #c6cbd3; --line: #414752; --soft: #30353e; --chip: #423126; --accent-text: #ffae73; --active: #c95700; --action: #0b0c0e; --error-bg: #492a2a; --error-ink: #ffb7b2; }
 @media (max-width: 600px) {
-  .overlay { align-items: flex-end; padding: 40px 8px max(8px, env(safe-area-inset-bottom)); }
-  .modal { max-height: calc(100vh - 48px); max-height: calc(100dvh - 40px - max(8px, env(safe-area-inset-bottom))); border-radius: 22px; }
+  .overlay { align-items: flex-end; padding: 40px 0 0; }
+  .modal { width: 100%; max-height: calc(100vh - 40px); max-height: calc(100dvh - 40px); border-radius: 22px 22px 0 0; }
   .body { padding: 11px 13px 13px; gap: 12px; }
-  .footer { padding: 10px 13px 12px; }
+  .footer { padding: 10px 13px calc(12px + env(safe-area-inset-bottom, 0px)); }
 }
 @media (max-width: 350px) { .check { font-size: 12px; gap: 5px; padding: 7px; } .chip > span:last-child { max-width: 80px; } }
 @media (prefers-reduced-motion: reduce) { .chevron, .chevronOpen { transition: none; } }
