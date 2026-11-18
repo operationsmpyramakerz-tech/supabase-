@@ -2,6 +2,8 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { OPERATIONS_ORDER_PAGES } from "../../lib/operations-order-pages.mjs";
+import { featureAllowed } from "../../lib/feature-permissions-registry";
 
 const PAGES = Object.freeze([
   {
@@ -82,22 +84,29 @@ function toNextClientRoute(value) {
   return raw;
 }
 
-export default function ShoppingCartSidebarFlyout({ allowedPages = [], activePath = "" }) {
+export default function ShoppingCartSidebarFlyout({ allowedPages = [], activePath = "", account = null, module = "shopping" }) {
   const router = useRouter();
 
   useEffect(() => {
-    const pages = allowedShoppingPages(allowedPages);
-    const parent = document.querySelector('.classic-app-shell a.nav-link[href="/next/orders/new"]');
+    const operations = module === "operations";
+    const pages = operations
+      ? (featureAllowed(account, "orders.operations.view") ? OPERATIONS_ORDER_PAGES : [])
+      : allowedShoppingPages(allowedPages);
+    const parentPath = operations ? "/next/operations-orders" : "/next/orders/new";
+    const panelId = operations ? "operations-orders-secondary-sidebar-next" : "shopping-cart-secondary-sidebar-next";
+    const moduleLabel = operations ? "Operations Orders" : "Shopping Cart";
+    const parent = document.querySelector(`.classic-app-shell a.nav-link[href="${parentPath}"]`);
     if (!(parent instanceof HTMLAnchorElement)) return undefined;
 
     const parentLi = parent.closest("li");
     if (parentLi instanceof HTMLElement) parentLi.style.display = pages.length ? "" : "none";
     if (!pages.length) return undefined;
 
-    parent.dataset.shoppingCartSubpageCount = String(pages.length);
+    if (operations) parent.dataset.operationsOrdersSubpageCount = String(pages.length);
+    else parent.dataset.shoppingCartSubpageCount = String(pages.length);
     parent.setAttribute("aria-haspopup", pages.length > 1 ? "menu" : "false");
     parent.setAttribute("aria-expanded", "false");
-    parent.title = pages.length === 1 ? `Shopping Cart · ${pages[0].label}` : "Shopping Cart";
+    parent.title = pages.length === 1 ? `${moduleLabel} · ${pages[0].label}` : moduleLabel;
     parent.setAttribute("aria-label", parent.title);
 
     const currentPath = String(activePath || window.location.pathname || "").replace(/\/+$/, "");
@@ -105,13 +114,13 @@ export default function ShoppingCartSidebarFlyout({ allowedPages = [], activePat
       parent.classList.add("active");
     }
 
-    let panel = document.getElementById("shopping-cart-secondary-sidebar-next");
+    let panel = document.getElementById(panelId);
     if (!(panel instanceof HTMLElement)) {
       panel = document.createElement("aside");
-      panel.id = "shopping-cart-secondary-sidebar-next";
+      panel.id = panelId;
       panel.className = "task-management-secondary-sidebar shopping-cart-secondary-sidebar";
       panel.setAttribute("role", "menu");
-      panel.setAttribute("aria-label", "Shopping Cart pages");
+      panel.setAttribute("aria-label", `${moduleLabel} pages`);
       panel.setAttribute("aria-hidden", "true");
       document.body.appendChild(panel);
     }
@@ -227,7 +236,7 @@ export default function ShoppingCartSidebarFlyout({ allowedPages = [], activePat
       closePanel();
       panel.remove();
     };
-  }, [allowedPages, activePath, router]);
+  }, [allowedPages, activePath, router, account, module]);
 
   return null;
 }

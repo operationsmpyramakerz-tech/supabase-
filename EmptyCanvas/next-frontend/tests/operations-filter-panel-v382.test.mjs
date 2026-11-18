@@ -26,7 +26,7 @@ test('Incomplete count scans fail rather than show incorrect totals',async()=>{
   await assert.rejects(collectOperationsFilterGroups(async()=>null,rows=>rows),/Incomplete/);
 });
 test('Draft state is initialized on open, applies only through the footer and omits removed summary',()=>{
-  const ui=read('components/orders/OperationsFilterControl.jsx');assert.match(ui,/setDraftStatuses\(\[\.\.\.statusValues\]\)/);assert.match(ui,/onApply\(\{statuses:draftStatuses,type:draftType,sort:draftSort,reset:resetRequested\}\)/);assert.match(ui,/onClick=\{apply\}/);assert.match(ui,/onClick=\{reset\}/);assert.doesNotMatch(ui,/filters selected|Clear all/);assert.match(ui,/Smart shortcuts/);
+  const ui=read('components/orders/OperationsFilterControl.jsx');assert.match(ui,/setDraftStatuses\(\[\.\.\.statusValues\]\)/);assert.match(ui,/onApply\(\{statuses:draftStatuses,sort:draftSort,reset:resetRequested\}\)/);assert.match(ui,/onClick=\{apply\}/);assert.match(ui,/onClick=\{reset\}/);assert.doesNotMatch(ui,/filters selected|Clear all/);assert.match(ui,/Smart shortcuts/);
   const client=read('components/orders/OperationsOrdersClient.jsx');assert.match(client,/loadGroups=\{loadFilterGroups\}/);assert.match(client,/statuses: OPERATIONS_STATUS_OPTIONS.map/);assert.match(client,/onApply=\{applyFilters\}/);
   assert.match(read('components/orders/OrdersPreferencesControl.jsx'),/if \(props.loadGroups && props.statusOptions\?\.length\) return <OperationsFilterControl/);
 });

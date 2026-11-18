@@ -57,7 +57,7 @@ test('2P4B receive status uses its own API permission and scoped data guard', ()
 
 test('2P4B Operations delivery enforces receipt upload before any mutation or external file upload', () => {
   const api = read('app/api/orders/operations/mutations-direct/route.js');
-  const page = read('app/operations-orders/page.jsx');
+  const page = read('components/orders/OperationsOrdersPage.jsx');
   const screen = read('components/orders/OperationsOrdersClient.jsx');
   const modal = read('components/orders/OperationsOrdersHeavyModals.jsx');
   assert.ok(api.includes('if (action === "mark-arrived")'));

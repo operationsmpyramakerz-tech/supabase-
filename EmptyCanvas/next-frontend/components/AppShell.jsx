@@ -157,6 +157,7 @@ export default function AppShell({
     if (link.href === "/next/kits") return featureAllowed(account, "kits.view");
     if (link.href === "/next/proposals") return featureAllowed(account, "proposals.view");
     if (link.href === "/next/projects-preparing") return featureAllowed(account, "preparing.view");
+    if (link.href === "/next/operations-orders") return featureAllowed(account, "orders.operations.view");
     if (link.href === "/next/orders-review") return featureAllowed(account, "orders.review.view");
     if (link.href === "/next/task-management") return featureAllowed(account, "tasks.view");
     if (link.href === "/next/events") return ["events.calendar.view", "events.requests.view", "events.components.view", "events.team.view"].some(key => featureAllowed(account, key));
@@ -223,6 +224,7 @@ export default function AppShell({
       <TaskManagementSidebarFlyout allowedPages={allowedPages} account={account} activePath={activePath} />
       <EventsSidebarFlyout allowedPages={allowedPages} account={account} activePath={activePath} />
       <ShoppingCartSidebarFlyout allowedPages={allowedPages} activePath={activePath} />
+      <ShoppingCartSidebarFlyout module="operations" account={account} allowedPages={allowedPages} activePath={activePath} />
 
       <div className="app-container classic-app-shell">
         <aside className="sidebar" style={{ "--desktop-dock-pages-width": desktopDockPagesWidth }}>

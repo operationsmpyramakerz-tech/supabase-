@@ -12,7 +12,7 @@ const panels = [
 for (const [name, path] of panels) {
   test(`${name} auto-fits the secondary rail to permission-filtered pages`, () => {
     const source = read(path);
-    assert.match(source, /const pages = (?:allowedShoppingPages\(allowedPages\)|featureAllowed\(account, "tasks\.view"\) \? allowedTaskPages\(allowedPages\) : \[\]|allowedEventPages\(allowedPages\)\.filter\(page => featureAllowed\(account, modules\[page\.key\]\)\))/);
+    assert.match(source, /const pages = (?:operations\s*\? \(featureAllowed\(account, "orders\.operations\.view"\) \? OPERATIONS_ORDER_PAGES : \[\]\)\s*:\s*allowedShoppingPages\(allowedPages\)|allowedShoppingPages\(allowedPages\)|featureAllowed\(account, "tasks\.view"\) \? allowedTaskPages\(allowedPages\) : \[\]|allowedEventPages\(allowedPages\)\.filter\(page => featureAllowed\(account, modules\[page\.key\]\)\))/);
     const positionOfCount = source.indexOf('panel.style.setProperty("--secondary-page-count", String(pages.length))');
     const positionOfRender = source.indexOf('const renderPanel = () =>');
     assert.ok(positionOfCount > source.indexOf('const pages ='), 'Count comes from the filtered page list');

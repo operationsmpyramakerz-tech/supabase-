@@ -493,7 +493,7 @@ async function postJson(url, body) {
   if (response.status === 401) {
     const message = text(data?.error) || "Unauthorized request.";
     if (/password/i.test(message)) throw new Error(message);
-    window.location.href = "/login?next=/next/operations-orders";
+    window.location.href = `/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`;
     throw new Error("Your session has expired.");
   }
   if (!response.ok) {

@@ -808,7 +808,7 @@ export function ClassicSidebarActiveIndicator({ activePath = "" }) {
       const link = origin?.closest?.("a.nav-link");
       if (!(link instanceof HTMLAnchorElement) || !sidebar.contains(link)) return;
       const rawHref = String(link.getAttribute("href") || "").trim();
-      if (!rawHref || rawHref === "/next/task-management" || rawHref === "/next/events") return;
+      if (!rawHref || rawHref === "/next/task-management" || rawHref === "/next/events" || (rawHref === "/next/operations-orders" && link.getAttribute("aria-haspopup") === "menu")) return;
       let destination;
       try { destination = new URL(link.href, window.location.href); } catch { return; }
       if (destination.origin !== window.location.origin) return;
@@ -836,7 +836,7 @@ export function ClassicSidebarActiveIndicator({ activePath = "" }) {
       // Task Management and Events are parent buttons that open the approved
       // secondary sidebar instead of navigating directly. Their own handlers
       // stay fully in control of those interactions.
-      if (rawHref === "/next/task-management" || rawHref === "/next/events") return;
+      if (rawHref === "/next/task-management" || rawHref === "/next/events" || (rawHref === "/next/operations-orders" && link.getAttribute("aria-haspopup") === "menu")) return;
 
       let destination;
       try { destination = new URL(link.href, window.location.href); } catch { return; }

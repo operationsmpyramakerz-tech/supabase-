@@ -82,7 +82,7 @@ test('2P4A card summary remains readable without any forbidden details click or 
     assert.ok(code.includes('orderCardAllows(scopePolicy, "details", group)'));
   }
   assert.match(read('app/orders/page.jsx'), /\["view_details", "orders\.my\.view_details"\]/);
-  assert.match(read('app/operations-orders/page.jsx'), /\["details", "orders\.operations\.details"\]/);
+  assert.match(read('components/orders/OperationsOrdersPage.jsx'), /\["details", "orders\.operations\.details"\]/);
 });
 
 test('2P4A tracking API and SSR page check permission prior to reading private data', () => {

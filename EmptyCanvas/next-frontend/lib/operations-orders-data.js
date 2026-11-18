@@ -810,9 +810,9 @@ export async function loadOperationsOrdersPage({
   };
 }
 
-export async function loadOperationsOrdersInitialPage({ account = {}, limit = PAGE_LIMIT } = {}) {
+export async function loadOperationsOrdersInitialPage({ account = {}, type = "all", limit = PAGE_LIMIT } = {}) {
   return await measurePerformance("page-data", "orders.operations.initial", async () =>
-    await loadOperationsOrdersPage({ account, tab: "all", type: "all", query: "", cursor: null, limit }),
+    await loadOperationsOrdersPage({ account, tab: "all", type, query: "", cursor: null, limit }),
   );
 }
 async function enrichOperationsMaintenanceRows(details, timings = null) {

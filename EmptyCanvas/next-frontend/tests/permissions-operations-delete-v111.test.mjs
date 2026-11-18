@@ -66,7 +66,7 @@ test('v111/2Q3D server rejects partial order ID payloads before DB deletion', as
 });
 
 test('v111 order modal shows Delete separately from Edit in active and archived orders', () => {
-  const page = read('app/operations-orders/page.jsx');
+  const page = read('components/orders/OperationsOrdersPage.jsx');
   const modal = read('components/orders/OperationsOrdersHeavyModals.jsx');
   const client = read('components/orders/OperationsOrdersClient.jsx');
   assert.ok(page.includes('delete: "orders.operations.delete"'));
