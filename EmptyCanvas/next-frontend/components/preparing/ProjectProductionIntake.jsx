@@ -3,6 +3,7 @@ import StageFilterTabs from "./StageFilterTabs";
 import StageQuantityInput from "./StageQuantityInput";
 import {useEffect,useMemo,useRef,useState} from "react";
 import {createPortal} from "react-dom";
+import exportStyles from "./ProductionIntakeExport.module.css";
 import {testingChange,testingCoverage,testingCoverageTotals} from "../../lib/preparing-project-testing-math.mjs";
 import {testingGroups,TESTING_EXPORT_COLUMNS,testingExportValue} from "../../lib/preparing-project-testing-grouping.mjs";
 
@@ -42,6 +43,8 @@ function TestingIcon({name="box",size=20}){
   close:<path d="M5 5 19 19M19 5 5 19"/>,
   search:<><circle cx="10.8" cy="10.8" r="7"/><path d="m16 16 5 5"/></>,
   history:<><path d="M3 12a9 9 0 1 0 2.3-6"/><path d="M3 4v5h5M12 7v5l3.5 2"/></>,
+  fileDownload:<><path d="M13 2H5a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h6M13 2v6h6M13 2l6 6v3M7 10h5M7 14h4"/><circle cx="17.5" cy="17.5" r="5"/><path d="M17.5 14.8v5.2m-2-2 2 2 2-2"/></>,
+  chevron:<path d="m6 9 6 6 6-6"/>,
   download:<><path d="M12 3v12m-5-5 5 5 5-5"/><path d="M4 17v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></>,
   clock:<><circle cx="12" cy="12" r="9"/><path d="M12 6.5V12l3.5 2"/></>,
   engineer:<><path d="M4 10h16M7 10V8a5 5 0 0 1 10 0v2M12 3v4M8 11.5a4 4 0 0 0 8 0M8 16l-4 2v4h16v-4l-4-2M9 17l3 3 3-3"/></>,
@@ -83,6 +86,15 @@ export default function ProjectProductionIntake({projectId,projectName,canTest,e
  const [preview,setPreview]=useState(null),[previewIndex,setPreviewIndex]=useState(0);
  const [exportColumns,setExportColumns]=useState(TESTING_EXPORT_COLUMNS.map(c=>c.key));
  const [exportGroups,setExportGroups]=useState([]),[exportBusy,setExportBusy]=useState(false);
+ const [exportFormat,setExportFormat]=useState("pdf"),[exportSheet,setExportSheet]=useState("blank");
+ const [exportKitsOpen,setExportKitsOpen]=useState(false),[exportError,setExportError]=useState("");
+ const exportDialogRef=useRef(null),exportCloseRef=useRef(null);
+ useEffect(()=>{
+  if(!showExport)return;
+  const previous=document.activeElement;
+  exportCloseRef.current?.focus({preventScroll:true});
+  return()=>{if(previous instanceof HTMLElement&&previous.isConnected)previous.focus({preventScroll:true});};
+ },[showExport]);
  const [draft,setDraft]=useState({}),[editing,setEditing]=useState({});
  const [error,setError]=useState(""),[success,setSuccess]=useState(""),[rowError,setRowError]=useState({});
  useEffect(()=>{if(searchOpen&&tab==="testing")searchInputRef.current?.focus();},[searchOpen,tab]);
@@ -139,6 +151,25 @@ export default function ProjectProductionIntake({projectId,projectName,canTest,e
   finally{setBusy(false);}
  }
  const selectedExportGroups=()=>allGroups.filter(g=>!exportGroups.length||exportGroups.includes(g.key));
+ const openExport=()=>{
+  setExportFormat("pdf");setExportSheet("blank");setExportKitsOpen(false);setExportError("");setShowExport(true);
+ };
+ const closeExport=()=>{if(!exportBusy)setShowExport(false);};
+ const handleExportKeyDown=event=>{
+  if(event.key==="Escape"){event.stopPropagation();closeExport();return;}
+  if(event.key!=="Tab")return;
+  const focusable=[...exportDialogRef.current.querySelectorAll('button:not(:disabled),input:not(:disabled)')].filter(element=>!element.closest('[hidden]'));
+  if(!focusable.length){event.preventDefault();return;}
+  const first=focusable[0],last=focusable[focusable.length-1];
+  if(event.shiftKey&&(document.activeElement===first||!focusable.includes(document.activeElement))){event.preventDefault();last.focus();}
+  else if(!event.shiftKey&&(document.activeElement===last||!focusable.includes(document.activeElement))){event.preventDefault();first.focus();}
+ };
+ function submitExport(){
+  if(exportBusy||!selectedExportGroups().length||!exportColumns.includes("name"))return;
+  setExportError("");
+  if(exportFormat==="pdf")return exportPDF(exportSheet==="blank");
+  try{exportCSV(exportSheet==="blank");}catch(e){setExportError(e?.message||"Unable to export CSV.");}
+ }
  function exportCSV(blank=false){
   if(!exportColumns.includes("name"))return;
   const headers=["Kit Tag",...exportColumns.map(key=>TESTING_EXPORT_COLUMNS.find(col=>col.key===key).label.replace("Tested", "Received"))];
@@ -159,7 +190,7 @@ export default function ProjectProductionIntake({projectId,projectName,canTest,e
    const blob=await response.blob();
    const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=`production-intake-${blank?"blank":"results"}-${projectId}.pdf`;a.click();setTimeout(()=>URL.revokeObjectURL(url),3000);
    setShowExport(false);
-  }catch(e){setError(e?.message||"Unable to export PDF.");}finally{setExportBusy(false);}
+  }catch(e){setExportError(e?.message||"Unable to export PDF.");}finally{setExportBusy(false);}
  }
  const toggleColumn=key=>{if(key==="name")return;setExportColumns(old=>old.includes(key)?old.filter(k=>k!==key):TESTING_EXPORT_COLUMNS.filter(c=>old.includes(c.key)||c.key===key).map(c=>c.key));};
  const toggleGroup=key=>{setExportGroups(old=>{
@@ -217,7 +248,7 @@ export default function ProjectProductionIntake({projectId,projectName,canTest,e
        </div>
       </div>
      </div>
-     <button type="button" className="pr-pt-download-button" aria-label="Download receiving report" title="Download receiving report" onClick={()=>setShowExport(true)} disabled={!data.items.length}><TestingIcon name="download" size={21}/></button>
+     <button type="button" className="pr-pt-download-button" aria-label="Download receiving report" title="Download receiving report" onClick={openExport} disabled={!data.items.length}><TestingIcon name="download" size={21}/></button>
     </div>
    </div>
    {tab==="testing"&&<>
@@ -280,23 +311,43 @@ export default function ProjectProductionIntake({projectId,projectName,canTest,e
     </section>
    </div>, document.body
   )}
-  {showExport&&<div className="pr-pt-export-overlay" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget&&!exportBusy)setShowExport(false);}}>
-   <section className="pr-pt-export-modal" role="dialog" aria-modal="true" aria-label="Export production receiving">
-    <header className="pr-pt-export-head"><div><strong>Export Receiving</strong><small>Choose columns, Kits and report format</small></div><button type="button" className="pr-secondary" disabled={exportBusy} onClick={()=>setShowExport(false)} aria-label="Close export">×</button></header>
-    <div className="pr-pt-export-body"><div className="pr-pt-export-summary">{exportColumns.length} columns selected <span aria-hidden="true">·</span> {exportGroups.length||allGroups.length} kit groups</div>
-     <div className="pr-pt-export-section-head"><strong>Columns</strong><button type="button" className="pr-pt-export-link" onClick={()=>setExportColumns(TESTING_EXPORT_COLUMNS.map(c=>c.key))}>Select all</button></div>
-     <div className="pr-pt-export-checks">{TESTING_EXPORT_COLUMNS.map(col=><label key={col.key} className="pr-pt-export-check"><input type="checkbox" checked={exportColumns.includes(col.key)} disabled={col.fixed} onChange={()=>toggleColumn(col.key)}/><span>{col.label.replace("Tested", "Received")}</span></label>)}</div>
-     <div className="pr-pt-export-section-head"><strong>Kit groups</strong><button type="button" className="pr-pt-export-link" onClick={()=>setExportGroups([])}>All Kits</button></div>
-     <div className="pr-pt-export-kits">{allGroups.map(group=><label key={group.key} className="pr-pt-export-check"><input type="checkbox" checked={!exportGroups.length||exportGroups.includes(group.key)} onChange={()=>toggleGroup(group.key)}/><span>{group.name}</span></label>)}</div>
-     <div className="pr-pt-export-info">Blank physical sheets include component names and required quantities; received quantities, Received By and Signature remain empty for handwriting.</div>
-    </div>
-    <footer className="pr-pt-export-actions">
-     <button type="button" className="pr-secondary" disabled={exportBusy} onClick={()=>exportCSV(false)}>CSV · Values</button>
-     <button type="button" className="pr-secondary" disabled={exportBusy} onClick={()=>exportCSV(true)}>CSV · Blank</button>
-     <button type="button" className="pr-secondary" disabled={exportBusy} onClick={()=>exportPDF(false)}>PDF · Values</button>
-     <button type="button" className="pr-primary" disabled={exportBusy} onClick={()=>exportPDF(true)}>{exportBusy?"Exporting…":"PDF · Blank sheet"}</button>
-    </footer>
-   </section>
-  </div>}
+  {showExport&&typeof document!=="undefined"&&createPortal(
+   <div className={exportStyles.overlay} role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)closeExport();}}>
+    <section ref={exportDialogRef} className={exportStyles.modal} role="dialog" aria-modal="true" aria-labelledby="intake-export-title" aria-busy={exportBusy} onKeyDown={handleExportKeyDown}>
+     <div className={exportStyles.emblem} aria-hidden="true"><TestingIcon name="fileDownload" size={32}/></div>
+     <header className={exportStyles.header}>
+      <h2 id="intake-export-title">Export Receiving</h2>
+      <button ref={exportCloseRef} type="button" className={exportStyles.close} disabled={exportBusy} onClick={closeExport} aria-label="Close export"><TestingIcon name="close" size={20}/></button>
+     </header>
+     <div className={exportStyles.body}>
+      <div className={exportStyles.summary} aria-live="polite">{exportColumns.length} columns selected <span aria-hidden="true">·</span> {selectedExportGroups().length} kit groups</div>
+      <div className={exportStyles.block}>
+       <div className={exportStyles.sectionHead}><h3>Columns</h3><button type="button" className={exportStyles.link} disabled={exportBusy} onClick={()=>setExportColumns(TESTING_EXPORT_COLUMNS.map(c=>c.key))}>Select all</button></div>
+       <div className={exportStyles.checks}>{TESTING_EXPORT_COLUMNS.map(col=><label key={col.key} className={exportStyles.check}><input type="checkbox" checked={exportColumns.includes(col.key)} disabled={exportBusy||col.fixed} onChange={()=>toggleColumn(col.key)}/><span>{col.label.replace("Tested", "Received")}</span></label>)}</div>
+      </div>
+      <div className={exportStyles.block}>
+       <div className={exportStyles.sectionHead}><h3>Kit groups</h3><button type="button" className={exportStyles.link} disabled={exportBusy} onClick={()=>setExportGroups([])}>All kits</button></div>
+       <button type="button" className={exportStyles.kitTrigger} disabled={exportBusy} aria-expanded={exportKitsOpen} aria-controls="intake-export-kits" aria-label={`${selectedExportGroups().length} kit groups selected; choose kit groups`} onClick={()=>setExportKitsOpen(value=>!value)}>
+        <span className={exportStyles.chips}>{selectedExportGroups().slice(0,2).map(group=><span className={exportStyles.chip} key={group.key}><span className={exportStyles.chipCheck}><TestingIcon name="check" size={12}/></span><span>{group.name}</span></span>)}{selectedExportGroups().length>2&&<span className={exportStyles.more}>+ {selectedExportGroups().length-2} more</span>}{!selectedExportGroups().length&&<span>No kits</span>}</span>
+        <span className={exportKitsOpen?exportStyles.chevronOpen:exportStyles.chevron}><TestingIcon name="chevron" size={20}/></span>
+       </button>
+       <div id="intake-export-kits" hidden={!exportKitsOpen} className={exportStyles.kitOptions}>{allGroups.map(group=><label key={group.key} className={exportStyles.check}><input type="checkbox" checked={!exportGroups.length||exportGroups.includes(group.key)} disabled={exportBusy||((!exportGroups.length?allGroups.length:exportGroups.length)===1&&(!exportGroups.length||exportGroups.includes(group.key)))} onChange={()=>toggleGroup(group.key)}/><span>{group.name}</span></label>)}</div>
+      </div>
+      <div className={exportStyles.block}>
+       <h3 id="intake-export-format">Report format</h3>
+       <div className={exportStyles.segments} role="group" aria-labelledby="intake-export-format">{[["pdf","PDF"],["csv","CSV"]].map(([value,label])=><button key={value} type="button" aria-pressed={exportFormat===value} disabled={exportBusy} onClick={()=>setExportFormat(value)}><TestingIcon name="document" size={19}/>{label}</button>)}</div>
+      </div>
+      <div className={exportStyles.block}>
+       <h3 id="intake-export-sheet">Sheet type</h3>
+       <div className={exportStyles.segments} role="group" aria-labelledby="intake-export-sheet">{[["values","Values"],["blank","Blank sheet"]].map(([value,label])=><button key={value} type="button" aria-pressed={exportSheet===value} disabled={exportBusy} onClick={()=>setExportSheet(value)}><TestingIcon name="layers" size={19}/>{label}</button>)}</div>
+      </div>
+     </div>
+     <footer className={exportStyles.footer}>
+      {exportError&&<div role="alert" className={exportStyles.error}>{exportError}</div>}
+      <button type="button" className={exportStyles.submit} disabled={exportBusy||!selectedExportGroups().length||!exportColumns.includes("name")} onClick={submitExport}><TestingIcon name="download" size={21}/>{exportBusy?"Exporting…":"Export"}</button>
+     </footer>
+    </section>
+   </div>,document.body
+  )}
  </div>;
 }
