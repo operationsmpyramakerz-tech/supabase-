@@ -67,9 +67,10 @@ function visualOrder(units, direction) {
   return output.join(" ");
 }
 
-function prepareMixedArabicReason(value, { width, measure } = {}) {
+function prepareMixedArabicReason(value, { width, measure, direction: paragraphDirection } = {}) {
   const source = String(value ?? "").replace(/\r\n?/g, "\n");
-  const direction = baseDirection(source);
+  const direction = paragraphDirection === "rtl" || paragraphDirection === "ltr"
+    ? paragraphDirection : baseDirection(source);
   if (!isMixedArabicReason(source)) return { text: source, align: direction === "rtl" ? "right" : "left" };
 
   const canWrap = Number.isFinite(width) && width > 0 && typeof measure === "function";

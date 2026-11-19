@@ -2,7 +2,8 @@ const PDFDocument = require("pdfkit");
 const path = require("path");
 const { attachPageNumbers } = require("./pdfPageNumbers");
 const { drawStocktakingHeader } = require("./pdfHeader");
-const { containsArabic, enableArabicPdf, ensurePdfArabicSupport, withNativeArabicPdfText } = require("./pdfArabicSupport");
+const { containsArabic, enableArabicPdf, ensurePdfArabicSupport } = require("./pdfArabicSupport");
+const { layoutMaintenanceArabicText, drawMaintenanceArabicText } = require("./maintenancePdfTextLayout");
 
 function formatDateTime(date) {
   try {
@@ -35,87 +36,6 @@ function money(value) {
 function safeExternalUrl(value) {
   const raw = String(value || "").trim();
   return /^https?:\/\//i.test(raw) ? raw : "";
-}
-
-// PDFKit/fontkit shapes Arabic glyphs correctly, but PDFKit still lays out the
-// whitespace-separated word runs from left to right. Build the visual RTL order
-// ourselves while keeping consecutive English/number runs in their original
-// order (for values such as "Power Supply 24V 2A"). The actual Arabic words stay
-// logical so fontkit can shape them normally.
-function nativeRtlVisualLine(wordsInput) {
-  const words = Array.isArray(wordsInput)
-    ? wordsInput.map((word) => String(word || "")).filter(Boolean)
-    : (String(wordsInput || "").trim().match(/\S+/g) || []);
-  if (!words.length) return "";
-
-  const runs = [];
-  for (let index = 0; index < words.length; index += 1) {
-    const word = words[index];
-    const arabic = containsArabic(word);
-    const latinOrNumber = /[A-Za-z0-9]/.test(word);
-
-    if (arabic) {
-      runs.push({ direction: "rtl", words: [word] });
-      continue;
-    }
-
-    if (latinOrNumber) {
-      const previous = runs[runs.length - 1];
-      if (previous?.direction === "ltr") previous.words.push(word);
-      else runs.push({ direction: "ltr", words: [word] });
-      continue;
-    }
-
-    // Keep punctuation with the closest meaningful run. A leading dash/bullet
-    // belongs to the following Arabic phrase so it stays on the right edge.
-    const previous = runs[runs.length - 1];
-    const nextWord = words[index + 1] || "";
-    if (!previous && containsArabic(nextWord)) {
-      runs.push({ direction: "rtl", words: [word] });
-    } else if (previous) {
-      previous.words.push(word);
-    } else {
-      runs.push({ direction: "ltr", words: [word] });
-    }
-  }
-
-  return runs.reverse().map((run) => run.words.join(" ")).join(" ");
-}
-
-function prepareNativeRtlPdfText(doc, value, maxWidth) {
-  const input = String(value || "").replace(/\r\n?/g, "\n");
-  if (!input) return "";
-
-  const width = Number(maxWidth);
-  const canMeasure = doc && typeof doc.widthOfString === "function" && Number.isFinite(width) && width > 0;
-
-  return input
-    .split("\n")
-    .map((sourceLine) => {
-      const rawLine = String(sourceLine || "").trim();
-      if (!rawLine) return "";
-
-      const words = rawLine.match(/\S+/g) || [];
-      if (!canMeasure || words.length <= 1) return nativeRtlVisualLine(words);
-
-      const logicalLines = [];
-      let current = [];
-      for (const word of words) {
-        const candidate = current.concat(word);
-        const visualCandidate = nativeRtlVisualLine(candidate);
-        const candidateWidth = doc.widthOfString(visualCandidate);
-        if (current.length && candidateWidth > width) {
-          logicalLines.push(current);
-          current = [word];
-        } else {
-          current = candidate;
-        }
-      }
-      if (current.length) logicalLines.push(current);
-
-      return logicalLines.map((logicalLine) => nativeRtlVisualLine(logicalLine)).join("\n");
-    })
-    .join("\n");
 }
 
 function uniqueTextList(value) {
@@ -281,25 +201,24 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
   const makeValueLayout = (value, width, fontSize = 8.8, fontName = "Helvetica", lineGap = 1) => {
     const raw = ensureText(value);
     const isArabic = containsArabic(raw);
-    const build = () => {
-      doc.font(fontName).fontSize(fontSize);
-      const display = isArabic ? prepareNativeRtlPdfText(doc, raw, width) : raw;
-      const align = isArabic ? "right" : "left";
-      const height = doc.heightOfString(display, { width, lineGap, align });
-      return { display, isArabic, align, height };
-    };
-    return isArabic ? withNativeArabicPdfText(doc, build) : build();
+    doc.font(fontName).fontSize(fontSize);
+    if (isArabic) return layoutMaintenanceArabicText(doc, raw, width, { fontName, fontSize, lineGap });
+    return { display: raw, isArabic: false, align: "left", height: doc.heightOfString(raw, { width, lineGap, align: "left" }) };
   };
 
   const drawValueLayout = (layout, x, y, width, { fontName = "Helvetica", fontSize = 8.8, lineGap = 1, color = COLORS.text, align, link } = {}) => {
     const safeLink = safeExternalUrl(link);
-    const render = () => doc.fillColor(color).font(fontName).fontSize(fontSize).text(layout.display, x, y, {
+    const linkOptions = safeLink ? { link: safeLink, underline: true } : {};
+    doc.fillColor(color);
+    if (layout.isArabic) {
+      return drawMaintenanceArabicText(doc, layout, x, y, width, { align, ...linkOptions });
+    }
+    return doc.font(fontName).fontSize(fontSize).text(layout.display, x, y, {
       width,
       lineGap,
       align: align || layout.align,
-      ...(safeLink ? { link: safeLink, underline: true } : {}),
+      ...linkOptions,
     });
-    return layout.isArabic ? withNativeArabicPdfText(doc, render) : render();
   };
 
   const drawMetaCard = (x, y, w, label, value) => {
