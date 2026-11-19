@@ -620,12 +620,11 @@ export function UserExpensesModal({ user, ownCarRate = DEFAULT_OWN_CAR_RATE_EGP_
 
   const renderGroups = (groups) => groups.length ? groups.map((group) => <UserExpenseTicket group={group} canViewOrderReceipts={permissions.viewOrderReceipts !== false} onReceipt={openReceipt} onEdit={permissions.edit ? beginEdit : null} onDelete={permissions.delete ? beginDelete : null} menuKey={menuKey} setMenuKey={setMenuKey} key={group.key}/>) : <div className="expenses-empty">Sorry, No data available</div>;
 
-  return <>
+  return createPortal(<>
     <div className={`ios-modal next-ios-modal-open ${styles.overlay}`} ref={overlayRef} style={{ display: "flex" }} role="dialog" aria-modal={receiptItem ? undefined : true} aria-hidden={receiptItem ? true : undefined} inert={receiptItem ? true : undefined} aria-labelledby="user-expenses-sheet-title" onMouseDown={(event) => event.target === event.currentTarget && !receiptItem && !action && requestClose()}>
       <div className={`ios-sheet ${styles.sheet}`} style={{ transform: opened && !closing ? "translateY(0)" : "translateY(100%)" }} onMouseDown={(event) => event.stopPropagation()}>
         <header className={styles.header}>
           <span className={styles.floatingIcon} aria-hidden="true"><UserClassicIcon name="wallet" size={28}/></span>
-          <button className={styles.close} type="button" aria-label="Close expenses" onClick={requestClose}><UserClassicIcon name="close" size={22}/></button>
           <h2 id="user-expenses-sheet-title" className={styles.title}>Expenses — {user.name || "User"}</h2>
         </header>
         <div className={`sheet-scroll ${styles.scroll}`}>
@@ -652,11 +651,14 @@ export function UserExpensesModal({ user, ownCarRate = DEFAULT_OWN_CAR_RATE_EGP_
           <div id="userExpensesList">{loading ? <div className="expenses-empty">Loading expenses…</div> : filterActive ? renderGroups(allDateGroups) : <>{renderGroups(recentGroups)}{showPast && pastGroups.length ? <><div className="expenses-separator"><span>Past expenses</span></div>{renderGroups(pastGroups)}</> : null}</>}</div>
           {!filterActive && split.past.length ? <div className="past-expenses-wrapper"><button className="past-expenses-btn" type="button" onClick={() => setShowPast((value) => !value)}>{showPast ? "Hide past expenses" : "Show past expenses"}</button></div> : null}
         </div>
+        <footer className={styles.footer}>
+          <button className={styles.closeButton} type="button" onClick={requestClose} disabled={closing}>Close</button>
+        </footer>
       </div>
     </div>
     {receiptItem ? <ReceiptViewer item={receiptItem} onClose={closeReceipt} /> : null}
     {action?.type === "password" ? <AdminPasswordModal mode={action.mode} count={action.ids?.length || 1} onClose={() => setAction(null)} onContinue={continueWithPassword} /> : null}
     {action?.type === "edit" ? <EditExpenseModal item={action.item} ownCarRate={ownCarRate} adminPassword={action.password} onClose={() => setAction(null)} onSaved={refreshAfterMutation} notify={notify} /> : null}
     {action?.type === "delete-confirm" ? <DeleteConfirmationModal count={action.ids?.length || 1} busy={deleteBusy} onClose={() => setAction(null)} onConfirm={deleteGroup} /> : null}
-  </>;
+  </>, document.body);
 }

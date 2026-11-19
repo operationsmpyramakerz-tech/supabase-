@@ -1,7 +1,10 @@
 /* Scoped to Expenses by Users only; shared expense sheet styles stay untouched. */
 /* Use the visible mobile viewport, including browser navigation and keyboards. */
 .overlay:global(.ios-modal) {
+  box-sizing: border-box;
   height: var(--user-expenses-visible-height, 100dvh);
+  /* Reserve room for the 60px icon, even when the list fills the sheet. */
+  padding: 64px 0 16px;
   top: var(--user-expenses-visible-top, 0px);
   bottom: auto;
 }
@@ -17,7 +20,11 @@
   box-sizing: border-box;
   width: 100%;
   max-width: 900px;
-  max-height: min(calc(var(--user-expenses-visible-height, 100dvh) - 80px), 900px);
+  display: flex;
+  flex-direction: column;
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: min(100%, 900px);
   overflow: visible;
   background: var(--sheet-surface);
   color: var(--sheet-ink);
@@ -29,7 +36,7 @@
 .header {
   position: relative;
   flex: 0 0 auto;
-  padding: 38px 54px 15px;
+  padding: 38px 16px 15px;
   border-bottom: 1px solid var(--sheet-line);
   text-align: center;
 }
@@ -51,7 +58,7 @@
   pointer-events: none;
 }
 .title { margin: 0; font-size: 1.25rem; font-weight: 900; line-height: 1.25; letter-spacing: -.025em; overflow-wrap: anywhere; }
-.close, .tool {
+.tool {
   display: grid;
   place-items: center;
   width: 40px;
@@ -64,8 +71,29 @@
   cursor: pointer;
   padding: 0;
 }
-.close { position: absolute; top: 12px; right: 14px; }
-.overlay .sheet .scroll { min-height: 0; margin: 0; padding: 14px 16px max(16px, env(safe-area-inset-bottom)); gap: 12px; overscroll-behavior: contain; }
+.overlay .sheet .scroll { min-height: 0; margin: 0; padding: 14px 16px 16px; gap: 12px; overscroll-behavior: contain; }
+.footer {
+  flex: 0 0 auto;
+  padding: 10px 16px 12px;
+  border-top: 1px solid var(--sheet-line);
+  background: var(--sheet-surface);
+  border-radius: 0 0 27px 27px;
+}
+.closeButton {
+  display: block;
+  width: 100%;
+  min-height: 46px;
+  padding: 12px 16px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: #151515;
+  color: #fff;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+.closeButton:focus-visible { outline: 2px solid var(--sheet-accent); outline-offset: 2px; }
+.closeButton:disabled { opacity: .65; cursor: default; }
 .scroll > :global(#userExpensesList) { flex: 0 0 auto; min-width: 0; }
 .sheet .balance { flex: 0 0 auto; padding: 13px 15px; border-radius: 16px; box-shadow: none; }
 .controls { flex: 0 0 auto; display: flex; flex-direction: column; gap: 8px; }
@@ -99,9 +127,12 @@
 }
 :global(html[data-theme="dark"]) .floatingIcon { border-color: #374151; }
 :global(html[data-theme="dark"]) .download, :global(html[data-theme="dark"]) .apply { background: #f8fafc; color: #11161f; }
+:global(html[data-theme="dark"]) .closeButton { border-color: #4b5563; }
 :global(html[data-theme="dark"]) .error { color: #fca5a5; }
 @media (max-width: 899px) {
-  .overlay .sheet { width: 100%; max-width: none; max-height: calc(var(--user-expenses-visible-height, 100dvh) - 48px); border-radius: 26px 26px 0 0; border-inline: 0; border-bottom: 0; }
+  .overlay:global(.ios-modal) { padding: max(64px, calc(env(safe-area-inset-top) + 42px)) 0 0; }
+  .overlay .sheet { width: 100%; max-width: none; max-height: 100%; border-radius: 26px 26px 0 0; border-inline: 0; border-bottom: 0; }
+  .footer { padding-bottom: max(12px, env(safe-area-inset-bottom)); border-radius: 0; }
 }
 @media (max-width: 350px) {
   .overlay .sheet .scroll { padding-inline: 10px; }
