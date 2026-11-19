@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { getDirectAccountGate } from "../../../../../lib/products-auth";
 import { featureGate } from "../../../../../lib/feature-permissions-server";
 import { resolveExpenseUserAccess, scopeExpenseDetail } from "../../../../../lib/expenses-users-scope";
-import { expensesForMemberId } from "../../../../../lib/expenses-data";
+import { expenseDestinationOptions, expensesForMemberId } from "../../../../../lib/expenses-data";
+
+import { buildExpenseDestinationFilters } from "../../../../../lib/expense-users-filters.mjs";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -20,7 +22,17 @@ export async function GET(_request, { params }) {
     const { memberId } = await params;
     const lookupId = await resolveExpenseUserAccess(gate.account, "expenses.users.view", memberId);
     const payload = await expensesForMemberId(lookupId);
-    return NextResponse.json(await scopeExpenseDetail(gate.account, "expenses.users.view", memberId, payload), {
+    const scoped = await scopeExpenseDetail(gate.account, "expenses.users.view", memberId, payload);
+    // Never expose the full directory or derive options from unscoped expenses.
+    let directory = [];
+    let destinationOptionsUnavailable = false;
+    try { directory = await expenseDestinationOptions({ fresh: true }); }
+    catch (error) {
+      destinationOptionsUnavailable = true;
+      console.warn("[expenses/users] destination filter directory unavailable:", error?.message || error);
+    }
+    const destinationFilters = buildExpenseDestinationFilters(scoped.items || [], directory);
+    return NextResponse.json({ ...scoped, ...destinationFilters, destinationOptionsUnavailable }, {
       headers: { "Cache-Control": "no-store" },
     });
   } catch (error) {

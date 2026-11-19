@@ -1,6 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { EMPTY_EXPENSE_FILTERS, expenseFilterCount, expenseFundsTypeOptions, matchesExpenseUserFilters } from "../../lib/expense-users-filters.mjs";
+import styles from "./ExpensesUsersSheet.module.css";
 import { DeleteConfirmDialog, DeleteVerificationDialog } from "../shared/SystemDeleteDialogs";
 import { DEFAULT_OWN_CAR_RATE_EGP_PER_KM, ownCarCostForKilometers } from "../../lib/own-car-expense.mjs";
 
@@ -158,19 +161,8 @@ function splitBySettlement(items, apiSettledAt, apiSettledDate) {
   return { recent, past, lastSettledAt: settledAt, lastSettledDate: settledDate };
 }
 
-function filterAndSort(items, { from = "", to = "", sortType = "newest" } = {}) {
-  let result = Array.isArray(items) ? [...items] : [];
-  if (from || to) {
-    result = result.filter((item) => {
-      const raw = item?.date || item?.createdTime || item?.created_time || null;
-      if (!raw) return true;
-      const key = toLocalDateKey(raw);
-      if (!key) return true;
-      if (from && key < from) return false;
-      if (to && key > to) return false;
-      return true;
-    });
-  }
+function filterAndSort(items, { sortType = "newest", ...filters } = {}) {
+  const result = (Array.isArray(items) ? items : []).filter(item => matchesExpenseUserFilters(item, filters, toLocalDateKey));
   result.sort((a, b) => {
     const dateA = new Date(a?.date || a?.createdTime || a?.created_time || 0);
     const dateB = new Date(b?.date || b?.createdTime || b?.created_time || 0);
@@ -324,6 +316,8 @@ async function fileToExpenseDataUrl(file) {
 function UserClassicIcon({ name, size = 18 }) {
   const common = { viewBox: "0 0 24 24", width: size, height: size, fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true };
   const icons = {
+    close: <><path d="m6 6 12 12M18 6 6 18"/></>,
+    wallet: <><path d="M20 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2v-3"/><path d="M3 7h17a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-4a4 4 0 0 1 0-8h6"/><path d="M16 13h.01"/></>,
     download: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>,
     filter: <polygon points="22 3 2 3 10 12.5 10 19 14 21 14 12.5 22 3"/>,
     rotate: <><polyline points="1 4 1 10 7 10"/><path d="M3.5 15a9 9 0 1 0 2.1-9.4L1 10"/></>,
@@ -353,13 +347,14 @@ function ReceiptViewer({ item, onClose }) {
     return () => { document.body.classList.remove("expense-shots-modal-open"); document.removeEventListener("keydown", onKey); };
   }, [onClose]);
 
-  return (
-    <div className="expense-shots-modal is-open" style={{ display: "flex" }} aria-hidden="false" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+  return createPortal(
+    <div className={`expense-shots-modal is-open ${styles.receiptOverlay}`} style={{ display: "flex" }} aria-hidden="false" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <div className="expense-shots-modal__card" role="dialog" aria-modal="true">
-        <div className="expense-shots-modal__head"><div><h4 className="expense-shots-modal__title">Screenshots</h4><div className="expense-shots-modal__count">{screenshots.length ? `${screenshots.length} image${screenshots.length === 1 ? "" : "s"}` : "No images uploaded"}</div></div><button type="button" className="expense-shots-modal__close" onClick={onClose} aria-label="Close screenshots viewer"><span aria-hidden="true">×</span></button></div>
+        <div className="expense-shots-modal__head"><div><h4 className="expense-shots-modal__title">Screenshots</h4><div className="expense-shots-modal__count">{screenshots.length ? `${screenshots.length} image${screenshots.length === 1 ? "" : "s"}` : "No images uploaded"}</div></div><button type="button" className="expense-shots-modal__close" autoFocus onClick={onClose} aria-label="Close screenshots viewer"><span aria-hidden="true">×</span></button></div>
         <div className="expense-shots-modal__body">{screenshots.length ? <div className="expense-shots-modal__grid">{screenshots.map((shot, index) => <a className="expense-shots-modal__item" href={shot.url} target="_blank" rel="noreferrer" key={`${shot.url}-${index}`}><span className="expense-shots-modal__image-wrap"><img className="expense-shots-modal__image" src={shot.url} alt={shot.name || `Screenshot ${index + 1}`} loading="lazy" /></span><span className="expense-shots-modal__caption">{shot.name || `Screenshot ${index + 1}`}</span></a>)}</div> : <div className="expense-shots-modal__empty"><div className="expense-shots-modal__empty-icon"><UserClassicIcon name="image" size={24}/></div><div>No screenshots uploaded for this expense.</div></div>}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -481,10 +476,19 @@ export function UserExpensesModal({ user, ownCarRate = DEFAULT_OWN_CAR_RATE_EGP_
   const [payload, setPayload] = useState(null);
   const [loading, setLoading] = useState(true);
   const [sort, setSort] = useState("newest");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [draftDateFrom, setDraftDateFrom] = useState("");
-  const [draftDateTo, setDraftDateTo] = useState("");
+  const [filters, setFilters] = useState(EMPTY_EXPENSE_FILTERS);
+  const [draftFilters, setDraftFilters] = useState(EMPTY_EXPENSE_FILTERS);
+  const [control, setControl] = useState("");
+  const { from: dateFrom, to: dateTo } = filters;
+  const filterCount = expenseFilterCount(filters);
+  const filterActive = filterCount > 0;
+  const invalidDates = Boolean(draftFilters.from && draftFilters.to && draftFilters.from > draftFilters.to);
+  const updateDraft = (key, value) => setDraftFilters(previous => ({ ...previous, [key]: value }));
+  const toggleControl = (key) => {
+    setMenuKey("");
+    if (key === "filter" && control !== "filter") setDraftFilters(filters);
+    setControl(control === key ? "" : key);
+  };
   const [showPast, setShowPast] = useState(false);
   const [receiptItem, setReceiptItem] = useState(null);
   const [menuKey, setMenuKey] = useState("");
@@ -493,12 +497,52 @@ export function UserExpensesModal({ user, ownCarRate = DEFAULT_OWN_CAR_RATE_EGP_
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [opened, setOpened] = useState(false);
   const [closing, setClosing] = useState(false);
+  const overlayRef = useRef(null);
+  const receiptTrigger = useRef(null);
+  const openReceipt = (item) => {
+    receiptTrigger.current = document.activeElement;
+    setReceiptItem(item);
+  };
+  const closeReceipt = () => {
+    setReceiptItem(null);
+    requestAnimationFrame(() => receiptTrigger.current?.focus?.());
+  };
+  useEffect(() => {
+    const overlay = overlayRef.current;
+    if (!overlay) return;
+    const viewport = window.visualViewport;
+    const syncViewport = () => {
+      const heights = [viewport?.height, window.innerHeight, document.documentElement.clientHeight].filter(height => Number.isFinite(height) && height > 0);
+      if (heights.length) overlay.style.setProperty("--user-expenses-visible-height", `${Math.floor(Math.min(...heights))}px`);
+      overlay.style.setProperty("--user-expenses-visible-top", `${Math.max(0, viewport?.offsetTop || 0)}px`);
+    };
+    syncViewport();
+    window.addEventListener("resize", syncViewport);
+    viewport?.addEventListener("resize", syncViewport);
+    viewport?.addEventListener("scroll", syncViewport);
+    return () => {
+      window.removeEventListener("resize", syncViewport);
+      viewport?.removeEventListener("resize", syncViewport);
+      viewport?.removeEventListener("scroll", syncViewport);
+    };
+  }, []);
 
   const userId = text(user?.id || user?.userId);
   const load = async () => {
     setLoading(true);
     try {
-      setPayload(await requestJson(`/next/api/expenses/user/${encodeURIComponent(userId)}`));
+      const nextPayload = await requestJson(`/next/api/expenses/user/${encodeURIComponent(userId)}`);
+      setPayload(nextPayload);
+      // Do not leave an applied select value that has disappeared after an edit/delete.
+      // Preserve a selected destination during temporary directory outages rather than broadening the search.
+      const reconcile = previous => {
+        const next = { ...previous };
+        if (!nextPayload.destinationOptionsUnavailable && next.destination && !nextPayload.destinationOptions?.some(option => option.id === next.destination)) next.destination = "";
+        if (next.fundsType && !expenseFundsTypeOptions(nextPayload.items || []).some(option => option.value === next.fundsType)) next.fundsType = "";
+        return next;
+      };
+      setFilters(reconcile);
+      setDraftFilters(reconcile);
     }
     catch (error) { notify("Unable to load expenses", error?.message || "Failed to load this user's expenses.", "error"); }
     finally { setLoading(false); }
@@ -515,17 +559,24 @@ export function UserExpensesModal({ user, ownCarRate = DEFAULT_OWN_CAR_RATE_EGP_
     window.setTimeout(onClose, 300);
   };
   useEffect(() => {
-    const onKey = (event) => event.key === "Escape" && !action && !receiptItem && requestClose();
+    const onKey = (event) => {
+      if (event.key !== "Escape" || action || receiptItem) return;
+      if (control) setControl("");
+      else if (menuKey) setMenuKey("");
+      else requestClose();
+    };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [action, receiptItem, closing]);
+  }, [action, receiptItem, closing, control, menuKey]);
 
   const split = useMemo(() => splitBySettlement(payload?.items || [], payload?.lastSettledAt, payload?.lastSettledDate), [payload]);
-  const filteredRecent = useMemo(() => filterAndSort(split.recent, { from: dateFrom, to: dateTo, sortType: sort }), [split.recent, dateFrom, dateTo, sort]);
-  const filteredPast = useMemo(() => filterAndSort(split.past, { from: dateFrom, to: dateTo, sortType: sort }), [split.past, dateFrom, dateTo, sort]);
-  const dateFilterActive = !!(dateFrom || dateTo);
+  const destinationOptions = payload?.destinationOptions || [];
+  const fundsTypeOptions = useMemo(() => expenseFundsTypeOptions(payload?.items || []), [payload]);
+  const filteredRecent = useMemo(() => filterAndSort(split.recent, { ...filters, sortType: sort }), [split.recent, filters, sort]);
+  const filteredPast = useMemo(() => filterAndSort(split.past, { ...filters, sortType: sort }), [split.past, filters, sort]);
   const combinedFiltered = useMemo(() => filterAndSort([...filteredRecent, ...filteredPast], { sortType: sort }), [filteredRecent, filteredPast, sort]);
-  const totalItems = dateFilterActive ? combinedFiltered : filteredRecent;
+  // An explicit filter searches both statement periods; the default remains the current balance.
+  const totalItems = filterActive ? combinedFiltered : filteredRecent;
   const filteredNet = totalItems.reduce((sum, item) => sum + transactionValue(item), 0);
   const recentGroups = useMemo(() => groupUserExpenses(filteredRecent, sort), [filteredRecent, sort]);
   const pastGroups = useMemo(() => groupUserExpenses(filteredPast, sort), [filteredPast, sort]);
@@ -533,8 +584,8 @@ export function UserExpensesModal({ user, ownCarRate = DEFAULT_OWN_CAR_RATE_EGP_
 
   const refreshAfterMutation = async () => { await Promise.all([load(), onUsersRefresh()]); };
   const exportExcel = async () => {
-    const exportItems = dateFilterActive ? combinedFiltered : filteredRecent;
-    if (!exportItems.length) return notify("No expenses", dateFilterActive ? "No expenses found for the selected period." : "No expenses to download.", "info");
+    const exportItems = totalItems;
+    if (!exportItems.length) return notify("No expenses", filterActive ? "No expenses match the selected filters." : "No expenses to download.", "info");
     setExporting(true);
     try {
       const response = await fetch("/next/api/expenses/export-direct", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scope: "users", kind: "excel", userName: `Expenses — ${user.name}`, userId, items: exportItems, dateFrom, dateTo, lastSettledAt: payload?.lastSettledAt, lastSettledDate: payload?.lastSettledDate }) });
@@ -567,23 +618,43 @@ export function UserExpensesModal({ user, ownCarRate = DEFAULT_OWN_CAR_RATE_EGP_
     finally { setDeleteBusy(false); }
   };
 
-  const renderGroups = (groups) => groups.length ? groups.map((group) => <UserExpenseTicket group={group} canViewOrderReceipts={permissions.viewOrderReceipts !== false} onReceipt={setReceiptItem} onEdit={permissions.edit ? beginEdit : null} onDelete={permissions.delete ? beginDelete : null} menuKey={menuKey} setMenuKey={setMenuKey} key={group.key}/>) : <div className="expenses-empty">Sorry, No data available</div>;
+  const renderGroups = (groups) => groups.length ? groups.map((group) => <UserExpenseTicket group={group} canViewOrderReceipts={permissions.viewOrderReceipts !== false} onReceipt={openReceipt} onEdit={permissions.edit ? beginEdit : null} onDelete={permissions.delete ? beginDelete : null} menuKey={menuKey} setMenuKey={setMenuKey} key={group.key}/>) : <div className="expenses-empty">Sorry, No data available</div>;
 
   return <>
-    <div className="ios-modal next-ios-modal-open" style={{ display: "flex" }} role="dialog" aria-modal="true" onMouseDown={(event) => event.target === event.currentTarget && requestClose()}>
-      <div className="ios-sheet" style={{ transform: opened && !closing ? "translateY(0)" : "translateY(100%)" }} onMouseDown={(event) => event.stopPropagation()}>
-        <div className="ios-drag" />
-        <div className="user-expenses-header"><div className="sheet-header"><div className="sheet-header-text"><div className="user-expenses-title">Expenses — {user.name || "User"}</div><div className="user-expenses-sub">All expenses for this team member</div></div></div></div>
-        <div className="sheet-scroll">
-          <div className={`total-balance-card${filteredNet < 0 ? " is-negative" : filteredNet > 0 ? " is-positive" : ""}`}><div className="total-balance-meta"><div className="total-balance-label"><UserClassicIcon name="card" size={18}/>Total balance</div><div className="total-balance-hint">After filters applied</div></div><div className="total-balance-value">{formatGBP(filteredNet)}</div></div>
-          <div className="sheet-controls"><div className="controls-row"><div className="download-wrapper">{permissions.export ? <button className="download-btn" type="button" onClick={exportExcel} disabled={exporting}><UserClassicIcon name="download" size={18}/>{exporting ? "Preparing Excel…" : "Download Excel"}</button> : null}</div><div className="sort-wrapper"><label className="control-label">Sort</label><div className="select-with-icon"><UserClassicIcon name="sort" size={18}/><select className="sort-select" value={sort} onChange={(event) => setSort(event.target.value)}><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="high">Highest amount</option><option value="low">Lowest amount</option></select></div></div></div><div className="date-filter"><div className="date-field"><label>From</label><input type="date" value={draftDateFrom} onChange={(event) => setDraftDateFrom(event.target.value)} /></div><div className="date-field"><label>To</label><input type="date" value={draftDateTo} onChange={(event) => setDraftDateTo(event.target.value)} /></div><div className="date-actions"><button className="filter-btn" type="button" onClick={() => { setDateFrom(draftDateFrom); setDateTo(draftDateTo); }}><UserClassicIcon name="filter" size={18}/>Apply</button><button className="filter-btn reset-btn" type="button" onClick={() => { setDraftDateFrom(""); setDraftDateTo(""); setDateFrom(""); setDateTo(""); }}><UserClassicIcon name="rotate" size={18}/>Reset</button></div></div></div>
-          <div id="userExpensesList">{loading ? <div className="expenses-empty">Loading expenses…</div> : dateFilterActive ? renderGroups(allDateGroups) : <>{renderGroups(recentGroups)}{showPast && pastGroups.length ? <><div className="expenses-separator"><span>Past expenses</span></div>{renderGroups(pastGroups)}</> : null}</>}</div>
-          {!dateFilterActive && split.past.length ? <div className="past-expenses-wrapper"><button className="past-expenses-btn" type="button" onClick={() => setShowPast((value) => !value)}>{showPast ? "Hide past expenses" : "Show past expenses"}</button></div> : null}
+    <div className={`ios-modal next-ios-modal-open ${styles.overlay}`} ref={overlayRef} style={{ display: "flex" }} role="dialog" aria-modal={receiptItem ? undefined : true} aria-hidden={receiptItem ? true : undefined} inert={receiptItem ? true : undefined} aria-labelledby="user-expenses-sheet-title" onMouseDown={(event) => event.target === event.currentTarget && !receiptItem && !action && requestClose()}>
+      <div className={`ios-sheet ${styles.sheet}`} style={{ transform: opened && !closing ? "translateY(0)" : "translateY(100%)" }} onMouseDown={(event) => event.stopPropagation()}>
+        <header className={styles.header}>
+          <span className={styles.floatingIcon} aria-hidden="true"><UserClassicIcon name="wallet" size={28}/></span>
+          <button className={styles.close} type="button" aria-label="Close expenses" onClick={requestClose}><UserClassicIcon name="close" size={22}/></button>
+          <h2 id="user-expenses-sheet-title" className={styles.title}>Expenses — {user.name || "User"}</h2>
+        </header>
+        <div className={`sheet-scroll ${styles.scroll}`}>
+          <div className={`total-balance-card ${styles.balance}${filteredNet < 0 ? " is-negative" : filteredNet > 0 ? " is-positive" : ""}`}><div className="total-balance-meta"><div className="total-balance-label"><UserClassicIcon name="card" size={18}/>{filterActive ? "Filtered balance" : "Total balance"}</div></div><div className="total-balance-value">{formatGBP(filteredNet)}</div></div>
+          <div className={styles.controls}>
+            <div className={styles.toolbar}>
+              {permissions.export ? <button className={styles.download} type="button" onClick={exportExcel} disabled={exporting || loading}><UserClassicIcon name="download" size={18}/>{exporting ? "Preparing…" : "Download Excel"}</button> : null}
+              <div className={styles.tools}>
+                <button type="button" className={`${styles.tool} ${control === "sort" ? styles.active : ""}`} aria-label="Sort expenses" title="Sort expenses" aria-expanded={control === "sort"} aria-controls="user-expense-sort-options" onClick={() => toggleControl("sort")}><UserClassicIcon name="sort" size={21}/></button>
+                <button type="button" className={`${styles.tool} ${control === "filter" || filterActive ? styles.active : ""}`} aria-label={`Filter expenses${filterActive ? ` (${filterCount} active)` : ""}`} title="Filter expenses" aria-expanded={control === "filter"} aria-controls="user-expense-filter-options" onClick={() => toggleControl("filter")}><UserClassicIcon name="filter" size={21}/>{filterActive ? <span className={styles.count}>{filterCount}</span> : null}</button>
+              </div>
+            </div>
+            {control === "sort" ? <div id="user-expense-sort-options" className={styles.sortPanel} role="group" aria-label="Sort expenses">{[["newest", "Newest first"], ["oldest", "Oldest first"], ["high", "Highest amount"], ["low", "Lowest amount"]].map(([value, label]) => <button className={styles.sortOption} type="button" aria-pressed={sort === value} key={value} onClick={() => { setSort(value); setControl(""); }}><span>{label}</span>{sort === value ? <span aria-hidden="true">✓</span> : null}</button>)}</div> : null}
+            {control === "filter" ? <form id="user-expense-filter-options" className={styles.filterPanel} onSubmit={event => { event.preventDefault(); if (!invalidDates) { setFilters({ ...draftFilters }); setControl(""); setMenuKey(""); } }}>
+              <div className={styles.filterHeading}>Filter by date</div>
+              <div className={styles.dates}><label className={styles.field}>From<input type="date" aria-label="From date" value={draftFilters.from} onChange={event => updateDraft("from", event.target.value)}/></label><label className={styles.field}>To<input type="date" aria-label="To date" value={draftFilters.to} onChange={event => updateDraft("to", event.target.value)}/></label></div>
+              {invalidDates ? <span className={styles.error} role="alert">From date must be before or equal to To date.</span> : null}
+              <label className={styles.field}>Filter by funds type<select value={draftFilters.fundsType} onChange={event => updateDraft("fundsType", event.target.value)}><option value="">All funds types</option>{fundsTypeOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+              <label className={styles.field}>Filter by destination<select value={draftFilters.destination} onChange={event => updateDraft("destination", event.target.value)} disabled={loading || payload?.destinationOptionsUnavailable}><option value="">{payload?.destinationOptionsUnavailable ? "Destinations unavailable" : "All destinations"}</option>{destinationOptions.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}</select></label>
+              <label className={styles.check}><input type="checkbox" checked={draftFilters.otherReason} onChange={event => updateDraft("otherReason", event.target.checked)}/>Other reason</label>
+              <div className={styles.filterActions}><button className={styles.reset} type="button" onClick={() => { setDraftFilters(EMPTY_EXPENSE_FILTERS); setFilters(EMPTY_EXPENSE_FILTERS); setMenuKey(""); }}>Reset</button><button className={styles.apply} type="submit" disabled={invalidDates}>Apply</button></div>
+            </form> : null}
+          </div>
+          <div id="userExpensesList">{loading ? <div className="expenses-empty">Loading expenses…</div> : filterActive ? renderGroups(allDateGroups) : <>{renderGroups(recentGroups)}{showPast && pastGroups.length ? <><div className="expenses-separator"><span>Past expenses</span></div>{renderGroups(pastGroups)}</> : null}</>}</div>
+          {!filterActive && split.past.length ? <div className="past-expenses-wrapper"><button className="past-expenses-btn" type="button" onClick={() => setShowPast((value) => !value)}>{showPast ? "Hide past expenses" : "Show past expenses"}</button></div> : null}
         </div>
-        <button className="modal-close-btn" type="button" onClick={requestClose}>Close</button>
       </div>
     </div>
-    {receiptItem ? <ReceiptViewer item={receiptItem} onClose={() => setReceiptItem(null)} /> : null}
+    {receiptItem ? <ReceiptViewer item={receiptItem} onClose={closeReceipt} /> : null}
     {action?.type === "password" ? <AdminPasswordModal mode={action.mode} count={action.ids?.length || 1} onClose={() => setAction(null)} onContinue={continueWithPassword} /> : null}
     {action?.type === "edit" ? <EditExpenseModal item={action.item} ownCarRate={ownCarRate} adminPassword={action.password} onClose={() => setAction(null)} onSaved={refreshAfterMutation} notify={notify} /> : null}
     {action?.type === "delete-confirm" ? <DeleteConfirmationModal count={action.ids?.length || 1} busy={deleteBusy} onClose={() => setAction(null)} onConfirm={deleteGroup} /> : null}

@@ -1,0 +1,112 @@
+/* Scoped to Expenses by Users only; shared expense sheet styles stay untouched. */
+/* Use the visible mobile viewport, including browser navigation and keyboards. */
+.overlay:global(.ios-modal) {
+  height: var(--user-expenses-visible-height, 100dvh);
+  top: var(--user-expenses-visible-top, 0px);
+  bottom: auto;
+}
+.overlay .sheet {
+  --sheet-surface: #fff;
+  --sheet-ink: #151515;
+  --sheet-muted: #616975;
+  --sheet-line: #e4e5e7;
+  --sheet-soft: #f5f6f7;
+  --sheet-accent: #c25400;
+  --sheet-accent-soft: #fff1e5;
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 900px;
+  max-height: min(calc(var(--user-expenses-visible-height, 100dvh) - 80px), 900px);
+  overflow: visible;
+  background: var(--sheet-surface);
+  color: var(--sheet-ink);
+  padding: 0;
+  border: 1px solid var(--sheet-line);
+  border-radius: 28px;
+  box-shadow: 0 20px 60px #0003;
+}
+.header {
+  position: relative;
+  flex: 0 0 auto;
+  padding: 38px 54px 15px;
+  border-bottom: 1px solid var(--sheet-line);
+  text-align: center;
+}
+.floatingIcon {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 60px;
+  height: 60px;
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  color: white;
+  background: #151515;
+  border-radius: 17px;
+  border: 2px solid white;
+  box-shadow: 0 7px 18px #0002;
+  pointer-events: none;
+}
+.title { margin: 0; font-size: 1.25rem; font-weight: 900; line-height: 1.25; letter-spacing: -.025em; overflow-wrap: anywhere; }
+.close, .tool {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  border: 1px solid var(--sheet-line);
+  border-radius: 12px;
+  background: var(--sheet-surface);
+  color: var(--sheet-ink);
+  cursor: pointer;
+  padding: 0;
+}
+.close { position: absolute; top: 12px; right: 14px; }
+.overlay .sheet .scroll { min-height: 0; margin: 0; padding: 14px 16px max(16px, env(safe-area-inset-bottom)); gap: 12px; overscroll-behavior: contain; }
+.scroll > :global(#userExpensesList) { flex: 0 0 auto; min-width: 0; }
+.sheet .balance { flex: 0 0 auto; padding: 13px 15px; border-radius: 16px; box-shadow: none; }
+.controls { flex: 0 0 auto; display: flex; flex-direction: column; gap: 8px; }
+.toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.tools { display: flex; gap: 8px; margin-left: auto; }
+.tool { position: relative; }
+.tool.active { background: var(--sheet-accent-soft); border-color: var(--sheet-accent); color: var(--sheet-accent); }
+.count { position: absolute; top: -5px; right: -4px; background: #c25400; color: #fff; min-width: 17px; height: 17px; border-radius: 9px; display: grid; place-items: center; font-size: 10px; font-weight: 800; border: 1px solid var(--sheet-surface); }
+.download, .apply, .reset { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; border: 1px solid transparent; border-radius: 12px; padding: 8px 12px; font: inherit; font-size: .85rem; font-weight: 750; cursor: pointer; }
+.download, .apply { background: #151515; color: #fff; }
+.download:disabled, .apply:disabled { opacity: .5; cursor: not-allowed; }
+.reset { background: var(--sheet-soft); border-color: var(--sheet-line); color: var(--sheet-ink); }
+.sortPanel, .filterPanel { padding: 12px; display: grid; gap: 12px; border: 1px solid var(--sheet-line); border-radius: 15px; background: var(--sheet-surface); }
+.sortPanel { gap: 3px; padding: 5px; }
+.sortOption { border: 0; background: transparent; color: var(--sheet-ink); text-align: left; padding: 10px; display: flex; justify-content: space-between; gap: 8px; border-radius: 9px; font: inherit; font-size: .88rem; cursor: pointer; }
+.sortOption[aria-pressed="true"] { background: var(--sheet-accent-soft); color: var(--sheet-accent); font-weight: 750; }
+.filterHeading, .field { font-size: .86rem; font-weight: 750; }
+.field { display: grid; gap: 6px; min-width: 0; }
+.dates { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+.field input, .field select { box-sizing: border-box; width: 100%; min-width: 0; height: 40px; padding: 7px 8px; border: 1px solid var(--sheet-line); border-radius: 10px; background: var(--sheet-soft); color: var(--sheet-ink); font: inherit; font-weight: 500; font-size: .85rem; }
+.field input[type="date"] { display: block; appearance: auto; }
+.check { display: flex; align-items: center; gap: 8px; color: var(--sheet-ink); font-size: .88rem; font-weight: 700; }
+.check input { width: 18px; height: 18px; margin: 0; accent-color: #e56c0b; }
+.error { font-size: .78rem; color: #b91c1c; }
+.filterActions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+/* The parent sheet uses 100220 !important in expenses-performance.css. */
+:global(body.expenses-users-page) .receiptOverlay { z-index: 100280 !important; }
+:global(html[data-theme="dark"]) .overlay .sheet {
+  --sheet-surface: #11161f; --sheet-ink: #f8fafc; --sheet-line: #374151; --sheet-soft: #1d2531; --sheet-muted: #a0aab8; --sheet-accent: #ff9b50; --sheet-accent-soft: #372516;
+  background: var(--sheet-surface) !important; color: var(--sheet-ink) !important;
+}
+:global(html[data-theme="dark"]) .floatingIcon { border-color: #374151; }
+:global(html[data-theme="dark"]) .download, :global(html[data-theme="dark"]) .apply { background: #f8fafc; color: #11161f; }
+:global(html[data-theme="dark"]) .error { color: #fca5a5; }
+@media (max-width: 899px) {
+  .overlay .sheet { width: 100%; max-width: none; max-height: calc(var(--user-expenses-visible-height, 100dvh) - 48px); border-radius: 26px 26px 0 0; border-inline: 0; border-bottom: 0; }
+}
+@media (max-width: 350px) {
+  .overlay .sheet .scroll { padding-inline: 10px; }
+  .download { font-size: .78rem; padding-inline: 8px; }
+  .dates { grid-template-columns: 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) { .overlay .sheet { transition: none; } }
