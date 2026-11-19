@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ClassicExpenseIcon, ClassicFieldLabel, ClassicSelect, ExpenseDestinationSelect, ExpenseOrderMultiSelect, ClassicFileField, ExpenseCurrencyInput, fundsTypeOption, filesPayload, OTHER_SCOPE_ID, SCREENSHOT_REQUIRED_KEYS } from "./ExpensesDialogs";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { expenseDestinationMenuPosition } from "../../lib/expense-destination-menu-position.mjs";
+import { ClassicExpenseIcon, ClassicFieldLabel, ClassicSelect, FundsCardVisual, ExpenseDestinationSelect, ExpenseOrderMultiSelect, ClassicFileField, ExpenseCurrencyInput, fundsTypeOption, filesPayload, OTHER_SCOPE_ID, SCREENSHOT_REQUIRED_KEYS } from "./ExpensesDialogs";
 import { expenseOrderCode, sameExpenseSelection } from "../../lib/expense-user-edit.mjs";
 import { ownCarCostForKilometers } from "../../lib/own-car-expense.mjs";
 
@@ -15,6 +17,68 @@ const orderCodes = item => [...new Set((item.orders || []).map(order => expenseO
 const optionId = code => `ord:${code.slice(4)}`;
 const readShots = item => (item.screenshots?.length ? item.screenshots : item.screenshotUrl ? [{ url: item.screenshotUrl, name: item.screenshotName || "Receipt" }] : []).filter(shot => shot.url);
 const initialScope = item => orderCodes(item).length ? orderCodes(item).map(optionId) : [OTHER_SCOPE_ID];
+
+// Reuse the Funds Type card visual, but keep the selection tied to the expense ID.
+function ExpenseRowCard({ row }) {
+  const credit = amount(row.cashIn) > 0;
+  const total = credit ? amount(row.cashIn) : amount(row.cashOut);
+  return <>
+    <FundsCardVisual value={row.fundsType}/>
+    <span className="expense-edit-picker__copy">
+      <span className="expense-edit-picker__headline"><strong>{row.fundsType || "Expense"}</strong><span className={`expense-edit-picker__amount${credit ? " is-in" : " is-out"}`}>{credit ? "+" : "−"}EGP {new Intl.NumberFormat("en-EG", { maximumFractionDigits: 2 }).format(total)}</span></span>
+      {(row.from || row.to) ? <span className="expense-edit-picker__route"><bdi>{row.from || "—"}</bdi><ClassicExpenseIcon name="arrow-right" size={14}/><bdi>{row.to || "—"}</bdi></span> : null}
+    </span>
+  </>;
+}
+
+function ExpenseToEditSelect({ rows, value, onChange, disabled }) {
+  const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState(null);
+  const trigger = useRef(null);
+  const menu = useRef(null);
+  const listId = useId();
+  const selected = rows.find(row => row.id === value) || rows[0];
+  useEffect(() => {
+    if (!open) return;
+    const viewport = window.visualViewport;
+    const sync = () => {
+      const rect = trigger.current?.getBoundingClientRect();
+      if (!rect) return;
+      const placement = expenseDestinationMenuPosition(rect, { top: viewport?.offsetTop ?? 0, left: viewport?.offsetLeft ?? 0, width: viewport?.width ?? window.innerWidth, height: viewport?.height ?? window.innerHeight }, rows.length);
+      // Use the actual content height without leaving a gap when opening above.
+      setPosition({ ...placement, height: "auto", ...(placement.top < rect.top ? { top: "auto", bottom: window.innerHeight - rect.top } : {}) });
+    };
+    const outside = event => { if (!trigger.current?.contains(event.target) && !menu.current?.contains(event.target)) setOpen(false); };
+    const escape = event => { if (event.key === "Escape") { setOpen(false); trigger.current?.focus(); } };
+    sync();
+    window.addEventListener("resize", sync);
+    window.addEventListener("scroll", sync, true);
+    viewport?.addEventListener("resize", sync);
+    viewport?.addEventListener("scroll", sync);
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", escape);
+    return () => { window.removeEventListener("resize", sync); window.removeEventListener("scroll", sync, true); viewport?.removeEventListener("resize", sync); viewport?.removeEventListener("scroll", sync); document.removeEventListener("pointerdown", outside); document.removeEventListener("keydown", escape); };
+  }, [open, rows.length]);
+  useEffect(() => { if (disabled) setOpen(false); }, [disabled]);
+  useEffect(() => { if (open && position) menu.current?.querySelector('[aria-selected="true"]')?.focus({ preventScroll: true }); }, [open, Boolean(position)]);
+  const choose = row => { if (disabled) return; setOpen(false); trigger.current?.focus(); if (row.id !== value) onChange(row.id); };
+  const navigate = event => {
+    const options = Array.from(menu.current?.querySelectorAll('[role="option"]') || []);
+    if (!options.length || !["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const index = options.indexOf(document.activeElement);
+    const next = event.key === "Home" ? 0 : event.key === "End" ? options.length - 1 : (index + (event.key === "ArrowDown" ? 1 : -1) + options.length) % options.length;
+    options[next]?.focus();
+  };
+  return <>
+    <button ref={trigger} type="button" className="expense-edit-picker__trigger" aria-label="Expense to edit" aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? listId : undefined} disabled={disabled} onClick={() => setOpen(current => !current)}>
+      <ExpenseRowCard row={selected}/><span className={`expense-edit-picker__chevron${open ? " is-open" : ""}`}><ClassicExpenseIcon name="chevron-down" size={18}/></span>
+    </button>
+    {open && !disabled && position && typeof document !== "undefined" ? createPortal(<div ref={menu} id={listId} role="listbox" aria-label="Expense to edit" className="expense-edit-picker__menu" style={position} onKeyDown={navigate}>
+      {rows.map(row => <button type="button" role="option" aria-selected={row.id === value} key={row.id} className={`expense-edit-picker__option${row.id === value ? " is-selected" : ""}`} onClick={() => choose(row)}><ExpenseRowCard row={row}/><span className="expense-edit-picker__radio" aria-hidden="true">{row.id === value ? <ClassicExpenseIcon name="check" size={14}/> : null}</span></button>)}
+    </div>, document.body) : null}
+  </>;
+}
 
 function Editor({ item, ownCarRate, saveExpense, onSaved, onClose, notify, rows, setSelected }) {
   const overlay = useRef(null);
@@ -130,7 +194,7 @@ function Editor({ item, ownCarRate, saveExpense, onSaved, onClose, notify, rows,
       <header className="expense-user-edit-head"><span className="expense-user-edit-badge"><ClassicExpenseIcon name="edit-3" size={26}/></span><h2 id="expense-user-edit-title">Edit Expense</h2></header>
       <form onSubmit={save} className="expense-user-edit-form">
         <div className="expense-user-edit-scroll ex-modal-sheet-scroll">
-          {rows.length > 1 ? <div className="expense-user-edit-group"><ClassicFieldLabel icon="tag">Expense to edit</ClassicFieldLabel><select className="ex-input" aria-label="Expense to edit" value={item.id} disabled={busy} onChange={event => { if (!dirty || window.confirm("Switch expense? Unsaved changes will be discarded.")) setSelected(event.target.value); }}>{rows.map((row, index) => <option key={row.id} value={row.id}>{index + 1}. {row.fundsType || "Expense"} · EGP {amount(row.cashIn) || amount(row.cashOut)} · {row.from || "—"} → {row.to || "—"}</option>)}</select></div> : null}
+          {rows.length > 1 ? <div className="expense-user-edit-group"><ClassicFieldLabel icon="tag">Expense to edit</ClassicFieldLabel><ExpenseToEditSelect rows={rows} value={item.id} disabled={busy} onChange={id => { if (!dirty || window.confirm("Switch expense? Unsaved changes will be discarded.")) setSelected(id); }}/></div> : null}
           {loadError ? <div className="expense-user-edit-error" role="alert">{loadError} <button type="button" onClick={() => setAttempt(n => n + 1)}>Retry</button></div> : !support ? <div role="status">Loading expense options…</div> : null}
           <fieldset disabled={busy || !support} className="expense-user-edit-fields">
             <div className="expense-user-edit-group"><h3>Expense details</h3>
@@ -139,7 +203,7 @@ function Editor({ item, ownCarRate, saveExpense, onSaved, onClose, notify, rows,
               {editableOrders ? <><ClassicFieldLabel icon="file-text">Orders / Reason <span className="req-star">*</span></ClassicFieldLabel><ExpenseOrderMultiSelect value={selectedOrders} onChange={changeOrders} options={orderOptions}/>{manual ? <><ClassicFieldLabel icon="edit-3">Other reason</ClassicFieldLabel><input className="ex-input" aria-label="Other reason" value={form.reason} onChange={input("reason")}/></> : null}</> : <><ClassicFieldLabel icon="file-text">Reason</ClassicFieldLabel><input className="ex-input" aria-label="Reason" value={settlement ? "Settled my account" : form.reason} onChange={input("reason")} readOnly={settlement}/></>}
             </div>
             <div className="expense-user-edit-group"><h3>{settlement ? "Settlement" : cashIn && !cashOut ? "Cash In" : "Cash Out"}</h3>
-              <ClassicFieldLabel icon="tag">Funds Type <span className="req-star">*</span></ClassicFieldLabel><ClassicSelect value={form.fundsType} onChange={value => update("fundsType", value)} options={funds} placeholder="Select funds type..." ariaLabel="Funds types" compactFundsCards/>
+              <ClassicFieldLabel icon="tag">Funds Type <span className="req-star">*</span></ClassicFieldLabel><ClassicSelect value={form.fundsType} onChange={value => update("fundsType", value)} options={funds} placeholder="Select funds type..." ariaLabel="Funds types" compactFundsCards showSelectedVisual/>
               {cashIn && !settlement ? <><ClassicFieldLabel icon="user">Payment by <span className="req-star">*</span></ClassicFieldLabel><input className="ex-input" aria-label="Payment by" value={form.cashInFrom} onChange={input("cashInFrom")}/></> : <><ClassicFieldLabel icon="log-out" compact>From</ClassicFieldLabel><input className="ex-input ex-input--compact" aria-label="From" value={form.from} onChange={input("from")}/><ClassicFieldLabel icon="log-in" compact>To</ClassicFieldLabel><input className="ex-input ex-input--compact" aria-label="To" value={form.to} onChange={input("to")}/></>}
               {cashIn ? <><ClassicFieldLabel icon="plus-circle">Cash In</ClassicFieldLabel><ExpenseCurrencyInput value={form.cashIn} onChange={input("cashIn")} label="Cash in amount in EGP"/></> : null}
               {cashOut ? ownCar ? <><ClassicFieldLabel icon="navigation">Kilometers <span className="req-star">*</span></ClassicFieldLabel><input className="ex-input" type="number" min="0.01" step="any" aria-label="Kilometers" value={form.kilometer} onChange={input("kilometer")}/><p className="expense-own-car-preview"><span>{ownCarRate} EGP / km</span><strong>{ownCost.toFixed(2)} EGP</strong></p></> : <><ClassicFieldLabel icon="minus-circle">Cash Out <span className="req-star">*</span></ClassicFieldLabel><ExpenseCurrencyInput value={form.cashOut} onChange={input("cashOut")} label="Cash out amount in EGP"/></> : null}

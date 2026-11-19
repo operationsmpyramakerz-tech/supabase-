@@ -6,6 +6,15 @@ import ClassicOrderIcon from "../orders/ClassicOrderIcon";
 import { DEFAULT_OWN_CAR_RATE_EGP_PER_KM, ownCarCostForKilometers } from "../../lib/own-car-expense.mjs";
 import { expenseOrderMenuPosition } from "../../lib/expense-order-menu-position.mjs";
 import { expenseDestinationMenuPosition } from "../../lib/expense-destination-menu-position.mjs";
+import onlineTransferIcon from "../../public/expense-fund-icons/online-transfer.png";
+import swvlIcon from "../../public/expense-fund-icons/swvl.png";
+import uberIcon from "../../public/expense-fund-icons/uber.png";
+import goBusIcon from "../../public/expense-fund-icons/go-bus.png";
+import fuelIcon from "../../public/expense-fund-icons/fuel.png";
+import taxiIcon from "../../public/expense-fund-icons/taxi.png";
+import indriveIcon from "../../public/expense-fund-icons/indrive.png";
+import didiIcon from "../../public/expense-fund-icons/didi.png";
+import byBusIcon from "../../public/expense-fund-icons/by-bus.png";
 
 const CASH_IN_TYPES = ["Cash Payment", "Online Transfer"];
 const SCREENSHOT_REQUIRED_KEYS = new Set(["owncar", "swvl", "gobus", "bybus", "train", "indrive", "uber", "uper", "didi"]);
@@ -72,25 +81,29 @@ function fundsTypeOption(value) {
 
 // Visual assets follow the approved Funds Type mockup. They are local ERP
 // images (no third-party requests, no changes to stored funds type values).
+// Static imports ensure the icons are bundled by Next, rather than depending
+// on a separate /next/expense-fund-icons public-asset proxy route.
 const FUNDS_TYPE_ICON_FILES = Object.freeze({
-  onlinetransfer: "online-transfer.png",
-  swvl: "swvl.png",
-  uber: "uber.png",
-  uper: "uber.png", // Legacy spelling uses Uber branding.
-  gobus: "go-bus.png",
-  fuel: "fuel.png",
-  taxi: "taxi.png",
-  indrive: "indrive.png",
-  didi: "didi.png",
-  bybus: "by-bus.png",
+  onlinetransfer: onlineTransferIcon.src,
+  swvl: swvlIcon.src,
+  uber: uberIcon.src,
+  uper: uberIcon.src, // Legacy spelling uses Uber branding.
+  gobus: goBusIcon.src,
+  fuel: fuelIcon.src,
+  taxi: taxiIcon.src,
+  indrive: indriveIcon.src,
+  didi: didiIcon.src,
+  bybus: byBusIcon.src,
 });
 
 function FundsCardVisual({ value }) {
   const key = typeKey(value);
   const asset = FUNDS_TYPE_ICON_FILES[key];
+  const [failedAsset, setFailedAsset] = useState(null);
+  const showAsset = asset && failedAsset !== asset;
   return (
-    <span className={`funds-select__card-icon funds-select__card-icon--${asset ? "image" : "generic"}`} aria-hidden="true">
-      {asset ? <img src={`/next/expense-fund-icons/${asset}`} width="44" height="44" alt="" loading="lazy"/> : <ClassicExpenseIcon name={fundsTypeIcon(value)} size={22}/>}
+    <span className={`funds-select__card-icon funds-select__card-icon--${showAsset ? "image" : "generic"}`} aria-hidden="true">
+      {showAsset ? <img key={asset} src={asset} width="44" height="44" alt="" loading="eager" onError={() => setFailedAsset(asset)}/> : <ClassicExpenseIcon name={fundsTypeIcon(value)} size={22}/>}
     </span>
   );
 }
@@ -265,7 +278,7 @@ function ClassicFieldLabel({ icon, children, compact = false }) {
   return <span className={`field-label${compact ? " field-label--compact" : ""}`}><ClassicExpenseIcon name={icon} size={compact ? 14 : 16}/>{children}</span>;
 }
 
-function ClassicSelect({ value, onChange, options = [], placeholder = "Select…", ariaLabel = "Options", compactFundsCards = false }) {
+function ClassicSelect({ value, onChange, options = [], placeholder = "Select…", ariaLabel = "Options", compactFundsCards = false, showSelectedVisual = false }) {
   const [open, setOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [menuStyle, setMenuStyle] = useState(null);
@@ -348,9 +361,9 @@ function ClassicSelect({ value, onChange, options = [], placeholder = "Select…
 
   return (
     <div className="order-select funds-select" ref={rootRef}>
-      <button type="button" className={`order-select__trigger${selected ? " is-selected" : " is-placeholder"}${open ? " is-open" : ""}`} aria-haspopup="listbox" aria-expanded={open} onClick={() => { if (open) setSearchTerm(""); setOpen((current) => !current); }}>
+      <button type="button" className={`order-select__trigger${selected ? " is-selected" : " is-placeholder"}${open ? " is-open" : ""}`} aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open} onClick={() => { if (open) setSearchTerm(""); setOpen((current) => !current); }}>
         <span className="order-select__trigger-label">
-          {selected ? <span className="funds-type-summary"><span className="funds-type-summary__name">{selected.label}</span></span> : placeholder}
+          {selected ? <span className="funds-type-summary">{showSelectedVisual ? <FundsCardVisual value={selected.value}/> : null}<span className="funds-type-summary__name">{selected.label}</span></span> : placeholder}
         </span>
         <ClassicExpenseIcon name="chevron-down" size={18}/>
       </button>
@@ -1163,4 +1176,4 @@ export default function ExpensesDialogs({
   );
 }
 
-export { ClassicExpenseIcon, ClassicFieldLabel, ClassicSelect, ExpenseDestinationSelect, ExpenseOrderMultiSelect, ClassicFileField, ExpenseCurrencyInput, fundsTypeOption, filesPayload, OTHER_SCOPE_ID, SCREENSHOT_REQUIRED_KEYS };
+export { ClassicExpenseIcon, ClassicFieldLabel, ClassicSelect, FundsCardVisual, ExpenseDestinationSelect, ExpenseOrderMultiSelect, ClassicFileField, ExpenseCurrencyInput, fundsTypeOption, filesPayload, OTHER_SCOPE_ID, SCREENSHOT_REQUIRED_KEYS };
