@@ -1,4 +1,5 @@
 import "server-only";
+import { expenseOrderCode, retainedExpenseReceipts } from "./expense-user-edit.mjs";
 import { featureAllowed } from "./feature-permissions-registry";
 import { assertExpenseOrderReferences } from "./expense-order-access";
 import { performance } from "node:perf_hooks";
@@ -1122,17 +1123,55 @@ export async function settleExpenseAccount(account = {}, payload = {}) {
   };
 }
 
-export async function updateExpenseForAdmin(expenseId, payload = {}) {
+export async function updateExpenseForAdmin(expenseId, payload = {}, account = {}) {
   const id = text(expenseId);
   if (!id) throw expenseError("Missing expense ID.", 400);
   const current = await selectById(expensesTable(), id);
   if (!current) throw expenseError("Expense not found.", 404);
 
-  const screenshots = [];
-  const existingUrls = Array.isArray(payload.screenshotUrls)
-    ? payload.screenshotUrls
-    : String(payload.screenshotUrls || "").split(/[\n,]+/);
-  existingUrls.map(text).filter(Boolean).forEach((url, index) => screenshots.push({ name: `Receipt ${index + 1}`, url }));
+  const old = serializeExpense(current);
+  const fundsType = text(payload.fundsType);
+  const date = text(payload.date);
+  const cashIn = Number(payload.cashIn), cashOut = Number(payload.cashOut);
+  const settlement = expenseFundsTypeKey(old.reason) === "settledmyaccount" || expenseFundsTypeKey(old.fundsType) === "settledmyaccount";
+  if (!fundsType || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(date)) || new Date(date).toISOString().slice(0, 10) !== date) throw expenseError("Valid date and funds type are required.", 400);
+  if (![cashIn, cashOut].every(value => Number.isFinite(value) && value >= 0)) throw expenseError("Invalid expense amount.", 400);
+  if (!settlement && (old.cashIn > 0 ? cashIn <= 0 : cashOut <= 0)) throw expenseError("Enter an amount greater than zero.", 400);
+  if ((old.cashIn <= 0 && cashIn > 0) || (old.cashOut <= 0 && old.cashIn > 0 && cashOut > 0)) throw expenseError("The expense direction cannot be changed.", 400);
+  if (settlement && expenseFundsTypeKey(payload.reason) !== "settledmyaccount") throw expenseError("The settlement marker cannot be changed.", 400);
+  if (!settlement && (expenseFundsTypeKey(payload.reason) === "settledmyaccount" || expenseFundsTypeKey(fundsType) === "settledmyaccount")) throw expenseError("Use the settlement workflow for account settlements.", 400);
+  if (expenseFundsTypeKey(fundsType) === "owncar" && (old.cashIn > 0 || settlement)) throw expenseError("Own car is only valid for cash out.", 400);
+  if (expenseFundsTypeKey(payload.fundsType) === "owncar" && (!Number.isFinite(Number(payload.kilometer)) || Number(payload.kilometer) <= 0 || !ownCarCostForKilometers(payload.kilometer, ownCarRatePerKm()))) {
+    throw expenseError("Enter a valid distance greater than zero for Own car.", 400);
+  }
+  const metadata = {};
+  if (Object.hasOwn(payload, "destinationUserId") && text(payload.destinationUserId) !== old.destinationUserId) {
+    const destination = (await expenseDestinationOptions({ fresh: true })).find(member => member.id === text(payload.destinationUserId));
+    if (!destination) throw expenseError("Select a valid destination user.", 400);
+    metadata.destination_user_id = destination.id;
+    metadata.destination_user_name = destination.name;
+  }
+  let reason = text(payload.reason);
+  if (!Object.hasOwn(payload, "orderSelection") && !settlement && old.cashIn <= 0 && old.orders.some(order => expenseOrderCode(order.orderId))) reason = old.reason;
+  if (Object.hasOwn(payload, "orderSelection")) {
+    if (settlement || old.cashIn > 0) throw expenseError("Order links can only be changed for cash out.", 400);
+    const selection = payload.orderSelection;
+    if (!selection || !Array.isArray(selection.orderIds) || !Array.isArray(selection.orderKeys)) throw expenseError("Invalid order selection.", 400);
+    const verified = await assertExpenseOrderReferences(account, selection);
+    if (!verified && !reason) throw expenseError("Write the expense reason.", 400);
+    reason = verified ? verified.orderLabel : reason;
+    metadata.orders_names = verified ? verified.orderLabel : "Other reason";
+    metadata.orders_raw = verified ? selection.orderIds.map(text).filter(Boolean).join(",") : null;
+    // Legacy URL columns are optional; clear only columns actually present.
+    for (const key of ["orders_urls", "orders_url"]) if (Object.hasOwn(current, key)) metadata[key] = null;
+  }
+  const existing = parseScreenshots(valueFor(current, ["screenshot", "Screenshot", "files_media"]));
+  const screenshots = [...retainedExpenseReceipts(existing, payload.screenshotUrls)];
+  const newFiles = Array.isArray(payload.screenshots) ? payload.screenshots.filter(shot => text(shot?.dataUrl || shot?.screenshotDataUrl)) : [];
+  const uploadCount = newFiles.length || (text(payload.screenshotDataUrl) ? 1 : 0);
+  if (uploadCount && screenshots.length + uploadCount > 6) throw expenseError("Up to 6 receipt images are allowed.", 400);
+  const needsScreenshot = new Set(["owncar", "swvl", "gobus", "bybus", "train", "indrive", "uber", "uper", "didi"]);
+  if ((needsScreenshot.has(expenseFundsTypeKey(fundsType)) || (old.cashIn > 0 && expenseFundsTypeKey(fundsType) === "onlinetransfer")) && !screenshots.length && !newFiles.length && !text(payload.screenshotDataUrl)) throw expenseError("Screenshot is required for this funds type.", 400);
 
   const newScreenshotText = await buildExpenseScreenshotText({
     screenshots: Array.isArray(payload.screenshots) ? payload.screenshots : [],
@@ -1156,12 +1195,9 @@ export async function updateExpenseForAdmin(expenseId, payload = {}) {
     unique.push({ name: text(shot?.name) || "Receipt", url });
   }
 
-  if (expenseFundsTypeKey(payload.fundsType) === "owncar" && (!Number.isFinite(Number(payload.kilometer)) || Number(payload.kilometer) <= 0 || !ownCarCostForKilometers(payload.kilometer, ownCarRatePerKm()))) {
-    throw expenseError("Enter a valid distance greater than zero for Own car.", 400);
-  }
-
   const patch = {
-    reason: text(payload.reason) || null,
+    ...metadata,
+    reason: reason || null,
     expense_date: text(payload.date) || null,
     funds_type: text(payload.fundsType) || null,
     from_location: text(payload.from) || null,
@@ -1172,8 +1208,10 @@ export async function updateExpenseForAdmin(expenseId, payload = {}) {
       ? ownCarCostForKilometers(payload.kilometer, ownCarRatePerKm())
       : number(payload.cashOut, 0),
     kilometer: number(payload.kilometer, 0),
-    cash_in_from: text(payload.cashInFrom) || null,
-    screenshot: expenseScreenshotField(unique),
+    // Older schemas store the payer only in from_location (the Cash In create path).
+    ...(Object.hasOwn(current, "cash_in_from") && old.cashIn > 0 && !settlement ? { cash_in_from: text(payload.cashInFrom) || null } : {}),
+    // Keep the original representation if no attachment changes were requested.
+    ...(!uploadCount && screenshots.length === existing.length ? {} : { screenshot: expenseScreenshotField(unique) }),
   };
   const updated = await updateById(expensesTable(), id, patch);
   invalidateExpenseDataCaches();

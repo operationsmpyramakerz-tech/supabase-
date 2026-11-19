@@ -787,7 +787,7 @@ export const FEATURE_DEFINITIONS = Object.freeze(
   {
     "module": "expenses.users",
     "key": "expenses.users.edit",
-    "label": "Admin update user expenses"
+    "label": "Edit user expenses"
   },
   {
     "module": "expenses.users",
@@ -1071,12 +1071,11 @@ export function featureAllowed(account, key, { legacyAllowed = true, scopes = ["
   if ((key.startsWith("orders.my.") && state?.grants?.[ORDER_SCOPE_MARKERS["orders.my"]]?.allowed === true)
     || (key.startsWith("orders.operations.") && state?.grants?.[ORDER_SCOPE_MARKERS["orders.operations"]]?.allowed === true)
     || (key.startsWith("orders.maintenance.") && state?.grants?.[ORDER_SCOPE_MARKERS["orders.maintenance"]]?.allowed === true)) scopes = ["own", "team", "all"];
-  // Permanent deletion is a NEW destructive capability: never inherit it from
-  // legacy Edit, the module opt-out switch, or missing profile grants.
-  // Only an explicitly allowed advanced grant enables it.
-  if (key === "orders.operations.delete") {
+  // Permanent order deletion and password-free expense editing require explicit
+  // advanced grants; never inherit them from legacy Page Access or missing profiles.
+  if (["orders.operations.delete", "expenses.users.edit"].includes(key)) {
     const grant = state?.grants?.[key];
-    const view = state?.grants?.["orders.operations.view"];
+    const view = state?.grants?.[key === "expenses.users.edit" ? "expenses.users.view" : "orders.operations.view"];
     return state?.mode === "enforced"
       && grant?.allowed === true
       && view?.allowed === true

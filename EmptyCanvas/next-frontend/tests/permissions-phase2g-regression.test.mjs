@@ -25,7 +25,8 @@ test('Phase 2G modules have active, individually selectable features in Users Ce
 test('Old user grants continue until explicitly opted in; denied View blocks mutations', () => {
   const alreadyAdvanced=user({ 'kits.view': grant(true) });
   for(const [module,actions] of Object.entries(modules)) {
-    assert.equal(featureAllowed(alreadyAdvanced, `${module}.${actions[1]}`),true);
+    // Password-free expense edits are a new explicit-only capability.
+    assert.equal(featureAllowed(alreadyAdvanced, `${module}.${actions[1]}`),module !== "expenses.users");
     assert.equal(featureAllowed(user({ [`${module}.view`]: grant(false), [`${module}.${actions[1]}`]: grant(true) }), `${module}.${actions[1]}`),false);
     assert.equal(featureAllowed(user({ [`${module}.view`]: grant(true), [`${module}.${actions[1]}`]: grant(false) }), `${module}.${actions[1]}`),false);
     assert.equal(featureAllowed(user({ [`${module}.view`]: grant(true), [`${module}.${actions[1]}`]: grant(true) }), `${module}.${actions[1]}`),true);

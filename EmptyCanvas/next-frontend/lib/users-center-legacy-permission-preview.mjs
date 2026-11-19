@@ -6,6 +6,7 @@ import { featureModuleForPage } from './users-center-page-feature-map.mjs';
 const READ_ACTION = /(?:^|\.)(?:view|view_details|details|read|export|download|pdf|report|analysis|financial_analysis|sla_view|checklist_view|preferences|tracking)(?:$|\.)/;
 const NEVER_INHERIT = new Set([
   'orders.operations.delete', // New destructive capability must be explicitly granted.
+  'expenses.users.edit', // Password-free expense edits require an explicit grant.
   'preparing.stages.__granular', 'preparing.tabs.__granular',
   'orders.shopping.sources.__granular',
 ]);

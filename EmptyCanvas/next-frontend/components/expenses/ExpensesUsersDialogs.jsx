@@ -3,9 +3,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { EMPTY_EXPENSE_FILTERS, expenseFilterCount, expenseFundsTypeOptions, matchesExpenseUserFilters } from "../../lib/expense-users-filters.mjs";
+import EditUserExpense from "./EditUserExpense";
+import { duplicateExpenseOrderReason } from "../../lib/expense-user-edit.mjs";
 import styles from "./ExpensesUsersSheet.module.css";
 import { DeleteConfirmDialog, DeleteVerificationDialog } from "../shared/SystemDeleteDialogs";
-import { DEFAULT_OWN_CAR_RATE_EGP_PER_KM, ownCarCostForKilometers } from "../../lib/own-car-expense.mjs";
+import { DEFAULT_OWN_CAR_RATE_EGP_PER_KM } from "../../lib/own-car-expense.mjs";
 
 const SETTLEMENT_KEY = "settledmyaccount";
 
@@ -15,7 +17,6 @@ function number(value) { const parsed = Number(value); return Number.isFinite(pa
 function normalized(value) { return lower(value).replace(/[^a-z0-9\u0600-\u06ff]+/g, ""); }
 function normalizeGroupText(value) { return text(value).replace(/\s+/g, " ").toLowerCase(); }
 function isSettlement(item) { return normalized(item?.fundsType) === SETTLEMENT_KEY || normalized(item?.reason) === SETTLEMENT_KEY; }
-function isOwnCar(item) { return lower(item?.fundsType) === "own car"; }
 
 function modernTrackingHref(order) {
   const groupId = text(order?.trackingGroupId);
@@ -229,13 +230,7 @@ function groupTotal(group) {
 }
 
 function shouldHideGroupReason(group) {
-  const reason = normalizeGroupText(group?.reason);
-  if (!reason || !Array.isArray(group?.orders) || !group.orders.length) return false;
-  return group.orders.some((order) => {
-    const label = normalizeGroupText(order?.label);
-    const orderId = normalizeGroupText(order?.orderId);
-    return (!!label && reason === label) || (!!orderId && reason === orderId);
-  });
+  return duplicateExpenseOrderReason(group?.reason, group?.orders || []);
 }
 
 function responseFileName(response, fallback) {
@@ -273,44 +268,6 @@ async function requestExpenseAdminMutation(action, { expenseId, adminPassword, e
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action, expenseId, adminPassword, ...(expense ? { expense } : {}) }),
   });
-}
-
-function shouldCompressImage(file) {
-  const type = lower(file?.type);
-  const name = lower(file?.name);
-  if (type === "image/gif" || type === "image/svg+xml" || /\.(gif|svg)$/i.test(name)) return false;
-  return type.startsWith("image/") || /\.(png|jpe?g|webp|bmp|avif)$/i.test(name);
-}
-
-async function fileToExpenseDataUrl(file) {
-  const raw = await new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(reader.error || new Error("File read failed"));
-    reader.readAsDataURL(file);
-  });
-  if (!raw || !shouldCompressImage(file)) return raw;
-  try {
-    const image = await new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error("Failed to load image for compression."));
-      img.src = raw;
-    });
-    const width = image.naturalWidth || image.width || 1;
-    const height = image.naturalHeight || image.height || 1;
-    const ratio = Math.min(1, 1600 / width, 1600 / height);
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, Math.round(width * ratio));
-    canvas.height = Math.max(1, Math.round(height * ratio));
-    const context = canvas.getContext("2d", { alpha: true });
-    context.drawImage(image, 0, 0, canvas.width, canvas.height);
-    let compressed = canvas.toDataURL("image/webp", 0.72);
-    if (!/^data:image\/webp/i.test(compressed)) compressed = canvas.toDataURL("image/jpeg", 0.74);
-    return compressed && compressed.length < raw.length ? compressed : raw;
-  } catch {
-    return raw;
-  }
 }
 
 function UserClassicIcon({ name, size = 18 }) {
@@ -358,56 +315,9 @@ function ReceiptViewer({ item, onClose }) {
   );
 }
 
-function ExpenseActionModal({ title, subtitle, onClose, children, actions, danger = false }) {
-  return <div className="expense-user-action-modal is-open" aria-hidden="false" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><div className="expense-user-action-card" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}><div className="expense-user-action-head"><div><h3 className="expense-user-action-title">{title}</h3>{subtitle ? <div className="expense-user-action-sub">{subtitle}</div> : null}</div><button type="button" className="expense-user-action-close" onClick={onClose}>×</button></div>{children}<div className="expense-user-action-actions">{actions}</div></div></div>;
-}
-
-function AdminPasswordModal({ mode, count = 1, onClose, onContinue }) {
+function AdminPasswordModal({ count = 1, onClose, onContinue }) {
   const [password, setPassword] = useState("");
-  const isDelete = mode === "delete";
-  if (isDelete) return <DeleteVerificationDialog title={count > 1 ? "Delete expense card" : "Delete expense"} password={password} onPasswordChange={setPassword} onCancel={onClose} onSubmit={onContinue} />;
-  return <ExpenseActionModal title="Edit expense" subtitle="Enter the Admin password to edit this expense." onClose={onClose} actions={<><button type="button" className="expense-user-action-btn expense-user-action-btn--muted" onClick={onClose}>Cancel</button><button type="button" className="expense-user-action-btn expense-user-action-btn--primary" onClick={() => onContinue(password.trim())}>Continue</button></>}><div className="expense-user-action-field"><label>Admin password</label><input type="password" autoFocus autoComplete="current-password" placeholder="Enter Admin password" value={password} onChange={(event) => setPassword(event.target.value)} /></div></ExpenseActionModal>;
-}
-
-function EditExpenseModal({ item, adminPassword, ownCarRate = DEFAULT_OWN_CAR_RATE_EGP_PER_KM, onClose, onSaved, notify }) {
-  const [form, setForm] = useState({
-    date: toLocalDateKey(item?.date || item?.createdTime || ""),
-    fundsType: text(item?.fundsType), cashIn: number(item?.cashIn), cashOut: number(item?.cashOut),
-    from: text(item?.from || item?.cashInFrom), to: text(item?.to), kilometer: number(item?.kilometer),
-    cashInFrom: text(item?.cashInFrom), reason: text(item?.reason || userDisplayReason(item)),
-    screenshotUrls: screenshotsFor(item).map((shot) => shot.url).filter(Boolean).join("\n"),
-  });
-  const [files, setFiles] = useState([]);
-  const [busy, setBusy] = useState(false);
-  const ownCar = isOwnCar(form);
-  const ownCarCost = ownCarCostForKilometers(form.kilometer, ownCarRate);
-  const update = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }));
-  const save = async () => {
-    if (ownCar && ownCarCost <= 0) return notify("Edit failed", "Enter a valid distance for Own car.", "error");
-    setBusy(true);
-    try {
-      const screenshots = [];
-      for (const file of files) {
-        const dataUrl = await fileToExpenseDataUrl(file);
-        if (dataUrl) screenshots.push({ name: file.name || "receipt.webp", dataUrl });
-      }
-      await requestExpenseAdminMutation("admin-update", {
-        expenseId: text(item?.id),
-        adminPassword,
-        expense: {
-          date: form.date, fundsType: form.fundsType, cashIn: number(form.cashIn), cashOut: number(form.cashOut),
-          from: form.from, to: form.to, kilometer: number(form.kilometer), cashInFrom: form.cashInFrom,
-          reason: form.reason, screenshotUrls: form.screenshotUrls.split(/[\n]+/).map((url) => url.trim()).filter(Boolean), screenshots,
-        },
-      });
-      notify("Saved", "Expense updated successfully.", "success");
-      await onSaved();
-      onClose();
-    } catch (error) { notify("Edit failed", error?.message || "Failed to update expense.", "error"); }
-    finally { setBusy(false); }
-  };
-
-  return <ExpenseActionModal title="Edit Expense" subtitle="Update this expense, then save the changes." onClose={onClose} actions={<><button type="button" className="expense-user-action-btn expense-user-action-btn--muted" onClick={onClose} disabled={busy}>Cancel</button><button type="button" className="expense-user-action-btn expense-user-action-btn--primary" onClick={save} disabled={busy}>{busy ? "Saving..." : "Save changes"}</button></>}><div className="expense-user-action-grid"><div className="expense-user-action-field"><label>Date</label><input type="date" value={form.date} onChange={update("date")} /></div><div className="expense-user-action-field"><label>Funds Type</label><input value={form.fundsType} onChange={update("fundsType")} /></div><div className="expense-user-action-field"><label>Cash In</label><input type="number" step="0.01" value={form.cashIn} onChange={update("cashIn")} /></div><div className="expense-user-action-field"><label>{ownCar ? `Cash Out (auto: £${ownCarRate}/km)` : "Cash Out"}</label><input type="number" step="0.01" value={ownCar ? ownCarCost : form.cashOut} onChange={update("cashOut")} disabled={ownCar} /></div><div className="expense-user-action-field"><label>From</label><input value={form.from} onChange={update("from")} /></div><div className="expense-user-action-field"><label>To</label><input value={form.to} onChange={update("to")} /></div><div className="expense-user-action-field"><label>Kilometer</label><input type="number" step="0.01" value={form.kilometer} onChange={update("kilometer")} /></div><div className="expense-user-action-field"><label>Cash In From</label><input value={form.cashInFrom} onChange={update("cashInFrom")} /></div><div className="expense-user-action-field is-wide"><label>Reason</label><textarea value={form.reason} onChange={update("reason")} /></div><div className="expense-user-action-field is-wide"><label>Receipt URLs</label><textarea placeholder="One URL per line" value={form.screenshotUrls} onChange={update("screenshotUrls")} /></div><div className="expense-user-action-field is-wide"><label>Add receipt image</label><input type="file" accept="image/*" multiple onChange={(event) => setFiles(Array.from(event.target.files || []))} /><div className="expense-user-action-note">Images are compressed in the browser before uploading.</div></div></div></ExpenseActionModal>;
+  return <DeleteVerificationDialog title={count > 1 ? "Delete expense card" : "Delete expense"} password={password} onPasswordChange={setPassword} onCancel={onClose} onSubmit={onContinue} />;
 }
 
 function DeleteConfirmationModal({ count, onClose, onConfirm, busy }) {
@@ -447,7 +357,6 @@ function UserExpenseTicket({ group, onReceipt, onEdit, onDelete, canViewOrderRec
   const hideReason = shouldHideGroupReason(group);
   const hasOrders = Array.isArray(group?.orders) && group.orders.length > 0;
   const reasonText = text(group?.reason) || "No reason";
-  const primary = rows[0] || null;
   const ids = rows.map((item) => text(item?.id)).filter(Boolean);
   const hasActions = Boolean(ids.length && (onEdit || onDelete));
   return <article className="expense-ticket expense-ticket--user-destination">
@@ -464,7 +373,7 @@ function UserExpenseTicket({ group, onReceipt, onEdit, onDelete, canViewOrderRec
         <div className="expense-ticket__user-reason">
           {hasOrders ? <UserExpenseOrderActions orders={group.orders} canViewOrderReceipts={canViewOrderReceipts}/> : !hideReason ? <div className="expense-ticket__reason">{reasonText}</div> : null}
         </div>
-        {hasActions ? <div className={`expense-ticket__actions${menuKey === group.key ? " is-open" : ""}`}><button type="button" className="expense-ticket__more" onClick={() => setMenuKey(menuKey === group.key ? "" : group.key)} aria-label="Expense actions">⋯</button><div className="expense-ticket__menu">{onEdit ? <button type="button" className="expense-ticket__menu-item" onClick={() => { setMenuKey(""); onEdit(primary); }}><UserClassicIcon name="edit" size={15}/><span>Edit</span></button> : null}{onDelete ? <button type="button" className="expense-ticket__menu-item expense-ticket__menu-item--danger" onClick={() => { setMenuKey(""); onDelete(ids); }}><UserClassicIcon name="trash" size={15}/><span>Delete</span></button> : null}</div></div> : null}
+        {hasActions ? <div className={`expense-ticket__actions${menuKey === group.key ? " is-open" : ""}`}><button type="button" className="expense-ticket__more" onClick={() => setMenuKey(menuKey === group.key ? "" : group.key)} aria-label="Expense actions">⋯</button><div className="expense-ticket__menu">{onEdit ? <button type="button" className="expense-ticket__menu-item" onClick={() => { setMenuKey(""); onEdit(rows.filter(item => text(item.id))); }}><UserClassicIcon name="edit" size={15}/><span>Edit</span></button> : null}{onDelete ? <button type="button" className="expense-ticket__menu-item expense-ticket__menu-item--danger" onClick={() => { setMenuKey(""); onDelete(ids); }}><UserClassicIcon name="trash" size={15}/><span>Delete</span></button> : null}</div></div> : null}
       </div>
       {hasOrders && !hideReason ? <div className="expense-ticket__reason expense-ticket__reason--block">{reasonText}</div> : null}
       <div className="expense-ticket__header-divider" aria-hidden="true" />
@@ -596,12 +505,11 @@ export function UserExpensesModal({ user, ownCarRate = DEFAULT_OWN_CAR_RATE_EGP_
     finally { setExporting(false); }
   };
 
-  const beginEdit = (item) => setAction({ type: "password", mode: "edit", item });
+  const beginEdit = (rows) => setAction({ type: "edit", rows });
   const beginDelete = (ids) => setAction({ type: "password", mode: "delete", ids });
   const continueWithPassword = (password) => {
     if (!password) return notify("Admin password", "Enter the Admin password to continue.", "info");
-    if (action?.mode === "edit") setAction({ type: "edit", item: action.item, password });
-    else if (action?.mode === "delete") setAction({ type: "delete-confirm", ids: action.ids, password });
+    if (action?.mode === "delete") setAction({ type: "delete-confirm", ids: action.ids, password });
   };
   const deleteGroup = async () => {
     const ids = Array.isArray(action?.ids) ? action.ids : [];
@@ -618,10 +526,10 @@ export function UserExpensesModal({ user, ownCarRate = DEFAULT_OWN_CAR_RATE_EGP_
     finally { setDeleteBusy(false); }
   };
 
-  const renderGroups = (groups) => groups.length ? groups.map((group) => <UserExpenseTicket group={group} canViewOrderReceipts={permissions.viewOrderReceipts !== false} onReceipt={openReceipt} onEdit={permissions.edit ? beginEdit : null} onDelete={permissions.delete ? beginDelete : null} menuKey={menuKey} setMenuKey={setMenuKey} key={group.key}/>) : <div className="expenses-empty">Sorry, No data available</div>;
+  const renderGroups = (groups) => groups.length ? groups.map((group) => <UserExpenseTicket group={group} canViewOrderReceipts={permissions.viewOrderReceipts !== false} onReceipt={openReceipt} onEdit={permissions.edit && payload?.canEdit ? beginEdit : null} onDelete={permissions.delete ? beginDelete : null} menuKey={menuKey} setMenuKey={setMenuKey} key={group.key}/>) : <div className="expenses-empty">Sorry, No data available</div>;
 
   return createPortal(<>
-    <div className={`ios-modal next-ios-modal-open ${styles.overlay}`} ref={overlayRef} style={{ display: "flex" }} role="dialog" aria-modal={receiptItem ? undefined : true} aria-hidden={receiptItem ? true : undefined} inert={receiptItem ? true : undefined} aria-labelledby="user-expenses-sheet-title" onMouseDown={(event) => event.target === event.currentTarget && !receiptItem && !action && requestClose()}>
+    <div className={`ios-modal next-ios-modal-open ${styles.overlay}`} ref={overlayRef} style={{ display: "flex" }} role="dialog" aria-modal={receiptItem || action ? undefined : true} aria-hidden={receiptItem || action ? true : undefined} inert={receiptItem || action ? true : undefined} aria-labelledby="user-expenses-sheet-title" onMouseDown={(event) => event.target === event.currentTarget && !receiptItem && !action && requestClose()}>
       <div className={`ios-sheet ${styles.sheet}`} style={{ transform: opened && !closing ? "translateY(0)" : "translateY(100%)" }} onMouseDown={(event) => event.stopPropagation()}>
         <header className={styles.header}>
           <span className={styles.floatingIcon} aria-hidden="true"><UserClassicIcon name="wallet" size={28}/></span>
@@ -658,7 +566,7 @@ export function UserExpensesModal({ user, ownCarRate = DEFAULT_OWN_CAR_RATE_EGP_
     </div>
     {receiptItem ? <ReceiptViewer item={receiptItem} onClose={closeReceipt} /> : null}
     {action?.type === "password" ? <AdminPasswordModal mode={action.mode} count={action.ids?.length || 1} onClose={() => setAction(null)} onContinue={continueWithPassword} /> : null}
-    {action?.type === "edit" ? <EditExpenseModal item={action.item} ownCarRate={ownCarRate} adminPassword={action.password} onClose={() => setAction(null)} onSaved={refreshAfterMutation} notify={notify} /> : null}
+    {action?.type === "edit" ? <EditUserExpense rows={action.rows} ownCarRate={ownCarRate} saveExpense={(expenseId, expense) => requestExpenseAdminMutation("admin-update", { expenseId, expense })} onClose={() => setAction(null)} onSaved={refreshAfterMutation} notify={notify} /> : null}
     {action?.type === "delete-confirm" ? <DeleteConfirmationModal count={action.ids?.length || 1} busy={deleteBusy} onClose={() => setAction(null)} onConfirm={deleteGroup} /> : null}
   </>, document.body);
 }

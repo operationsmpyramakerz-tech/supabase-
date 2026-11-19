@@ -50,7 +50,7 @@ test('ticket header shows destination, date, then reason and retains permission-
   assert.match(ticket, /expense-ticket__destination-date[\s\S]*formatExpenseGroupDate[\s\S]*expense-ticket__destination-divider[\s\S]*UserExpenseOrderActions/);
   assert.match(ticket, /Boolean\(ids\.length && \(onEdit \|\| onDelete\)\)/);
   assert.match(ticket, /onDelete\(ids\)/);
-  assert.match(ticket, /onEdit\(primary\)/);
+  assert.match(ticket, /onEdit\(rows\.filter\(item => text\(item\.id\)\)\)/);
 });
 
 // Workbook test double: execute the real exporter, inspecting its row/cell

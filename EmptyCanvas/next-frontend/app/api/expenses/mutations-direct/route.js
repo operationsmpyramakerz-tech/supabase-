@@ -56,16 +56,16 @@ export async function POST(request) {
     "cash-in": "expenses.cash_in", "cash-out": "expenses.cash_out", "settle": "expenses.settle",
     "admin-update": "expenses.users.edit", "admin-delete": "expenses.users.delete",
   };
-  const gate = featureGate(await getDirectAccountGate([pageName]), actionPermissions[action]);
+  const gate = featureGate(await getDirectAccountGate([pageName]), actionPermissions[action], action === "admin-update" ? { legacyAllowed: false } : {});
   if (!gate.ok) {
     return noStore({ success: false, error: gate.error || "Authentication required." }, { status: gate.status || 503 });
   }
 
   const mutationAccess = directPageMutationAccess(gate.account, [pageName]);
-  if (mutationAccess === false) {
+  if (action !== "admin-update" && mutationAccess === false) {
     return noStore({ success: false, error: "Edit access is required for this action." }, { status: 403 });
   }
-  if (mutationAccess === null) {
+  if (action !== "admin-update" && mutationAccess === null) {
     return noStore({ success: false, error: "The direct page permission context is unavailable." }, { status: 503 });
   }
 
@@ -78,23 +78,17 @@ export async function POST(request) {
     } else if (action === "settle") {
       result = await settleExpenseAccount(gate.account || {}, body?.payload || body);
     } else {
-      // Password checks supplement scope checks; they do not authorize
-      // editing/deleting another employee's ledger.
+      // Edit is authorized by the explicit feature grant and record scope.
+      // Deletion still additionally requires the Admin password.
       await assertExpenseRecordAccess(gate.account, actionPermissions[action], body?.expenseId);
-      const adminPassword = text(body?.adminPassword);
-      if (!adminPassword) {
-        return noStore({ success: false, error: "Admin password is required." }, { status: 400 });
-      }
-      const passwordOk = await verifyPageAdminPasswordDirect(gate.account || {}, adminPassword, ["Expenses Users"]);
-      if (passwordOk === null) {
-        return noStore({ success: false, error: "The direct Admin password context is unavailable." }, { status: 503 });
-      }
-      if (!passwordOk) {
-        return noStore({ success: false, error: "Invalid Admin password." }, { status: 401 });
-      }
       if (action === "admin-update") {
-        result = await updateExpenseForAdmin(body?.expenseId, body?.expense || body?.payload || {});
+        result = await updateExpenseForAdmin(body?.expenseId, body?.expense || body?.payload || {}, gate.account);
       } else {
+        const adminPassword = text(body?.adminPassword);
+        if (!adminPassword) return noStore({ success: false, error: "Admin password is required." }, { status: 400 });
+        const passwordOk = await verifyPageAdminPasswordDirect(gate.account || {}, adminPassword, ["Expenses Users"]);
+        if (passwordOk === null) return noStore({ success: false, error: "The direct Admin password context is unavailable." }, { status: 503 });
+        if (!passwordOk) return noStore({ success: false, error: "Invalid Admin password." }, { status: 401 });
         result = await deleteExpenseForAdmin(body?.expenseId);
       }
     }

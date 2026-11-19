@@ -71,7 +71,7 @@ test('server computes destination options after permission scoping and export re
 test('receipt portal clears actual sheet stacking level and sheet uses icon-only controls',()=>{
   const css=read('../components/expenses/ExpensesUsersSheet.module.css');
   const perf=read('../public/css/expenses-performance.css');
-  const viewer=jsx.slice(jsx.indexOf('function ReceiptViewer('),jsx.indexOf('function ExpenseActionModal('));
+  const viewer=jsx.slice(jsx.indexOf('function ReceiptViewer('),jsx.indexOf('function AdminPasswordModal('));
   assert.match(viewer,/return createPortal\([\s\S]*document\.body/);
   assert.match(perf,/z-index: 100220 !important/);
   assert.match(css,/\.receiptOverlay\s*\{\s*z-index: 100280 !important/);
@@ -79,5 +79,5 @@ test('receipt portal clears actual sheet stacking level and sheet uses icon-only
   assert.match(jsx,/aria-label="Sort expenses"[^>]*[\s\S]*?<UserClassicIcon name="sort" size=\{21\}\/>/);
   assert.match(jsx,/aria-label=\{`Filter expenses/);
   assert.match(jsx,/disabled=\{invalidDates\}/);
-  assert.match(jsx,/inert=\{receiptItem \? true : undefined\}/);
+  assert.match(jsx,/inert=\{receiptItem \|\| action \? true : undefined\}/);
 });

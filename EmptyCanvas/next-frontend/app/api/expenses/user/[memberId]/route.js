@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDirectAccountGate } from "../../../../../lib/products-auth";
+import { featureAllowed } from "../../../../../lib/feature-permissions-registry";
 import { featureGate } from "../../../../../lib/feature-permissions-server";
 import { resolveExpenseUserAccess, scopeExpenseDetail } from "../../../../../lib/expenses-users-scope";
 import { expenseDestinationOptions, expensesForMemberId } from "../../../../../lib/expenses-data";
@@ -32,7 +33,12 @@ export async function GET(_request, { params }) {
       console.warn("[expenses/users] destination filter directory unavailable:", error?.message || error);
     }
     const destinationFilters = buildExpenseDestinationFilters(scoped.items || [], directory);
-    return NextResponse.json({ ...scoped, ...destinationFilters, destinationOptionsUnavailable }, {
+    let canEdit = false;
+    if (featureAllowed(gate.account, "expenses.users.edit", { legacyAllowed: false })) {
+      try { await resolveExpenseUserAccess(gate.account, "expenses.users.edit", memberId); canEdit = true; }
+      catch { /* fail closed for user-specific edit scope */ }
+    }
+    return NextResponse.json({ ...scoped, ...destinationFilters, destinationOptionsUnavailable, canEdit }, {
       headers: { "Cache-Control": "no-store" },
     });
   } catch (error) {

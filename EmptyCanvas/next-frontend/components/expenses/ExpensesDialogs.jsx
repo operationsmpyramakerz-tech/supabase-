@@ -1162,3 +1162,5 @@ export default function ExpensesDialogs({
     </>
   );
 }
+
+export { ClassicExpenseIcon, ClassicFieldLabel, ClassicSelect, ExpenseDestinationSelect, ExpenseOrderMultiSelect, ClassicFileField, ExpenseCurrencyInput, fundsTypeOption, filesPayload, OTHER_SCOPE_ID, SCREENSHOT_REQUIRED_KEYS };
