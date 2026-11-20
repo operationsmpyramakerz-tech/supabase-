@@ -9,7 +9,6 @@ Rules:
 - Dirty graphify-out/ files are expected after hooks or incremental updates; dirty graph files are not a reason to skip graphify. Only skip graphify if the task is about stale or incorrect graph output, or the user explicitly says not to use it.
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
-- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
 - A committed graphify-out/graph.json is rewritten whole on every build, so a large diff to it in a pull request is expected. Do not flag it as churn or suggest skipping the graph rebuild or its hooks.
 
 <!-- gitnexus:start -->
@@ -17,7 +16,7 @@ Rules:
 
 This project is indexed by GitNexus as **supabase-** (23989 symbols, 83365 relationships, 1172 execution flows).
 
-> Index stale? Run `node .gitnexus/run.cjs analyze --index-only` from the project root — it auto-selects an available runner. No `.gitnexus/run.cjs` yet? Bootstrap with `npx`, `bunx`, or `pnpm dlx` — e.g. `bunx gitnexus@latest analyze` (npm 11 npx crash; #1939).
+> Run `tools/erp-intelligence/setup.sh` for first-time setup.
 
 ## Always Do
 
@@ -68,13 +67,6 @@ This project is indexed by GitNexus as **supabase-** (23989 symbols, 83365 relat
 - Never access production data or secrets.
 - Run relevant tests after modifications.
 - Review git diff and affected execution flows.
-- After approved code changes, refresh both indexes:
-  GRAPHIFY_BACKEND=none graphify update .
-  GITNEXUS_LBUG_EXTENSION_INSTALL=load-only gitnexus analyze
+- Run `tools/erp-intelligence/refresh.sh` after approved code changes or when either index is stale. It uses GitNexus index-only mode to preserve these instructions and the installed skills.
 - Report indexing failures and incomplete coverage.
 - Never commit, push or deploy without explicit approval.
-
-
-For routine index refreshes after approved code changes, run
-`tools/erp-intelligence/refresh.sh`. It runs both indexers and uses GitNexus
-index-only mode to preserve these instructions and the installed skills.

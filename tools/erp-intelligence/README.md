@@ -8,16 +8,17 @@ tools/erp-intelligence/status.sh
 tools/erp-intelligence/refresh.sh
 ```
 
-`setup.sh` checks installed versions, installs only missing commands, and
-refreshes both indexes. It stops on a version mismatch before installing
-anything. Use a Linux development checkout with Bash, Git, Python 3, and
+`setup.sh` checks installed versions, installs missing commands, and checks
+that Graphify can initialize its SQL parser. It installs the pinned SQL extra
+with uv if the parser is missing. It stops on a version mismatch before
+installing anything. Use a Linux development checkout with Bash, Git, Python 3, and
 `flock` (util-linux). For missing tools, provide `uv` and a user-writable npm
 global prefix whose bin directory is on PATH. The original runtime was
 Node.js 24.22.2.
 
 | Command | Pinned package |
 | --- | --- |
-| Graphify | `graphifyy==0.9.113` via uv with Python 3.12.3 |
+| Graphify | `graphifyy[sql]==0.9.113` via uv with Python 3.12.3 |
 | GitNexus | `gitnexus@1.6.12` via npm |
 | Codex | `@openai/codex@0.171.0` via npm |
 
@@ -44,11 +45,15 @@ root if GitNexus reports a missing extension, then rerun setup.
 GITNEXUS_CONTENT_RETENTION=none GITNEXUS_LBUG_EXTENSION_INSTALL=auto gitnexus analyze --index-only
 ```
 
-The root `.gitignore` excludes the generated index directories from future
-Git additions. Both indexes are built locally. Codex authentication and any
-editor-managed MCP configuration are handled by the host. For a standalone
-Codex CLI session, GitNexus can be registered separately with
-`codex mcp add gitnexus -- gitnexus mcp` if no such server is already configured.
+Setup restores missing Graphify skill and reference files under
+`.codex/skills/graphify` and `.claude/skills/graphify`, preserving existing
+files and project instructions. It registers GitNexus in the standalone
+Codex CLI configuration if the `gitnexus` entry is absent. Codex authentication
+and editor-managed MCP configuration are handled by the host.
+
+Setup then runs `refresh.sh` to create or update both local indexes and runs
+`status.sh` to report their status. The root `.gitignore` excludes the generated
+index directories from future Git additions.
 
 `status.sh` shows CLI versions and GitNexus's native coverage and freshness
 report. Graphify freshness compares recorded manifest timestamps and flags

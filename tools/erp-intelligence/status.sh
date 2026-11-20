@@ -2,6 +2,8 @@
 set -euo pipefail
 
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.."
+export PATH="$PATH:${UV_TOOL_BIN_DIR:-${XDG_BIN_HOME:-$HOME/.local/bin}}"
+export GRAPHIFY_NO_AUTO_REFRESH=1
 result=0
 for tool in graphify gitnexus codex; do
     if command -v "$tool" >/dev/null; then

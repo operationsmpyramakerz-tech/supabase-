@@ -2,6 +2,7 @@
 set -euo pipefail
 
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.."
+export PATH="$PATH:${UV_TOOL_BIN_DIR:-${XDG_BIN_HOME:-$HOME/.local/bin}}"
 for tool in graphify gitnexus flock; do
     if ! command -v "$tool" >/dev/null; then
         printf 'Required command unavailable: %s\n' "$tool" >&2
@@ -14,7 +15,7 @@ exec 9<.
 flock 9
 
 result=0
-GRAPHIFY_BACKEND=none graphify update . || {
+GRAPHIFY_NO_AUTO_REFRESH=1 GRAPHIFY_BACKEND=none graphify update . || {
     printf 'Graphify refresh failed.\n' >&2
     result=1
 }
