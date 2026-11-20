@@ -147,7 +147,7 @@ export default function ProductAdditionReviewClient({ canUploadImage = false, ta
 
   return <main className="addition-review addition-review--v2">
     <HeaderFolderBreadcrumb segments={[
-      { label: "Products", icon: "package", onClick: () => router.push("/next/products") },
+      { label: "Products", icon: "package", onClick: () => router.push("/products") },
       { label: "Product Addition Requests", icon: "package" },
     ]}/>
     <header className="par2-heading"><span className="par2-heading-icon"><Icon name="package"/></span><h2>Requested New Products</h2></header>
