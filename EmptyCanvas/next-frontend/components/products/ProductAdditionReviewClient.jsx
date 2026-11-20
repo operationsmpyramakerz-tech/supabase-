@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import HeaderFolderBreadcrumb from "../HeaderFolderBreadcrumb";
+import { useRouter } from "next/navigation";
 import ProductAdditionForm from "../orders/ProductAdditionForm";
 import ClassicOrderIcon from "../orders/ClassicOrderIcon";
 import CurrentOrderCreatorPopover from "../orders/CurrentOrderCreatorPopover";
@@ -77,6 +79,7 @@ async function requestJson(url, options = {}) {
 }
 
 export default function ProductAdditionReviewClient({ canUploadImage = false, tagsCatalog = [], unitsCatalog = [] }) {
+  const router = useRouter();
   const [requests, setRequests] = useState([]);
   const [query, setQuery] = useState("");
   const [creator, setCreator] = useState(null);
@@ -143,9 +146,12 @@ export default function ProductAdditionReviewClient({ canUploadImage = false, ta
   };
 
   return <main className="addition-review addition-review--v2">
+    <HeaderFolderBreadcrumb segments={[
+      { label: "Products", icon: "package", onClick: () => router.push("/next/products") },
+      { label: "Product Addition Requests", icon: "package" },
+    ]}/>
     <header className="par2-heading"><span className="par2-heading-icon"><Icon name="package"/></span><h2>Requested New Products</h2></header>
     <div className="par2-overview">
-      <a className="par2-back" href="/next/products"><Icon name="back"/>Back to Products</a>
       <div className="par2-stats">
         {[
           { label: "Pending", value: count("pending"), key: "pending", icon: "clock" },
