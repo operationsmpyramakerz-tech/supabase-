@@ -1,0 +1,68 @@
+/* ERP Home Motion v1 — load and enter Home only; keep global chrome stable.
+   Pure CSS: no JS hydration dependency, no external libraries, no data changes. */
+
+@keyframes erpHomeRouteEnter {
+  from { opacity: 0; transform: translate3d(0, 12px, 0); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes erpHomeContentReveal {
+  from { opacity: 0; transform: translate3d(0, 16px, 0); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes erpHomeTileReveal {
+  from { opacity: 0; transform: translate3d(0, 10px, 0) scale(.985); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Navigation into Home: animate only the route content, not persistent header,
+   sidebar, bottom dock, or the server-streamed loading skeleton. */
+body.page-home .erp-home-dashboard:not(.next-home-dashboard-loading) {
+  animation: erpHomeRouteEnter 360ms cubic-bezier(.2, .75, .25, 1) both;
+}
+
+/* Hero first, then KPI cards and dashboard workspaces in a subtle stagger. */
+body.page-home .erp-home-dashboard:not(.next-home-dashboard-loading) > .erp-home-dashboard__header {
+  animation: erpHomeContentReveal 420ms cubic-bezier(.18, .72, .22, 1) 55ms both;
+}
+body.page-home .erp-home-dashboard:not(.next-home-dashboard-loading) > .erp-home-tiles > .erp-home-tile {
+  animation: erpHomeTileReveal 430ms cubic-bezier(.18, .72, .22, 1) both;
+}
+body.page-home .erp-home-dashboard:not(.next-home-dashboard-loading) > .erp-home-tiles > .erp-home-tile:nth-child(1) { animation-delay: 115ms; }
+body.page-home .erp-home-dashboard:not(.next-home-dashboard-loading) > .erp-home-tiles > .erp-home-tile:nth-child(2) { animation-delay: 165ms; }
+body.page-home .erp-home-dashboard:not(.next-home-dashboard-loading) > .erp-home-tiles > .erp-home-tile:nth-child(3) { animation-delay: 215ms; }
+body.page-home .erp-home-dashboard:not(.next-home-dashboard-loading) > .erp-home-tiles > .erp-home-tile:nth-child(4) { animation-delay: 265ms; }
+
+/* Main analytics panels. Each is independent; interactive children remain
+   clickable throughout; no scroll locking, no overlay, no forced transforms. */
+body.page-home .erp-home-dashboard:not(.next-home-dashboard-loading) > :is(
+  .erp-home-focus, .erp-home-backlog, .erp-home-cycle, .erp-home-sla,
+  .erp-home-trends, .erp-home-dashboard__section-heading,
+  .erp-home-order-grid, .erp-home-secondary
+) {
+  animation: erpHomeContentReveal 460ms cubic-bezier(.2, .72, .24, 1) 290ms both;
+}
+
+/* Ancillary cards beneath the dashboard: Recent Orders, Quick Actions, Scope. */
+body.page-home .erp-home-details > :is(.home-list-card, .home-actions, .home-scope) {
+  animation: erpHomeContentReveal 440ms cubic-bezier(.2, .72, .24, 1) both;
+}
+body.page-home .erp-home-details > :nth-child(1) { animation-delay: 320ms; }
+body.page-home .erp-home-details > :nth-child(2) { animation-delay: 375ms; }
+body.page-home .erp-home-details > :nth-child(3) { animation-delay: 430ms; }
+
+/* Accessibility: no fades, translations or delays if reduced motion is on. */
+@media (prefers-reduced-motion: reduce) {
+  body.page-home .erp-home-dashboard:not(.next-home-dashboard-loading),
+  body.page-home .erp-home-dashboard:not(.next-home-dashboard-loading) > .erp-home-dashboard__header,
+  body.page-home .erp-home-dashboard:not(.next-home-dashboard-loading) > .erp-home-tiles > .erp-home-tile,
+  body.page-home .erp-home-dashboard:not(.next-home-dashboard-loading) > :is(
+    .erp-home-focus, .erp-home-backlog, .erp-home-cycle, .erp-home-sla,
+    .erp-home-trends, .erp-home-dashboard__section-heading,
+    .erp-home-order-grid, .erp-home-secondary
+  ),
+  body.page-home .erp-home-details > :is(.home-list-card, .home-actions, .home-scope) {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}

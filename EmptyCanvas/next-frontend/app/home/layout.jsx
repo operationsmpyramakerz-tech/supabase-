@@ -7,6 +7,7 @@ export default function HomeLayout({ children }) {
       <link rel="stylesheet" href="/next/css/home-performance.css?v=boot-main51-v1" precedence="erp-performance" />
       <link rel="stylesheet" href="/next/css/home.css?v=boot-main51-v1" precedence="erp-detail" />
       <link rel="stylesheet" href="/next/css/home-dashboard-v2.css?v=boot-main51-v1" precedence="erp-detail" />
+      <link rel="stylesheet" href="/next/css/home-motion-v1.css?v=home-motion-v1" precedence="erp-detail" />
       {children}
     </>
   );
