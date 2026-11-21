@@ -19,6 +19,7 @@ function AdditionIcon({ name, size = 19 }) {
     unit: <><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></>,
     upload: <><path d="M12 16V4m-4 4 4-4 4 4"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></>,
     image: <><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></>,
+    edit: <><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L9 17l-4 1 1-4Z"/></>,
   };
   return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{icons[name] || icons.plus}</svg>;
 }
@@ -132,9 +133,12 @@ export default function ProductAdditionForm({ initial = {}, units = [], tags = [
           <div className="addition-field addition-field--full"><span>Product Image <b>*</b></span>
             <input ref={fileRef} hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={chooseImage} aria-label="Upload product image" />
             <div className={`addition-image-upload ${dragging ? "is-dragging" : ""} ${preview ? "has-image" : ""}`} onDragOver={event => { event.preventDefault(); if (canUploadImage) setDragging(true); }} onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget)) setDragging(false); }} onDrop={event => { event.preventDefault(); setDragging(false); if (canUploadImage) void prepareImage(event.dataTransfer.files?.[0]); }}>
-              {preview ? <img className="addition-image-upload__preview" src={preview} alt="Selected product"/> : <span className="addition-image-upload__icon"><AdditionIcon name="upload" size={24}/></span>}
+              {preview ? <span className="addition-image-upload__preview-wrap">
+                <img className="addition-image-upload__preview" src={preview} alt="Selected product" />
+                {review && canUploadImage ? <button type="button" className="addition-image-upload__edit-image" aria-label="Change product image" title="Change image" onClick={() => fileRef.current?.click()} disabled={busy}><AdditionIcon name="edit" size={16}/></button> : null}
+              </span> : <span className="addition-image-upload__icon"><AdditionIcon name="upload" size={24}/></span>}
               <span className="addition-image-upload__copy"><strong>{image?.name || (preview ? "Product image selected" : "Upload product image")}</strong><small>{preview ? "PNG, JPG or WEBP · Image ready" : "PNG, JPG or WEBP · Maximum 10 MB"}</small></span>
-              {canUploadImage ? <button className="addition-image-upload__browse" type="button" onClick={() => fileRef.current?.click()} disabled={busy}>{preview ? "Change" : "Browse"}</button> : null}
+              {canUploadImage ? <button className="addition-image-upload__browse" type="button" onClick={() => fileRef.current?.click()} disabled={busy}>{preview ? (review ? "Change Image" : "Change") : "Browse"}</button> : null}
               {preview && canUploadImage ? <button type="button" className="addition-image-upload__remove" onClick={() => { setImage(null); update("imageUrl", ""); }} aria-label="Remove image" disabled={busy}><AdditionIcon name="x" size={16}/></button> : null}
             </div>
             {!canUploadImage && !preview ? <small className="addition-image-upload__help">Image upload permission is required to complete this request.</small> : null}

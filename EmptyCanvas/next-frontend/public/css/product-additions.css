@@ -395,3 +395,112 @@
   }
   .addition-dialog__footer{border-radius:0;background:#fff}
 }
+
+
+/* ERP PRODUCT ADDITION REVIEW DIALOG CONTROLS V7 */
+/* Guard against older broad modal rules affecting this form. */
+body.products-page .addition-dialog {
+  padding: 0 !important;
+  align-items: stretch !important;
+  justify-content: flex-start !important;
+}
+body.products-page .addition-dialog__header {
+  position: relative;
+  width: 100%;
+  align-self: stretch;
+  flex: 0 0 42px;
+  min-height: 42px;
+  margin: 0;
+}
+body.products-page .addition-dialog__icon {
+  left: 50%;
+  top: -29px;
+  transform: translateX(-50%);
+}
+body.products-page .addition-dialog__close {
+  position: absolute;
+  inset-inline-start: auto;
+  left: auto;
+  right: 14px;
+  top: 10px;
+  margin: 0 !important;
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
+  display: grid;
+  place-items: center;
+  z-index: 5;
+}
+body.products-page .addition-dialog__body {
+  width: 100%;
+  align-self: stretch;
+  min-width: 0;
+}
+body.products-page .addition-dialog__footer {
+  width: 100%;
+  align-self: stretch;
+  grid-template-columns: minmax(0,1fr) minmax(0,1.7fr);
+}
+/* Keep the form preview a thumbnail, never a full-width opened image. */
+body.products-page .addition-image-upload__preview-wrap {
+  position: relative;
+  display: block;
+  width: 74px;
+  height: 74px;
+  flex: 0 0 74px;
+}
+body.products-page .addition-image-upload__preview-wrap > .addition-image-upload__preview {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  object-fit: cover !important;
+  border-radius: 12px;
+}
+body.products-page .addition-image-upload__edit-image {
+  position: absolute;
+  bottom: -3px;
+  right: -3px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 2px solid white;
+  border-radius: 10px;
+  background: #101827;
+  color: white;
+  box-shadow: 0 4px 12px rgba(15,23,42,.16);
+  cursor: pointer;
+}
+body.products-page .addition-image-upload__edit-image:focus-visible,
+body.products-page .addition-dialog__close:focus-visible {
+  outline: 3px solid #fb923c;
+  outline-offset: 2px;
+}
+@media (max-width: 760px) {
+  body.products-page .addition-dialog__header { flex-basis: 46px; min-height: 46px; }
+  body.products-page .addition-dialog__close { right: 15px; top: 11px; }
+  body.products-page .addition-dialog__body { padding: 15px 16px 18px; }
+  body.products-page .addition-dialog__footer { padding: 12px 15px calc(14px + env(safe-area-inset-bottom, 0px)); }
+  body.products-page .addition-image-upload.has-image {
+    display: grid;
+    grid-template-columns: 74px minmax(0, 1fr) 32px;
+    grid-template-rows: auto auto;
+    gap: 7px 10px;
+    align-items: center;
+    padding: 11px;
+  }
+  body.products-page .addition-image-upload.has-image .addition-image-upload__preview-wrap { grid-column: 1; grid-row: 1 / span 2; }
+  body.products-page .addition-image-upload.has-image .addition-image-upload__copy { grid-column: 2; grid-row: 1; }
+  body.products-page .addition-image-upload.has-image .addition-image-upload__browse { grid-column: 2; grid-row: 2; justify-self: start; }
+  body.products-page .addition-image-upload.has-image .addition-image-upload__remove { grid-column: 3; grid-row: 1; justify-self: end; }
+}
+@media (max-width: 360px) {
+  body.products-page .addition-image-upload.has-image { grid-template-columns: 62px minmax(0,1fr) 30px; gap: 6px; }
+  body.products-page .addition-image-upload__preview-wrap { width: 62px; height: 62px; flex-basis: 62px; }
+  body.products-page .addition-image-upload.has-image .addition-image-upload__copy small { display: none; }
+}
+/* ERP PRODUCT ADDITION REVIEW DIALOG CONTROLS V7 - END */

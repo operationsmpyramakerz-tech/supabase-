@@ -148,58 +148,7 @@ html[data-theme="dark"] .addition-review--v2 { --par-surface:#171c25; --par-soft
 }
 /* ERP PRODUCT ADDITION COMPACT CARD V3 - END */
 
-/* ERP PRODUCT ADDITION MODAL MOBILE FIX V4 - BEGIN */
-/* Smaller product image preview on mobile + remove extra subtitle spacing in the review modal. */
-@media (max-width: 640px) {
-  body :is(
-    .product-image-viewer,
-    .products-image-viewer,
-    .product-image-dialog,
-    .products-dialog__image-viewer,
-    .products-dialog-image-viewer,
-    [data-product-image-viewer],
-    [data-image-viewer],
-    [aria-modal="true"]
-  ) img {
-    max-width: min(88vw, 420px) !important;
-    max-height: 68vh !important;
-    width: auto !important;
-    height: auto !important;
-    object-fit: contain !important;
-    margin-inline: auto !important;
-  }
 
-  body :is(
-    .product-image-viewer,
-    .products-image-viewer,
-    .product-image-dialog,
-    .products-dialog__image-viewer,
-    .products-dialog-image-viewer,
-    [data-product-image-viewer],
-    [data-image-viewer],
-    [aria-modal="true"]
-  ) {
-    padding: 14px !important;
-    align-items: center !important;
-    justify-content: center !important;
-  }
-
-  body :is(
-    .product-image-viewer,
-    .products-image-viewer,
-    .product-image-dialog,
-    .products-dialog__image-viewer,
-    .products-dialog-image-viewer,
-    [data-product-image-viewer],
-    [data-image-viewer],
-    [aria-modal="true"]
-  ) :is(.dialog-content, .viewer-content, .image-content, .modal-content, .content) {
-    max-width: min(92vw, 460px) !important;
-    max-height: 78vh !important;
-    margin: 0 auto !important;
-  }
-}
-/* ERP PRODUCT ADDITION MODAL MOBILE FIX V4 - END */
 
 /* ERP PRODUCT ADDITION MOBILE REVIEW FIX V5 — BEGIN */
 @media (max-width: 760px) {
