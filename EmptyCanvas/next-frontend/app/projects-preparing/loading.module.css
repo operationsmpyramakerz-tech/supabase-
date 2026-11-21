@@ -104,3 +104,22 @@
   .addFolder, .folder { width: 146px; height: 138px; flex-basis: 146px; }
 }
 @media (prefers-reduced-motion: reduce) { .skeleton::after { animation: none; } }
+
+/* Step 4: content-only route loading entrance matching the real Projects index. */
+@keyframes erpPrepSkeletonEnter {
+  from { opacity: 0; transform: translate3d(0, 11px, 0); }
+  to { opacity: 1; transform: none; }
+}
+.root .hero { animation: erpPrepSkeletonEnter 415ms cubic-bezier(.22,1,.36,1) 20ms backwards; }
+.root .stats > .stat { animation: erpPrepSkeletonEnter 450ms cubic-bezier(.22,1,.36,1) backwards; }
+.root .stats > :nth-child(1) { animation-delay: 85ms; }
+.root .stats > :nth-child(2) { animation-delay: 135ms; }
+.root .stats > :nth-child(3) { animation-delay: 185ms; }
+.root .stats > :nth-child(4) { animation-delay: 235ms; }
+.root .tabs { animation: erpPrepSkeletonEnter 425ms cubic-bezier(.22,1,.36,1) 285ms backwards; }
+.root .folders > * { animation: erpPrepSkeletonEnter 475ms cubic-bezier(.22,1,.36,1) backwards; }
+.root .folders > :nth-child(1) { animation-delay: 350ms; }
+.root .folders > :nth-child(2) { animation-delay: 420ms; }
+@media (prefers-reduced-motion: reduce) {
+  .root .hero, .root .stats > *, .root .tabs, .root .folders > * { animation: none !important; }
+}

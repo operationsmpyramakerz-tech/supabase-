@@ -1,0 +1,137 @@
+/* Pyramakerz ERP | Step 4 – Projects Preparing entrance motion
+   Animate committed project content only. Never animate app header/sidebar,
+   bottom dock, modal overlays, or the skeleton loading component here. */
+@keyframes erpPrepSceneIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes erpPrepRiseIn {
+  from { opacity: 0; transform: translate3d(0, 16px, 0) scale(.989); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes erpPrepTabIn {
+  from { opacity: 0; transform: translate3d(0, 9px, 0); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes erpPrepFolderIn {
+  from { opacity: 0; transform: translate3d(0, 21px, 0) scale(.975); }
+  to { opacity: 1; transform: none; }
+}
+
+/* The real project component is the only .pr-root on the route. */
+.pr-root.pr-root--index,
+.pr-root.pr-root--project,
+.pr-root.pr-root--school {
+  --erp-prep-enter-ease: cubic-bezier(.22, 1, .36, 1);
+  animation: erpPrepSceneIn 340ms ease-out both;
+}
+
+/* Project folder index, matching the user's Projects Preparing screenshot. */
+.pr-root--index > .pr-index-stats > .pr-index-stat {
+  animation: erpPrepRiseIn 490ms var(--erp-prep-enter-ease, ease-out) backwards;
+}
+.pr-root--index > .pr-index-stats > :nth-child(1) { animation-delay: 70ms; }
+.pr-root--index > .pr-index-stats > :nth-child(2) { animation-delay: 125ms; }
+.pr-root--index > .pr-index-stats > :nth-child(3) { animation-delay: 180ms; }
+.pr-root--index > .pr-index-stats > :nth-child(4) { animation-delay: 235ms; }
+.pr-root--index > .pr-index-controls {
+  animation: erpPrepTabIn 440ms var(--erp-prep-enter-ease, ease-out) 265ms backwards;
+}
+.pr-root--index > .pr-index-controls .pr-project-tabs > .pr-project-tab {
+  animation: erpPrepTabIn 370ms var(--erp-prep-enter-ease, ease-out) backwards;
+}
+.pr-root--index > .pr-index-controls .pr-project-tabs > :nth-child(1) { animation-delay: 305ms; }
+.pr-root--index > .pr-index-controls .pr-project-tabs > :nth-child(2) { animation-delay: 350ms; }
+.pr-root--index > .pr-index-controls .pr-project-tabs > :nth-child(3) { animation-delay: 395ms; }
+.pr-root--index > .pr-index-controls .pr-project-tabs > :nth-child(n+4) { animation-delay: 440ms; }
+.pr-root--index > .pr-index-folder-grid > :is(.pr-index-add-project, .pr-folder-card, .pr-index-no-projects) {
+  animation: erpPrepFolderIn 565ms var(--erp-prep-enter-ease, ease-out) backwards;
+}
+.pr-root--index > .pr-index-folder-grid > :nth-child(1) { animation-delay: 335ms; }
+.pr-root--index > .pr-index-folder-grid > :nth-child(2) { animation-delay: 405ms; }
+.pr-root--index > .pr-index-folder-grid > :nth-child(3) { animation-delay: 475ms; }
+.pr-root--index > .pr-index-folder-grid > :nth-child(4) { animation-delay: 545ms; }
+.pr-root--index > .pr-index-folder-grid > :nth-child(5) { animation-delay: 615ms; }
+.pr-root--index > .pr-index-folder-grid > :nth-child(n+6) { animation-delay: 665ms; }
+
+/* When a project folder is opened, animate the tab bar and overview cards
+   rather than the shared navigation shell or detail overlays. */
+.pr-root--project > .pr-project-detail-tabs {
+  animation: erpPrepTabIn 440ms var(--erp-prep-enter-ease, ease-out) 75ms backwards;
+}
+.pr-root--project .pr-project-detail-overview > *,
+.pr-root--project .pr-project-overview-reports,
+.pr-root--project .pr-project-tab-pane--components,
+.pr-root--project .pr-project-steps-panel--tab,
+.pr-root--project .pr-project-schools-panel--tab {
+  animation: erpPrepRiseIn 520ms var(--erp-prep-enter-ease, ease-out) backwards;
+}
+.pr-root--project .pr-project-detail-overview > :nth-child(1) { animation-delay: 125ms; }
+.pr-root--project .pr-project-detail-overview > :nth-child(2) { animation-delay: 205ms; }
+.pr-root--project .pr-project-overview-reports { animation-delay: 255ms; }
+.pr-root--project .pr-project-tab-pane--components,
+.pr-root--project .pr-project-steps-panel--tab,
+.pr-root--project .pr-project-schools-panel--tab { animation-delay: 130ms; }
+.pr-root--project .pr-project-step-timeline > .pr-project-step-row,
+.pr-root--project .pr-dashboard-schools > :is(.pr-add-school-tile, .pr-folder-card) {
+  animation: erpPrepFolderIn 510ms var(--erp-prep-enter-ease, ease-out) backwards;
+}
+.pr-root--project .pr-project-step-timeline > :nth-child(1),
+.pr-root--project .pr-dashboard-schools > :nth-child(1) { animation-delay: 165ms; }
+.pr-root--project .pr-project-step-timeline > :nth-child(2),
+.pr-root--project .pr-dashboard-schools > :nth-child(2) { animation-delay: 215ms; }
+.pr-root--project .pr-project-step-timeline > :nth-child(3),
+.pr-root--project .pr-dashboard-schools > :nth-child(3) { animation-delay: 265ms; }
+.pr-root--project .pr-project-step-timeline > :nth-child(4),
+.pr-root--project .pr-dashboard-schools > :nth-child(4) { animation-delay: 315ms; }
+.pr-root--project .pr-project-step-timeline > :nth-child(n+5),
+.pr-root--project .pr-dashboard-schools > :nth-child(n+5) { animation-delay: 365ms; }
+
+/* School details inside a project (no animation on modal/bottom sheets). */
+.pr-root--school > .pr-summary-card--school,
+.pr-root--school > .pr-workflow-top,
+.pr-root--school .pr-school-tools,
+.pr-root--school .pr-stage-list > .pr-stage {
+  animation: erpPrepRiseIn 480ms var(--erp-prep-enter-ease, ease-out) backwards;
+}
+.pr-root--school > .pr-summary-card--school { animation-delay: 90ms; }
+.pr-root--school .pr-school-tools { animation-delay: 165ms; }
+.pr-root--school > .pr-workflow-top { animation-delay: 220ms; }
+.pr-root--school .pr-stage-list > :nth-child(1) { animation-delay: 260ms; }
+.pr-root--school .pr-stage-list > :nth-child(2) { animation-delay: 310ms; }
+.pr-root--school .pr-stage-list > :nth-child(3) { animation-delay: 360ms; }
+.pr-root--school .pr-stage-list > :nth-child(n+4) { animation-delay: 410ms; }
+
+@media (max-width: 650px) {
+  @keyframes erpPrepRiseIn {
+    from { opacity: 0; transform: translate3d(0, 10px, 0) scale(.991); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes erpPrepFolderIn {
+    from { opacity: 0; transform: translate3d(0, 13px, 0) scale(.985); }
+    to { opacity: 1; transform: none; }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pr-root.pr-root--index,
+  .pr-root.pr-root--project,
+  .pr-root.pr-root--school,
+  .pr-root .pr-index-stat,
+  .pr-root .pr-index-controls,
+  .pr-root .pr-project-tab,
+  .pr-root .pr-index-folder-grid > *,
+  .pr-root .pr-project-detail-tabs,
+  .pr-root .pr-project-detail-overview > *,
+  .pr-root .pr-project-overview-reports,
+  .pr-root .pr-project-tab-pane,
+  .pr-root .pr-project-steps-panel--tab,
+  .pr-root .pr-project-step-row,
+  .pr-root .pr-dashboard-schools > *,
+  .pr-root .pr-project-schools-panel--tab,
+  .pr-root .pr-summary-card--school,
+  .pr-root .pr-workflow-top,
+  .pr-root .pr-school-tools,
+  .pr-root .pr-stage-list > * {
+    animation: none !important;
+  }
+}

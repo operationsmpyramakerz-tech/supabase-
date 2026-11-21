@@ -1,0 +1,101 @@
+/* Pyramakerz ERP | Step 4 – Events Calendar entrance motion
+   Real page class .agenda-v2 does not occur in the loading fallback.
+   Keep all animation off shared header, sidebar, dock, dialogs and popovers. */
+@keyframes erpAgendaSceneIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes erpAgendaDropIn {
+  from { opacity: 0; transform: translate3d(0, -10px, 0); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes erpAgendaRiseIn {
+  from { opacity: 0; transform: translate3d(0, 15px, 0) scale(.987); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes erpAgendaDayIn {
+  from { opacity: 0; transform: translate3d(0, 9px, 0) scale(.962); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes erpAgendaSlideIn {
+  from { opacity: 0; transform: translate3d(13px, 0, 0); }
+  to { opacity: 1; transform: none; }
+}
+
+.events-calendar-shell.agenda-v2 {
+  --erp-agenda-ease: cubic-bezier(.22, 1, .36, 1);
+  animation: erpAgendaSceneIn 350ms ease-out both;
+}
+.events-calendar-shell.agenda-v2 > .agenda-top {
+  animation: erpAgendaDropIn 435ms var(--erp-agenda-ease, ease-out) 45ms backwards;
+}
+.events-calendar-shell.agenda-v2 .agenda-stats > .agenda-stat {
+  animation: erpAgendaRiseIn 495ms var(--erp-agenda-ease, ease-out) backwards;
+}
+.events-calendar-shell.agenda-v2 .agenda-stats > :nth-child(1) { animation-delay: 90ms; }
+.events-calendar-shell.agenda-v2 .agenda-stats > :nth-child(2) { animation-delay: 150ms; }
+.events-calendar-shell.agenda-v2 .agenda-stats > :nth-child(3) { animation-delay: 210ms; }
+.events-calendar-shell.agenda-v2 .agenda-stats > :nth-child(4) { animation-delay: 270ms; }
+.events-calendar-shell.agenda-v2 .agenda-layout > .agenda-left > .agenda-calendar {
+  animation: erpAgendaRiseIn 510ms var(--erp-agenda-ease, ease-out) 230ms backwards;
+}
+.events-calendar-shell.agenda-v2 .agenda-layout > .agenda-left > .agenda-add {
+  animation: erpAgendaRiseIn 495ms var(--erp-agenda-ease, ease-out) 405ms backwards;
+}
+.events-calendar-shell.agenda-v2 .agenda-layout > .agenda-list {
+  animation: erpAgendaSlideIn 520ms var(--erp-agenda-ease, ease-out) 440ms backwards;
+}
+.events-calendar-shell.agenda-v2 .agenda-calendar .agenda-month {
+  animation: erpAgendaDropIn 420ms var(--erp-agenda-ease, ease-out) 295ms backwards;
+}
+.events-calendar-shell.agenda-v2 .agenda-days > .agenda-day {
+  animation: erpAgendaDayIn 385ms var(--erp-agenda-ease, ease-out) backwards;
+}
+.events-calendar-shell.agenda-v2 .agenda-days > :nth-child(1) { animation-delay: 350ms; }
+.events-calendar-shell.agenda-v2 .agenda-days > :nth-child(2) { animation-delay: 385ms; }
+.events-calendar-shell.agenda-v2 .agenda-days > :nth-child(3) { animation-delay: 420ms; }
+.events-calendar-shell.agenda-v2 .agenda-days > :nth-child(4) { animation-delay: 455ms; }
+.events-calendar-shell.agenda-v2 .agenda-days > :nth-child(5) { animation-delay: 490ms; }
+.events-calendar-shell.agenda-v2 .agenda-days > :nth-child(6) { animation-delay: 525ms; }
+.events-calendar-shell.agenda-v2 .agenda-days > :nth-child(n+7) { animation-delay: 560ms; }
+.events-calendar-shell.agenda-v2 .agenda-calendar .agenda-legend {
+  animation: erpAgendaRiseIn 430ms var(--erp-agenda-ease, ease-out) 585ms backwards;
+}
+.events-calendar-shell.agenda-v2 .agenda-tabs > button {
+  animation: erpAgendaDropIn 370ms var(--erp-agenda-ease, ease-out) backwards;
+}
+.events-calendar-shell.agenda-v2 .agenda-tabs > :nth-child(1) { animation-delay: 515ms; }
+.events-calendar-shell.agenda-v2 .agenda-tabs > :nth-child(2) { animation-delay: 555ms; }
+.events-calendar-shell.agenda-v2 .agenda-tabs > :nth-child(n+3) { animation-delay: 595ms; }
+.events-calendar-shell.agenda-v2 .agenda-rows > :is(.agenda-row, .agenda-empty) {
+  animation: erpAgendaRiseIn 520ms var(--erp-agenda-ease, ease-out) backwards;
+}
+.events-calendar-shell.agenda-v2 .agenda-rows > :nth-child(1) { animation-delay: 635ms; }
+.events-calendar-shell.agenda-v2 .agenda-rows > :nth-child(2) { animation-delay: 690ms; }
+.events-calendar-shell.agenda-v2 .agenda-rows > :nth-child(3) { animation-delay: 745ms; }
+.events-calendar-shell.agenda-v2 .agenda-rows > :nth-child(n+4) { animation-delay: 800ms; }
+
+@media (max-width: 680px) {
+  @keyframes erpAgendaRiseIn {
+    from { opacity: 0; transform: translate3d(0, 10px, 0) scale(.991); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes erpAgendaSlideIn {
+    from { opacity: 0; transform: translate3d(0, 10px, 0); }
+    to { opacity: 1; transform: none; }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .events-calendar-shell.agenda-v2,
+  .events-calendar-shell.agenda-v2 > .agenda-top,
+  .events-calendar-shell.agenda-v2 .agenda-stats > *,
+  .events-calendar-shell.agenda-v2 .agenda-layout > .agenda-left > *,
+  .events-calendar-shell.agenda-v2 .agenda-layout > .agenda-list,
+  .events-calendar-shell.agenda-v2 .agenda-calendar .agenda-month,
+  .events-calendar-shell.agenda-v2 .agenda-days > *,
+  .events-calendar-shell.agenda-v2 .agenda-calendar .agenda-legend,
+  .events-calendar-shell.agenda-v2 .agenda-tabs > *,
+  .events-calendar-shell.agenda-v2 .agenda-rows > * {
+    animation: none !important;
+  }
+}

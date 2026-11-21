@@ -1,0 +1,78 @@
+/* Matching Event Calendar skeleton: no duplicated header/sidebar/dock. */
+.erpEventsLoadingRoot {
+  width: 100%;
+  min-width: 0;
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: 22px clamp(14px, 3vw, 32px) 86px;
+  box-sizing: border-box;
+  color: #101827;
+}
+.erpEventsLoadingRoot *, .erpEventsLoadingRoot *::before, .erpEventsLoadingRoot *::after { box-sizing: border-box; }
+.visuallyHidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
+.shimmer { display: block; position: relative; overflow: hidden; background: #e9ebef; border-radius: 9px; }
+.shimmer::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.67), transparent);
+  transform: translateX(-100%);
+  animation: erpEventsShimmer 1.6s ease-in-out infinite;
+}
+@keyframes erpEventsShimmer { to { transform: translateX(100%); } }
+@keyframes erpEventsSkeletonIn { from { opacity: 0; transform: translate3d(0,11px,0); } to { opacity: 1; transform: none; } }
+.stats { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px; margin-bottom: 16px; }
+.stat {
+  display: flex; align-items: center; min-width: 0; gap: 13px;
+  border-radius: 17px; border: 1px solid #eef0f3; padding: 15px 13px;
+  min-height: 77px; animation: erpEventsSkeletonIn 460ms cubic-bezier(.22,1,.36,1) backwards;
+}
+.stat:nth-child(1) { animation-delay: 40ms; }
+.stat:nth-child(2) { animation-delay: 95ms; }
+.stat:nth-child(3) { animation-delay: 150ms; }
+.stat:nth-child(4) { animation-delay: 205ms; }
+.total { background: #222327; }
+.pending { background: #fff0d4; }
+.confirmed { background: #e0f6e7; }
+.archived { background: #ebeaf0; }
+.statIcon { flex: 0 0 43px; width: 43px; height: 43px; border-radius: 13px; background: rgba(255,255,255,.19); }
+.pending .statIcon, .confirmed .statIcon, .archived .statIcon { background: rgba(67,77,89,.10); }
+.stat > div { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 8px; }
+.statTitle { height: 10px; width: min(100%,130px); background: rgba(255,255,255,.36); }
+.statNumber { width: 31px; height: 21px; background: rgba(255,255,255,.44); }
+.pending .statTitle, .confirmed .statTitle, .archived .statTitle,
+.pending .statNumber, .confirmed .statNumber, .archived .statNumber { background: rgba(73,81,92,.18); }
+.layout { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); align-items: start; gap: 15px; }
+.left { min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.calendar, .agenda { border-radius: 22px; border: 1px solid #e9ebef; background: #fff; padding: 17px; animation: erpEventsSkeletonIn 470ms cubic-bezier(.22,1,.36,1) backwards; }
+.calendar { animation-delay: 235ms; }
+.calendarHeading { display: flex; align-items: center; justify-content: space-between; gap: 15px; margin-bottom: 16px; }
+.nav { width: 39px; height: 39px; border-radius: 12px; }
+.month { width: 162px; max-width: 48%; height: 19px; }
+.days { display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); gap: 7px; }
+.day { height: 68px; border-radius: 13px; background: #f0f1f4; }
+.legend { display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 16px; padding-top: 12px; border-top: 1px solid #edeef2; }
+.legendItem { width: 100px; height: 10px; }
+.add { height: 56px; width: 100%; background: #ffd3ae; border-radius: 12px; animation: erpEventsSkeletonIn 430ms cubic-bezier(.22,1,.36,1) 325ms backwards; }
+.agenda { min-height: 320px; animation-delay: 370ms; }
+.tabs { display: grid; grid-template-columns: repeat(3,1fr); gap: 7px; padding: 6px; border-radius: 13px; background: #f6f6f8; }
+.tab { height: 43px; border-radius: 10px; }
+.tab:first-child { background: #222327; }
+.empty { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 230px; gap: 13px; }
+.emptyIcon { width: 39px; height: 39px; background: #ffe0c7; border-radius: 11px; }
+.emptyTitle { width: 170px; max-width: 75%; height: 15px; }
+.emptyCaption { width: 230px; max-width: 90%; height: 10px; }
+@media (max-width: 1050px) { .layout { grid-template-columns: 1fr; } }
+@media (max-width: 680px) {
+  .erpEventsLoadingRoot { padding: 15px 14px 75px; }
+  .stats { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; margin-bottom: 13px; }
+  .stat { min-height: 70px; padding: 11px 9px; gap: 10px; border-radius: 15px; }
+  .statIcon { flex-basis: 38px; width: 38px; height: 38px; }
+  .calendar, .agenda { padding: 13px; border-radius: 18px; }
+  .days { gap: 5px; }
+  .day { height: 59px; }
+  .add { height: 49px; }
+  .agenda { min-height: 265px; }
+  .empty { min-height: 185px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shimmer::after, .stat, .calendar, .add, .agenda { animation: none !important; }
+}
