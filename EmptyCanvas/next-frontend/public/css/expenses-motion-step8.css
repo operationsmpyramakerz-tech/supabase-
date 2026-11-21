@@ -1,0 +1,93 @@
+/* ERP_CINEMATIC_STEP8 | Expenses dashboard and route loading only.
+   Do not animate a common container; each card has an independent reveal.
+   No animation touches header, dock, sidebars, dialogs, filters on change or popovers. */
+@keyframes erpExpenseCard8 {
+  from { opacity: 0; transform: translate3d(0, 24px, 0) scale(.97); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes erpExpenseToolbar8 {
+  from { opacity: 0; transform: translate3d(0, -12px, 0); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes erpExpenseSoft8 {
+  from { opacity: 0; transform: translate3d(0, 12px, 0); }
+  to { opacity: 1; transform: none; }
+}
+/* Balance card first; cash action buttons are SEPARATE animation targets. */
+.expenses-layout.expenses-dashboard.next-expenses-classic-parity > .expenses-dashboard__sidebar > .expenses-summary-card {
+  animation: erpExpenseCard8 600ms cubic-bezier(.22, 1, .36, 1) 65ms backwards;
+}
+.expenses-layout.next-expenses-classic-parity .expenses-summary-card .summary-pill {
+  animation: erpExpenseSoft8 420ms cubic-bezier(.22, 1, .36, 1) backwards;
+}
+.expenses-layout.next-expenses-classic-parity .expenses-summary-card .summary-pill:nth-child(1) { animation-delay: 235ms; }
+.expenses-layout.next-expenses-classic-parity .expenses-summary-card .summary-pill:nth-child(2) { animation-delay: 295ms; }
+.expenses-layout.next-expenses-classic-parity .expense-action-grid > .cash-btn {
+  animation: erpExpenseCard8 640ms cubic-bezier(.22, 1, .36, 1) backwards;
+}
+.expenses-layout.next-expenses-classic-parity .expense-action-grid > .cash-btn:nth-child(1) { animation-delay: 175ms; }
+.expenses-layout.next-expenses-classic-parity .expense-action-grid > .cash-btn:nth-child(2) { animation-delay: 285ms; }
+.expenses-layout.next-expenses-classic-parity .expense-action-grid > .cash-btn:nth-child(n+3) { animation-delay: 365ms; }
+/* Keep the activity container static. Stagger its header, tabs and transactions. */
+.expenses-layout.next-expenses-classic-parity .expenses-activity-card > .expenses-activity-head {
+  animation: erpExpenseToolbar8 485ms cubic-bezier(.22, 1, .36, 1) 285ms backwards;
+}
+.expenses-layout.next-expenses-classic-parity .expenses-activity-card > .expenses-overview {
+  animation: erpExpenseSoft8 485ms cubic-bezier(.22, 1, .36, 1) 370ms backwards;
+}
+.expenses-layout.next-expenses-classic-parity .expenses-content--tickets > .expense-ticket {
+  animation: erpExpenseCard8 635ms cubic-bezier(.22, 1, .36, 1) backwards;
+}
+.expenses-layout.next-expenses-classic-parity .expenses-content--tickets > .expenses-empty {
+  animation: erpExpenseSoft8 460ms cubic-bezier(.22, 1, .36, 1) 445ms backwards;
+}
+/* Existing streamed loading skeleton, no change to shared shell markup. */
+.next-classic-expenses-loading .next-expenses-classic-parity .next-expenses-loading-panel {
+  animation: erpExpenseCard8 550ms cubic-bezier(.22, 1, .36, 1) 65ms backwards;
+}
+.next-classic-expenses-loading .next-expenses-classic-parity .next-expenses-loading-action {
+  animation: erpExpenseCard8 550ms cubic-bezier(.22, 1, .36, 1) backwards;
+}
+.next-classic-expenses-loading .next-expenses-classic-parity .next-expenses-loading-action:nth-child(1) { animation-delay: 175ms; }
+.next-classic-expenses-loading .next-expenses-classic-parity .next-expenses-loading-action:nth-child(2) { animation-delay: 275ms; }
+.next-classic-expenses-loading .next-expenses-classic-parity .next-expenses-loading-ledger {
+  animation: erpExpenseSoft8 520ms cubic-bezier(.22, 1, .36, 1) 360ms backwards;
+}
+@media (max-width: 700px) {
+  @keyframes erpExpenseCard8 {
+    from { opacity: 0; transform: translate3d(0, 17px, 0) scale(.978); }
+    to { opacity: 1; transform: none; }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .expenses-layout.next-expenses-classic-parity .expenses-summary-card,
+  .expenses-layout.next-expenses-classic-parity .summary-pill,
+  .expenses-layout.next-expenses-classic-parity .cash-btn,
+  .expenses-layout.next-expenses-classic-parity .expenses-activity-head,
+  .expenses-layout.next-expenses-classic-parity .expenses-overview,
+  .expenses-layout.next-expenses-classic-parity .expenses-content--tickets > *,
+  .next-classic-expenses-loading .next-expenses-classic-parity .next-expenses-loading-panel,
+  .next-classic-expenses-loading .next-expenses-classic-parity .next-expenses-loading-action,
+  .next-classic-expenses-loading .next-expenses-classic-parity .next-expenses-loading-ledger {
+    animation: none !important;
+  }
+}
+
+/* First ledger cards each get their own entrance timing. */
+.expenses-layout.next-expenses-classic-parity .expenses-content--tickets > .expense-ticket:nth-child(1) { animation-delay: 455ms; }
+.expenses-layout.next-expenses-classic-parity .expenses-content--tickets > .expense-ticket:nth-child(2) { animation-delay: 527ms; }
+.expenses-layout.next-expenses-classic-parity .expenses-content--tickets > .expense-ticket:nth-child(3) { animation-delay: 599ms; }
+.expenses-layout.next-expenses-classic-parity .expenses-content--tickets > .expense-ticket:nth-child(4) { animation-delay: 671ms; }
+.expenses-layout.next-expenses-classic-parity .expenses-content--tickets > .expense-ticket:nth-child(5) { animation-delay: 743ms; }
+.expenses-layout.next-expenses-classic-parity .expenses-content--tickets > .expense-ticket:nth-child(6) { animation-delay: 815ms; }
+.expenses-layout.next-expenses-classic-parity .expenses-content--tickets > .expense-ticket:nth-child(7) { animation-delay: 887ms; }
+.expenses-layout.next-expenses-classic-parity .expenses-content--tickets > .expense-ticket:nth-child(8) { animation-delay: 959ms; }
+.expenses-layout.next-expenses-classic-parity .expenses-content--tickets > .expense-ticket:nth-child(9) { animation-delay: 1031ms; }
+.expenses-layout.next-expenses-classic-parity .expenses-content--tickets > .expense-ticket:nth-child(10) { animation-delay: 1103ms; }
+.expenses-layout.next-expenses-classic-parity .expenses-content--tickets > .expense-ticket:nth-child(11) { animation-delay: 1175ms; }
+.expenses-layout.next-expenses-classic-parity .expenses-content--tickets > .expense-ticket:nth-child(12) { animation-delay: 1247ms; }
+.expenses-layout.next-expenses-classic-parity .expenses-content--tickets > .expense-ticket:nth-child(13) { animation-delay: 1319ms; }
+.expenses-layout.next-expenses-classic-parity .expenses-content--tickets > .expense-ticket:nth-child(14) { animation-delay: 1391ms; }
+.expenses-layout.next-expenses-classic-parity .expenses-content--tickets > .expense-ticket:nth-child(15) { animation-delay: 1463ms; }
+.expenses-layout.next-expenses-classic-parity .expenses-content--tickets > .expense-ticket:nth-child(16) { animation-delay: 1535ms; }
+.expenses-layout.next-expenses-classic-parity .expenses-content--tickets > .expense-ticket:nth-child(n+17) { animation-delay: 1555ms; }

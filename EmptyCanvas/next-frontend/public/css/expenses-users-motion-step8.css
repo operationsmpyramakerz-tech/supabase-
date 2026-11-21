@@ -1,0 +1,68 @@
+/* ERP_CINEMATIC_STEP8 | Expenses by Users; each user tile animates
+   separately. The .user-tabs wrapper NEVER animates as one large block.
+   Modals, toast, overlays and shared navigation remain untouched. */
+@keyframes erpExpenseUserCard8 {
+  from { opacity: 0; transform: translate3d(0, 27px, 0) scale(.965); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes erpExpenseUserSkeleton8 {
+  from { opacity: 0; transform: translate3d(0, 15px, 0) scale(.986); }
+  to { opacity: 1; transform: none; }
+}
+/* A button is a REAL user card. Keep the entire grid visible as tiles enter. */
+.expenses-layout.next-expense-users-classic-parity .user-tabs > button.user-tab {
+  animation: erpExpenseUserCard8 665ms cubic-bezier(.22, 1, .36, 1) backwards;
+}
+.expenses-layout.next-expense-users-classic-parity .user-tabs > .users-empty {
+  animation: erpExpenseUserSkeleton8 470ms cubic-bezier(.22, 1, .36, 1) 100ms backwards;
+}
+/* The 6 shimmer cards on the current route loading screen are independent. */
+.next-classic-expenses-loading .next-expense-users-classic-parity .user-tabs > .next-expenses-loading-user-card {
+  animation: erpExpenseUserSkeleton8 530ms cubic-bezier(.22, 1, .36, 1) backwards;
+}
+@media (max-width: 700px) {
+  @keyframes erpExpenseUserCard8 {
+    from { opacity: 0; transform: translate3d(0, 18px, 0) scale(.975); }
+    to { opacity: 1; transform: none; }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .expenses-layout.next-expense-users-classic-parity .user-tabs > button.user-tab,
+  .expenses-layout.next-expense-users-classic-parity .user-tabs > .users-empty,
+  .next-classic-expenses-loading .next-expense-users-classic-parity .user-tabs > .next-expenses-loading-user-card {
+    animation: none !important;
+  }
+}
+
+/* Per-user stagger, independent of the list container. */
+.expenses-layout.next-expense-users-classic-parity .user-tabs > button.user-tab:nth-child(1) { animation-delay: 110ms; }
+.expenses-layout.next-expense-users-classic-parity .user-tabs > button.user-tab:nth-child(2) { animation-delay: 187ms; }
+.expenses-layout.next-expense-users-classic-parity .user-tabs > button.user-tab:nth-child(3) { animation-delay: 264ms; }
+.expenses-layout.next-expense-users-classic-parity .user-tabs > button.user-tab:nth-child(4) { animation-delay: 341ms; }
+.expenses-layout.next-expense-users-classic-parity .user-tabs > button.user-tab:nth-child(5) { animation-delay: 418ms; }
+.expenses-layout.next-expense-users-classic-parity .user-tabs > button.user-tab:nth-child(6) { animation-delay: 495ms; }
+.expenses-layout.next-expense-users-classic-parity .user-tabs > button.user-tab:nth-child(7) { animation-delay: 572ms; }
+.expenses-layout.next-expense-users-classic-parity .user-tabs > button.user-tab:nth-child(8) { animation-delay: 649ms; }
+.expenses-layout.next-expense-users-classic-parity .user-tabs > button.user-tab:nth-child(9) { animation-delay: 726ms; }
+.expenses-layout.next-expense-users-classic-parity .user-tabs > button.user-tab:nth-child(10) { animation-delay: 803ms; }
+.expenses-layout.next-expense-users-classic-parity .user-tabs > button.user-tab:nth-child(11) { animation-delay: 880ms; }
+.expenses-layout.next-expense-users-classic-parity .user-tabs > button.user-tab:nth-child(12) { animation-delay: 957ms; }
+.expenses-layout.next-expense-users-classic-parity .user-tabs > button.user-tab:nth-child(13) { animation-delay: 1034ms; }
+.expenses-layout.next-expense-users-classic-parity .user-tabs > button.user-tab:nth-child(14) { animation-delay: 1111ms; }
+.expenses-layout.next-expense-users-classic-parity .user-tabs > button.user-tab:nth-child(15) { animation-delay: 1188ms; }
+.expenses-layout.next-expense-users-classic-parity .user-tabs > button.user-tab:nth-child(16) { animation-delay: 1265ms; }
+.expenses-layout.next-expense-users-classic-parity .user-tabs > button.user-tab:nth-child(17) { animation-delay: 1342ms; }
+.expenses-layout.next-expense-users-classic-parity .user-tabs > button.user-tab:nth-child(18) { animation-delay: 1419ms; }
+.expenses-layout.next-expense-users-classic-parity .user-tabs > button.user-tab:nth-child(19) { animation-delay: 1496ms; }
+.expenses-layout.next-expense-users-classic-parity .user-tabs > button.user-tab:nth-child(20) { animation-delay: 1573ms; }
+.expenses-layout.next-expense-users-classic-parity .user-tabs > button.user-tab:nth-child(21) { animation-delay: 1650ms; }
+.expenses-layout.next-expense-users-classic-parity .user-tabs > button.user-tab:nth-child(22) { animation-delay: 1727ms; }
+.expenses-layout.next-expense-users-classic-parity .user-tabs > button.user-tab:nth-child(23) { animation-delay: 1804ms; }
+.expenses-layout.next-expense-users-classic-parity .user-tabs > button.user-tab:nth-child(24) { animation-delay: 1881ms; }
+.expenses-layout.next-expense-users-classic-parity .user-tabs > button.user-tab:nth-child(n+25) { animation-delay: 1880ms; }
+.next-classic-expenses-loading .next-expense-users-classic-parity .user-tabs > .next-expenses-loading-user-card:nth-child(1) { animation-delay: 95ms; }
+.next-classic-expenses-loading .next-expense-users-classic-parity .user-tabs > .next-expenses-loading-user-card:nth-child(2) { animation-delay: 180ms; }
+.next-classic-expenses-loading .next-expense-users-classic-parity .user-tabs > .next-expenses-loading-user-card:nth-child(3) { animation-delay: 265ms; }
+.next-classic-expenses-loading .next-expense-users-classic-parity .user-tabs > .next-expenses-loading-user-card:nth-child(4) { animation-delay: 350ms; }
+.next-classic-expenses-loading .next-expense-users-classic-parity .user-tabs > .next-expenses-loading-user-card:nth-child(5) { animation-delay: 435ms; }
+.next-classic-expenses-loading .next-expense-users-classic-parity .user-tabs > .next-expenses-loading-user-card:nth-child(6) { animation-delay: 520ms; }
