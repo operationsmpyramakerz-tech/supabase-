@@ -70,7 +70,7 @@ function ComponentThumbnail({row,onOpen}){
 }
 export default function ProjectWarehouseReceiving({projectId,projectName,canReceive,editTabs={},request,onClose,closurePanel}) {
  const [state,setState]=useState(empty),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false);
- const [tab,setTab]=useState("receiving"),[search,setSearch]=useState(""),[filter,setFilter]=useState("all");
+ const [tab,setTab]=useState("receiving"),[search,setSearch]=useState(""),[filter,setFilter]=useState("available");
  const [searchOpen,setSearchOpen]=useState(false);
  const searchInputRef=useRef(null);
  const [preview,setPreview]=useState(null),[previewIndex,setPreviewIndex]=useState(0);

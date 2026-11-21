@@ -76,7 +76,7 @@ function ComponentThumbnail({row,onOpen}){
 }
 export default function ProjectTesting({projectId,projectName,canTest,editTabs={},request,onClose,closurePanel}) {
  const [data,setData]=useState(initial),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false);
- const [tab,setTab]=useState("testing"),[search,setSearch]=useState(""),[filter,setFilter]=useState("all");
+ const [tab,setTab]=useState("testing"),[search,setSearch]=useState(""),[filter,setFilter]=useState("pending");
  const [searchOpen,setSearchOpen]=useState(false);
  const searchInputRef=useRef(null);
  // Keep the existing Testing edit rules for all tabs, including All Components.
