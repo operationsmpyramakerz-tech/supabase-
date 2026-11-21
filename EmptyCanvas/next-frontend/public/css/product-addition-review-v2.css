@@ -216,3 +216,87 @@ html[data-theme="dark"] .addition-review--v2 { --par-surface:#171c25; --par-soft
   }
 }
 /* ERP PRODUCT ADDITION MOBILE REVIEW FIX V5 — END */
+
+/* ERP REQUESTED NEW PRODUCTS — X BUTTONS V9 BEGIN */
+/* Both X controls use the same compact, neutral look on this page only. */
+body.products-page .next-products-image-viewer > section[role="dialog"] > header > button,
+body.products-page .addition-dialog .addition-image-upload.has-image .addition-image-upload__remove {
+  -webkit-appearance: none;
+  appearance: none;
+  position: relative;
+  display: grid !important;
+  place-items: center !important;
+  flex: 0 0 40px !important;
+  width: 40px !important;
+  height: 40px !important;
+  min-width: 40px !important;
+  min-height: 40px !important;
+  max-width: 40px !important;
+  max-height: 40px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 1px solid #dce2ea !important;
+  border-radius: 12px !important;
+  background: #f6f7f9 !important;
+  color: #101827 !important;
+  box-shadow: none !important;
+  transform: none !important;
+  font-size: 0 !important;
+  line-height: 0 !important;
+  cursor: pointer;
+  box-sizing: border-box !important;
+  -webkit-tap-highlight-color: transparent;
+}
+/* Draw a crisp, truly centered X instead of relying on a font glyph's baseline. */
+body.products-page .next-products-image-viewer > section[role="dialog"] > header > button::before,
+body.products-page .next-products-image-viewer > section[role="dialog"] > header > button::after,
+body.products-page .addition-dialog .addition-image-upload.has-image .addition-image-upload__remove::before,
+body.products-page .addition-dialog .addition-image-upload.has-image .addition-image-upload__remove::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 16px;
+  height: 2px;
+  border-radius: 99px;
+  background: currentColor;
+  pointer-events: none;
+}
+body.products-page .next-products-image-viewer > section[role="dialog"] > header > button::before,
+body.products-page .addition-dialog .addition-image-upload.has-image .addition-image-upload__remove::before {
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+body.products-page .next-products-image-viewer > section[role="dialog"] > header > button::after,
+body.products-page .addition-dialog .addition-image-upload.has-image .addition-image-upload__remove::after {
+  transform: translate(-50%, -50%) rotate(-45deg);
+}
+/* Hide the original glyph/icon without altering accessible button labels. */
+body.products-page .addition-dialog .addition-image-upload.has-image .addition-image-upload__remove > svg {
+  display: none !important;
+}
+body.products-page .next-products-image-viewer > section[role="dialog"] > header > button:hover,
+body.products-page .addition-dialog .addition-image-upload.has-image .addition-image-upload__remove:hover {
+  background: #e9edf2 !important;
+  border-color: #cbd5e1 !important;
+}
+body.products-page .next-products-image-viewer > section[role="dialog"] > header > button:focus-visible,
+body.products-page .addition-dialog .addition-image-upload.has-image .addition-image-upload__remove:focus-visible {
+  outline: 3px solid #f97316 !important;
+  outline-offset: 2px;
+}
+body.products-page .addition-dialog .addition-image-upload.has-image .addition-image-upload__remove {
+  justify-self: end;
+  align-self: start;
+}
+/* Reserve a full, fixed column so the remove button never floats into text. */
+@media (max-width: 760px) {
+  body.products-page .addition-dialog .addition-image-upload.has-image {
+    grid-template-columns: 74px minmax(0, 1fr) 40px;
+  }
+}
+@media (max-width: 360px) {
+  body.products-page .addition-dialog .addition-image-upload.has-image {
+    grid-template-columns: 62px minmax(0, 1fr) 40px;
+  }
+}
+/* ERP REQUESTED NEW PRODUCTS — X BUTTONS V9 END */
