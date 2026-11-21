@@ -1,0 +1,93 @@
+/* ERP • My/Current Orders cinematic motion v1
+   Same scene -> toolbar -> staggered cards sequencing as Home Motion v2.
+   Scoped to the LIVE page; loading skeleton, global shell and modal overlays
+   are deliberately excluded. CSS only: no dependency or data-flow changes. */
+
+@keyframes erpCurrentSceneIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes erpCurrentToolbarIn {
+  from { opacity: 0; transform: translate3d(0, -10px, 0); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes erpCurrentSurfaceIn {
+  from { opacity: 0; transform: translate3d(0, 13px, 0); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes erpCurrentCardIn {
+  from { opacity: 0; transform: translate3d(0, var(--erp-current-motion-y, 20px), 0) scale(.981); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes erpCurrentContentIn {
+  from { opacity: 0; transform: translate3d(0, 9px, 0); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* The skeleton uses .next-classic-orders-parity without .orders-workspace.
+   Likewise, unrelated descendants of app/orders/ never match this scope. */
+body.current-orders-page .next-classic-orders-parity.orders-workspace:not(.next-classic-operations-parity) {
+  --erp-current-ease: cubic-bezier(.22, 1, .36, 1);
+  animation: erpCurrentSceneIn 340ms ease-out backwards;
+}
+
+/* Page toolbar appears before list content; sticky positioning stays intact. */
+body.current-orders-page .orders-workspace > .next-current-orders-toolbar-wrap {
+  animation: erpCurrentToolbarIn 460ms var(--erp-current-ease, ease-out) 55ms backwards;
+}
+body.current-orders-page .next-current-orders-toolbar-wrap .order-status-tab {
+  animation: erpCurrentContentIn 420ms var(--erp-current-ease, ease-out) backwards;
+}
+body.current-orders-page .next-current-orders-toolbar-wrap .order-status-tab:nth-child(1) { animation-delay: 90ms; }
+body.current-orders-page .next-current-orders-toolbar-wrap .order-status-tab:nth-child(2) { animation-delay: 130ms; }
+body.current-orders-page .next-current-orders-toolbar-wrap .order-status-tab:nth-child(3) { animation-delay: 170ms; }
+body.current-orders-page .next-current-orders-toolbar-wrap .order-status-tab:nth-child(4) { animation-delay: 210ms; }
+body.current-orders-page .next-current-orders-toolbar-wrap .order-status-tab:nth-child(5) { animation-delay: 250ms; }
+body.current-orders-page .next-current-orders-toolbar-wrap .order-status-tab:nth-child(6) { animation-delay: 290ms; }
+body.current-orders-page .next-current-orders-toolbar-wrap .order-status-tab:nth-child(n+7) { animation-delay: 330ms; }
+body.current-orders-page .next-current-orders-toolbar-wrap .orders-toolbar__divider,
+body.current-orders-page .next-current-orders-toolbar-wrap .orders-toolbar > :last-child:not(.orders-toolbar__scroll) {
+  animation: erpCurrentContentIn 440ms var(--erp-current-ease, ease-out) 255ms backwards;
+}
+
+/* The list surface arrives, then the actual order cards stagger separately. */
+body.current-orders-page .orders-workspace > #current-orders {
+  animation: erpCurrentSurfaceIn 480ms var(--erp-current-ease, ease-out) 170ms backwards;
+}
+body.current-orders-page .orders-workspace #orders-list > .co-card {
+  animation: erpCurrentCardIn 570ms var(--erp-current-ease, ease-out) backwards;
+}
+body.current-orders-page .orders-workspace #orders-list > .co-card:nth-child(1)  { animation-delay: 200ms; }
+body.current-orders-page .orders-workspace #orders-list > .co-card:nth-child(2)  { animation-delay: 255ms; }
+body.current-orders-page .orders-workspace #orders-list > .co-card:nth-child(3)  { animation-delay: 310ms; }
+body.current-orders-page .orders-workspace #orders-list > .co-card:nth-child(4)  { animation-delay: 365ms; }
+body.current-orders-page .orders-workspace #orders-list > .co-card:nth-child(5)  { animation-delay: 420ms; }
+body.current-orders-page .orders-workspace #orders-list > .co-card:nth-child(6)  { animation-delay: 475ms; }
+body.current-orders-page .orders-workspace #orders-list > .co-card:nth-child(7)  { animation-delay: 530ms; }
+body.current-orders-page .orders-workspace #orders-list > .co-card:nth-child(8)  { animation-delay: 585ms; }
+body.current-orders-page .orders-workspace #orders-list > .co-card:nth-child(n+9) { animation-delay: 630ms; }
+
+/* Empty results and Load More do not pop in abruptly. No dialog animation: its
+   own positioning, focus trap, and loading overlay remain untouched. */
+body.current-orders-page .orders-workspace #orders-list > :not(.co-card),
+body.current-orders-page .orders-workspace #current-orders > :last-child:not(#orders-list) {
+  animation: erpCurrentContentIn 470ms var(--erp-current-ease, ease-out) 260ms backwards;
+}
+
+/* fill-mode: backwards (NOT both) ensures hover transforms and menus behave
+   normally after the entrance animation completes. */
+@media (max-width: 700px) {
+  body.current-orders-page .orders-workspace { --erp-current-motion-y: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.current-orders-page .next-classic-orders-parity.orders-workspace,
+  body.current-orders-page .orders-workspace > .next-current-orders-toolbar-wrap,
+  body.current-orders-page .next-current-orders-toolbar-wrap .order-status-tab,
+  body.current-orders-page .next-current-orders-toolbar-wrap .orders-toolbar__divider,
+  body.current-orders-page .next-current-orders-toolbar-wrap .orders-toolbar > :last-child:not(.orders-toolbar__scroll),
+  body.current-orders-page .orders-workspace > #current-orders,
+  body.current-orders-page .orders-workspace #orders-list > *,
+  body.current-orders-page .orders-workspace #current-orders > :last-child:not(#orders-list) {
+    animation: none !important;
+  }
+}

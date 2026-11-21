@@ -1,0 +1,87 @@
+/* ERP • Operations Orders cinematic motion v1
+   Covers Request Products, Withdraw Products and Request Maintenance as one
+   operations workspace family. Only resolved live-page content animates. */
+
+@keyframes erpOperationsSceneIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes erpOperationsToolbarIn {
+  from { opacity: 0; transform: translate3d(0, -10px, 0); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes erpOperationsSurfaceIn {
+  from { opacity: 0; transform: translate3d(0, 13px, 0); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes erpOperationsCardIn {
+  from { opacity: 0; transform: translate3d(0, var(--erp-operations-motion-y, 20px), 0) scale(.981); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes erpOperationsContentIn {
+  from { opacity: 0; transform: translate3d(0, 9px, 0); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Live client root only: no skeleton, not the redirect route, and no modals. */
+body.operations-orders-page .next-classic-operations-parity.orders-workspace {
+  --erp-operations-ease: cubic-bezier(.22, 1, .36, 1);
+  animation: erpOperationsSceneIn 340ms ease-out backwards;
+}
+
+body.operations-orders-page .next-classic-operations-parity.orders-workspace > .next-operations-orders-toolbar-wrap {
+  animation: erpOperationsToolbarIn 460ms var(--erp-operations-ease, ease-out) 55ms backwards;
+}
+body.operations-orders-page .next-operations-orders-toolbar-wrap .order-status-tab {
+  animation: erpOperationsContentIn 420ms var(--erp-operations-ease, ease-out) backwards;
+}
+body.operations-orders-page .next-operations-orders-toolbar-wrap .order-status-tab:nth-child(1) { animation-delay: 90ms; }
+body.operations-orders-page .next-operations-orders-toolbar-wrap .order-status-tab:nth-child(2) { animation-delay: 130ms; }
+body.operations-orders-page .next-operations-orders-toolbar-wrap .order-status-tab:nth-child(3) { animation-delay: 170ms; }
+body.operations-orders-page .next-operations-orders-toolbar-wrap .order-status-tab:nth-child(4) { animation-delay: 210ms; }
+body.operations-orders-page .next-operations-orders-toolbar-wrap .order-status-tab:nth-child(5) { animation-delay: 250ms; }
+body.operations-orders-page .next-operations-orders-toolbar-wrap .order-status-tab:nth-child(6) { animation-delay: 290ms; }
+body.operations-orders-page .next-operations-orders-toolbar-wrap .order-status-tab:nth-child(n+7) { animation-delay: 330ms; }
+body.operations-orders-page .next-operations-orders-toolbar-wrap .orders-toolbar__divider,
+body.operations-orders-page .next-operations-orders-toolbar-wrap .orders-toolbar > :last-child:not(.orders-toolbar__scroll) {
+  animation: erpOperationsContentIn 440ms var(--erp-operations-ease, ease-out) 255ms backwards;
+}
+
+body.operations-orders-page .next-classic-operations-parity.orders-workspace > #operations-orders-list {
+  animation: erpOperationsSurfaceIn 480ms var(--erp-operations-ease, ease-out) 170ms backwards;
+}
+body.operations-orders-page .orders-workspace #requested-list > .co-card {
+  animation: erpOperationsCardIn 570ms var(--erp-operations-ease, ease-out) backwards;
+}
+body.operations-orders-page .orders-workspace #requested-list > .co-card:nth-child(1)  { animation-delay: 200ms; }
+body.operations-orders-page .orders-workspace #requested-list > .co-card:nth-child(2)  { animation-delay: 255ms; }
+body.operations-orders-page .orders-workspace #requested-list > .co-card:nth-child(3)  { animation-delay: 310ms; }
+body.operations-orders-page .orders-workspace #requested-list > .co-card:nth-child(4)  { animation-delay: 365ms; }
+body.operations-orders-page .orders-workspace #requested-list > .co-card:nth-child(5)  { animation-delay: 420ms; }
+body.operations-orders-page .orders-workspace #requested-list > .co-card:nth-child(6)  { animation-delay: 475ms; }
+body.operations-orders-page .orders-workspace #requested-list > .co-card:nth-child(7)  { animation-delay: 530ms; }
+body.operations-orders-page .orders-workspace #requested-list > .co-card:nth-child(8)  { animation-delay: 585ms; }
+body.operations-orders-page .orders-workspace #requested-list > .co-card:nth-child(n+9) { animation-delay: 630ms; }
+
+body.operations-orders-page .orders-workspace #requested-list > :not(.co-card),
+body.operations-orders-page .orders-workspace #operations-orders-list > :last-child:not(#requested-list) {
+  animation: erpOperationsContentIn 470ms var(--erp-operations-ease, ease-out) 260ms backwards;
+}
+
+/* Avoid animation-fill-mode:both; keep existing hover and interactive transform
+   behavior after entrance. Respect the OS reduced-motion preference. */
+@media (max-width: 700px) {
+  body.operations-orders-page .orders-workspace { --erp-operations-motion-y: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.operations-orders-page .next-classic-operations-parity.orders-workspace,
+  body.operations-orders-page .next-classic-operations-parity.orders-workspace > .next-operations-orders-toolbar-wrap,
+  body.operations-orders-page .next-operations-orders-toolbar-wrap .order-status-tab,
+  body.operations-orders-page .next-operations-orders-toolbar-wrap .orders-toolbar__divider,
+  body.operations-orders-page .next-operations-orders-toolbar-wrap .orders-toolbar > :last-child:not(.orders-toolbar__scroll),
+  body.operations-orders-page .next-classic-operations-parity.orders-workspace > #operations-orders-list,
+  body.operations-orders-page .orders-workspace #requested-list > *,
+  body.operations-orders-page .orders-workspace #operations-orders-list > :last-child:not(#requested-list) {
+    animation: none !important;
+  }
+}
