@@ -1,0 +1,92 @@
+/* ERP_CINEMATIC_STEP9 – Users Center. Individual metrics, people and folder
+   cards animate one by one (Stocktaking-style). No animation on the directory
+   grid parent, popovers, member editor, modals, menus or bottom navigation. */
+@keyframes erpUserRise9 {
+  from { opacity: 0; transform: translate3d(0, 27px, 0) scale(.963); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+@keyframes erpUserSoft9 {
+  from { opacity: 0; transform: translate3d(0, 14px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+.user-access-page .ua-page-body.ua-directory-v339 .ua-directory-hero {
+  opacity: 1;
+  animation: erpUserRise9 590ms cubic-bezier(.22, 1, .36, 1) 45ms backwards;
+}
+.user-access-page .ua-page-body.ua-directory-v339 .ua-directory-metrics > .ua-directory-metric,
+.user-access-page .ua-page-body.ua-directory-v339 .ua-directory-users__grid > :is(.ua-add-member-card, .ua-directory-user-card),
+.user-access-page .ua-page-body.ua-directory-v339 .ua-folders > :is(.ua-folder, .ua-add-member-card),
+.user-access-page .ua-page-body.ua-directory-v339 .ua-members-grid > .ua-member-card {
+  opacity: 1;
+  animation: erpUserRise9 635ms cubic-bezier(.22, 1, .36, 1) backwards;
+}
+.user-access-page .ua-page-body.ua-directory-v339 .ua-directory-metrics > :nth-child(1) { animation-delay: 125ms; }
+.user-access-page .ua-page-body.ua-directory-v339 .ua-directory-metrics > :nth-child(2) { animation-delay: 225ms; }
+.user-access-page .ua-page-body.ua-directory-v339 .ua-directory-metrics > :nth-child(3) { animation-delay: 325ms; }
+.user-access-page .ua-page-body.ua-directory-v339 .ua-directory-metrics > :nth-child(4) { animation-delay: 425ms; }
+.user-access-page .ua-page-body.ua-directory-v339 .ua-directory-toolbar {
+  animation: erpUserSoft9 460ms cubic-bezier(.22, 1, .36, 1) 390ms backwards;
+}
+/* A consistent stagger across all directory modes, including Add Member. */
+.user-access-page .ua-page-body.ua-directory-v339 .ua-directory-users__grid > :nth-child(1),
+.user-access-page .ua-page-body.ua-directory-v339 .ua-folders > :nth-child(1),
+.user-access-page .ua-page-body.ua-directory-v339 .ua-members-grid > :nth-child(1) { animation-delay: 490ms; }
+.user-access-page .ua-page-body.ua-directory-v339 .ua-directory-users__grid > :nth-child(2),
+.user-access-page .ua-page-body.ua-directory-v339 .ua-folders > :nth-child(2),
+.user-access-page .ua-page-body.ua-directory-v339 .ua-members-grid > :nth-child(2) { animation-delay: 580ms; }
+.user-access-page .ua-page-body.ua-directory-v339 .ua-directory-users__grid > :nth-child(3),
+.user-access-page .ua-page-body.ua-directory-v339 .ua-folders > :nth-child(3),
+.user-access-page .ua-page-body.ua-directory-v339 .ua-members-grid > :nth-child(3) { animation-delay: 670ms; }
+.user-access-page .ua-page-body.ua-directory-v339 .ua-directory-users__grid > :nth-child(4),
+.user-access-page .ua-page-body.ua-directory-v339 .ua-folders > :nth-child(4),
+.user-access-page .ua-page-body.ua-directory-v339 .ua-members-grid > :nth-child(4) { animation-delay: 760ms; }
+.user-access-page .ua-page-body.ua-directory-v339 .ua-directory-users__grid > :nth-child(5),
+.user-access-page .ua-page-body.ua-directory-v339 .ua-folders > :nth-child(5),
+.user-access-page .ua-page-body.ua-directory-v339 .ua-members-grid > :nth-child(5) { animation-delay: 850ms; }
+.user-access-page .ua-page-body.ua-directory-v339 .ua-directory-users__grid > :nth-child(6),
+.user-access-page .ua-page-body.ua-directory-v339 .ua-folders > :nth-child(6),
+.user-access-page .ua-page-body.ua-directory-v339 .ua-members-grid > :nth-child(6) { animation-delay: 940ms; }
+.user-access-page .ua-page-body.ua-directory-v339 .ua-directory-users__grid > :nth-child(7),
+.user-access-page .ua-page-body.ua-directory-v339 .ua-folders > :nth-child(7),
+.user-access-page .ua-page-body.ua-directory-v339 .ua-members-grid > :nth-child(7) { animation-delay: 1030ms; }
+.user-access-page .ua-page-body.ua-directory-v339 .ua-directory-users__grid > :nth-child(8),
+.user-access-page .ua-page-body.ua-directory-v339 .ua-folders > :nth-child(8),
+.user-access-page .ua-page-body.ua-directory-v339 .ua-members-grid > :nth-child(8) { animation-delay: 1120ms; }
+.user-access-page .ua-page-body.ua-directory-v339 .ua-directory-users__grid > :nth-child(9),
+.user-access-page .ua-page-body.ua-directory-v339 .ua-folders > :nth-child(9),
+.user-access-page .ua-page-body.ua-directory-v339 .ua-members-grid > :nth-child(9) { animation-delay: 1210ms; }
+.user-access-page .ua-page-body.ua-directory-v339 .ua-directory-users__grid > :nth-child(10),
+.user-access-page .ua-page-body.ua-directory-v339 .ua-folders > :nth-child(10),
+.user-access-page .ua-page-body.ua-directory-v339 .ua-members-grid > :nth-child(10) { animation-delay: 1300ms; }
+.user-access-page .ua-page-body.ua-directory-v339 .ua-directory-users__grid > :nth-child(11),
+.user-access-page .ua-page-body.ua-directory-v339 .ua-folders > :nth-child(11),
+.user-access-page .ua-page-body.ua-directory-v339 .ua-members-grid > :nth-child(11) { animation-delay: 1390ms; }
+.user-access-page .ua-page-body.ua-directory-v339 .ua-directory-users__grid > :nth-child(12),
+.user-access-page .ua-page-body.ua-directory-v339 .ua-folders > :nth-child(12),
+.user-access-page .ua-page-body.ua-directory-v339 .ua-members-grid > :nth-child(12) { animation-delay: 1480ms; }
+/* Limit long delay on large directories: quick and safe after first dozen. */
+.user-access-page .ua-page-body.ua-directory-v339 .ua-directory-users__grid > :nth-child(n+13),
+.user-access-page .ua-page-body.ua-directory-v339 .ua-folders > :nth-child(n+13),
+.user-access-page .ua-page-body.ua-directory-v339 .ua-members-grid > :nth-child(n+13) { animation-delay: 1550ms; }
+/* Route loading existing folder skeleton; avoid touching shared shell. */
+.next-classic-users-loading .next-ua-loading-actions { animation: erpUserSoft9 440ms ease-out 60ms backwards; }
+.next-classic-users-loading .next-ua-loading-folders > .ua-folder { animation: erpUserRise9 490ms ease-out backwards; }
+.next-classic-users-loading .next-ua-loading-folders > :nth-child(1) { animation-delay: 145ms; }
+.next-classic-users-loading .next-ua-loading-folders > :nth-child(2) { animation-delay: 225ms; }
+.next-classic-users-loading .next-ua-loading-folders > :nth-child(3) { animation-delay: 305ms; }
+.next-classic-users-loading .next-ua-loading-folders > :nth-child(4) { animation-delay: 385ms; }
+.next-classic-users-loading .next-ua-loading-folders > :nth-child(5) { animation-delay: 465ms; }
+.next-classic-users-loading .next-ua-loading-folders > :nth-child(6) { animation-delay: 545ms; }
+.next-classic-users-loading .next-ua-loading-folders > :nth-child(7) { animation-delay: 625ms; }
+.next-classic-users-loading .next-ua-loading-folders > :nth-child(8) { animation-delay: 705ms; }
+@media (prefers-reduced-motion: reduce) {
+  .user-access-page .ua-page-body.ua-directory-v339 .ua-directory-hero,
+  .user-access-page .ua-page-body.ua-directory-v339 .ua-directory-metric,
+  .user-access-page .ua-page-body.ua-directory-v339 .ua-directory-toolbar,
+  .user-access-page .ua-page-body.ua-directory-v339 .ua-directory-user-card,
+  .user-access-page .ua-page-body.ua-directory-v339 .ua-folder,
+  .user-access-page .ua-page-body.ua-directory-v339 .ua-add-member-card,
+  .user-access-page .ua-page-body.ua-directory-v339 .ua-member-card,
+  .next-classic-users-loading .next-ua-loading-actions,
+  .next-classic-users-loading .next-ua-loading-folders > .ua-folder { animation: none !important; opacity: 1; }
+}

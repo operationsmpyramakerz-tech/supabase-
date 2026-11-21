@@ -1,0 +1,95 @@
+/* ERP_CINEMATIC_STEP9 – Task Management.
+   Each card animates independently. Header, sidebar, bottom dock, popovers,
+   dialogs and inner form controls are outside the animation targets. */
+@keyframes erpTaskRise9 {
+  from { opacity: 0; transform: translate3d(0, 25px, 0) scale(.962); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+@keyframes erpTaskSoft9 {
+  from { opacity: 0; transform: translate3d(0, 13px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+@keyframes erpTaskDown9 {
+  from { opacity: 0; transform: translate3d(0, -12px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+/* IMPORTANT: final opacity is the base opacity 1. Only the entrance is filled
+   backwards; never leave an animated card opacity:0 after it completes. */
+.next-task-classic-parity .tm-main .tm-mobile-week-card,
+.next-task-classic-parity .tm-main .tm-mobile-summary-grid > .tm-mobile-summary-card,
+.next-task-classic-parity .tm-main .tm-mobile-day-feed,
+.next-task-classic-parity .tm-main .tm-mobile-task-list > .tm-mobile-task-card,
+.next-task-classic-parity .tm-main .tm-agenda-column > .tm-agenda-card,
+.next-task-classic-parity .tm-main .tm-ticket-grid > .tm-ticket-card,
+.next-task-classic-parity .tm-main .tm-day-task-list > .tm-agenda-task {
+  opacity: 1;
+  animation: erpTaskRise9 630ms cubic-bezier(.22, 1, .36, 1) backwards;
+}
+.next-task-classic-parity .tm-main .tm-mobile-week-card,
+.next-task-classic-parity .tm-main .tm-agenda-column > .tm-agenda-card:first-child {
+  animation-delay: 75ms;
+}
+.next-task-classic-parity .tm-main .tm-mobile-summary-grid > :nth-child(1) { animation-delay: 165ms; }
+.next-task-classic-parity .tm-main .tm-mobile-summary-grid > :nth-child(2) { animation-delay: 275ms; }
+.next-task-classic-parity .tm-main .tm-mobile-summary-grid > :nth-child(3) { animation-delay: 385ms; }
+.next-task-classic-parity .tm-main .tm-mobile-day-feed { animation-delay: 450ms; }
+.next-task-classic-parity .tm-main .tm-agenda-column > .tm-agenda-card:nth-child(2) { animation-delay: 190ms; }
+.next-task-classic-parity .tm-main .tm-tasks-column > .tm-toolbar,
+.next-task-classic-parity .tm-main .tm-mobile-list-heading {
+  animation: erpTaskDown9 470ms cubic-bezier(.22, 1, .36, 1) 255ms backwards;
+}
+/* All/Delegated/My task card grids: one card at a time. */
+.next-task-classic-parity .tm-main .tm-ticket-grid > .tm-ticket-card,
+.next-task-classic-parity .tm-main .tm-mobile-task-list > .tm-mobile-task-card {
+  animation-delay: 385ms;
+}
+.next-task-classic-parity .tm-main .tm-day-task-list > .tm-agenda-task { animation-delay: 225ms; }
+.next-task-classic-parity .tm-main .tm-ticket-grid > :nth-child(2),
+.next-task-classic-parity .tm-main .tm-mobile-task-list > :nth-child(2),
+.next-task-classic-parity .tm-main .tm-day-task-list > :nth-child(2) { animation-delay: 490ms; }
+.next-task-classic-parity .tm-main .tm-ticket-grid > :nth-child(3),
+.next-task-classic-parity .tm-main .tm-mobile-task-list > :nth-child(3),
+.next-task-classic-parity .tm-main .tm-day-task-list > :nth-child(3) { animation-delay: 595ms; }
+.next-task-classic-parity .tm-main .tm-ticket-grid > :nth-child(4),
+.next-task-classic-parity .tm-main .tm-mobile-task-list > :nth-child(4),
+.next-task-classic-parity .tm-main .tm-day-task-list > :nth-child(4) { animation-delay: 700ms; }
+.next-task-classic-parity .tm-main .tm-ticket-grid > :nth-child(5),
+.next-task-classic-parity .tm-main .tm-mobile-task-list > :nth-child(5),
+.next-task-classic-parity .tm-main .tm-day-task-list > :nth-child(5) { animation-delay: 805ms; }
+.next-task-classic-parity .tm-main .tm-ticket-grid > :nth-child(6),
+.next-task-classic-parity .tm-main .tm-mobile-task-list > :nth-child(6) { animation-delay: 910ms; }
+.next-task-classic-parity .tm-main .tm-ticket-grid > :nth-child(7),
+.next-task-classic-parity .tm-main .tm-mobile-task-list > :nth-child(7) { animation-delay: 1015ms; }
+.next-task-classic-parity .tm-main .tm-ticket-grid > :nth-child(8),
+.next-task-classic-parity .tm-main .tm-mobile-task-list > :nth-child(8) { animation-delay: 1120ms; }
+.next-task-classic-parity .tm-main .tm-ticket-grid > :nth-child(n+9),
+.next-task-classic-parity .tm-main .tm-mobile-task-list > :nth-child(n+9) { animation-delay: 1180ms; }
+/* Skeleton: stable chrome never animates, only content. */
+.next-classic-task-loading .classic-task-loading__viewbar { animation: erpTaskDown9 410ms ease-out 40ms backwards; }
+.next-classic-task-loading .classic-task-loading__calendar { animation: erpTaskRise9 530ms ease-out 90ms backwards; }
+.next-classic-task-loading .classic-task-loading__day { animation: erpTaskRise9 530ms ease-out 195ms backwards; }
+.next-classic-task-loading .classic-task-loading__toolbar { animation: erpTaskSoft9 470ms ease-out 240ms backwards; }
+.next-classic-task-loading .tm-ticket-grid > .classic-task-loading__ticket { animation: erpTaskRise9 510ms ease-out backwards; }
+.next-classic-task-loading .tm-ticket-grid > :nth-child(1) { animation-delay: 290ms; }
+.next-classic-task-loading .tm-ticket-grid > :nth-child(2) { animation-delay: 375ms; }
+.next-classic-task-loading .tm-ticket-grid > :nth-child(3) { animation-delay: 460ms; }
+.next-classic-task-loading .tm-ticket-grid > :nth-child(4) { animation-delay: 545ms; }
+@media (prefers-reduced-motion: reduce) {
+  .next-task-classic-parity .tm-main .tm-mobile-week-card,
+  .next-task-classic-parity .tm-main .tm-mobile-summary-card,
+  .next-task-classic-parity .tm-main .tm-mobile-day-feed,
+  .next-task-classic-parity .tm-main .tm-mobile-task-card,
+  .next-task-classic-parity .tm-main .tm-agenda-card,
+  .next-task-classic-parity .tm-main .tm-agenda-task,
+  .next-task-classic-parity .tm-main .tm-ticket-card,
+  .next-task-classic-parity .tm-main .tm-toolbar,
+  .next-task-classic-parity .tm-main .tm-mobile-list-heading,
+  .next-classic-task-loading .classic-task-loading__viewbar,
+  .next-classic-task-loading .classic-task-loading__calendar,
+  .next-classic-task-loading .classic-task-loading__day,
+  .next-classic-task-loading .classic-task-loading__toolbar,
+  .next-classic-task-loading .classic-task-loading__ticket {
+    animation: none !important;
+    opacity: 1;
+  }
+}
