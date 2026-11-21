@@ -271,6 +271,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
   const [moveDialog, setMoveDialog] = useState(null);
   const [passwordRequest, setPasswordRequest] = useState(null);
   const [folderMenu, setFolderMenu] = useState("");
+  const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const folderLongPressTimerRef = useRef(null);
   const folderLongPressStartRef = useRef(null);
   const suppressFolderClickRef = useRef(false);
@@ -309,6 +310,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
   useEffect(() => {
     const close = (event) => {
       if (!event.target.closest(".products-proposal-folder")) setFolderMenu("");
+      if (!event.target.closest(".kit-quick-create")) setCreateMenuOpen(false);
       if (pickerRef.current && !pickerRef.current.contains(event.target)) setProductPickerOpen(false);
       if (!event.target.closest(".proposal-download-menu-wrap") && !event.target.closest(".proposal-download-modal")) setDownloadMenuOpen(false);
       if (!event.target.closest(".proposal-sort-menu-wrap")) setSortMenuOpen(false);
@@ -316,6 +318,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
     const onKey = (event) => {
       if (event.key !== "Escape") return;
       setFolderMenu("");
+      setCreateMenuOpen(false);
       setProductPickerOpen(false);
       setDownloadMenuOpen(false);
       setSortMenuOpen(false);
@@ -1501,27 +1504,55 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
       ]}/> : null}
       <Toast toast={toast} onClose={() => setToast(null)} />
 
-      <div className="proposals-floating-actions kit-library-actions">
-        {activeFolder ? (
-          <>
-            {canCreate ? <button type="button" className="products-btn products-btn--light proposal-classic-combine-btn next-kit-combine-btn" onClick={() => setCombineOpen(true)} disabled={kits.length < 2}><FeatherIcon name="merge" /><span>Combined Kits</span></button> : null}
-            {canCreate ? <button type="button" className="products-add-btn proposals-create-btn" onClick={startCreateKit}><FeatherIcon name="briefcase" /><span>Create New Kit</span></button> : null}
-          </>
-        ) : (
-          <>
-            {canCreate ? <button type="button" className="products-add-btn proposals-create-btn" onClick={startCreateKit}><FeatherIcon name="briefcase" /><span>Create New Kit</span></button> : null}
-            {can("folder_create") ? <button type="button" className="products-add-btn proposals-create-btn kit-create-folder-btn" onClick={() => setFolderDialog({ mode: "create", value: "" })}><FeatherIcon name="folderPlus" /><span>Create Folder</span></button> : null}
-          </>
-        )}
-      </div>
+      {activeFolder ? (
+        <div className="proposals-floating-actions kit-library-actions">
+          {canCreate ? <button type="button" className="products-btn products-btn--light proposal-classic-combine-btn next-kit-combine-btn" onClick={() => setCombineOpen(true)} disabled={kits.length < 2}><FeatherIcon name="merge" /><span>Combined Kits</span></button> : null}
+          {canCreate ? <button type="button" className="products-add-btn proposals-create-btn" onClick={startCreateKit}><FeatherIcon name="briefcase" /><span>Create New Kit</span></button> : null}
+        </div>
+      ) : null}
 
       {bootstrapWarnings.length ? <div className="proposal-view-note"><span aria-hidden="true">!</span><span>Some startup resources were delayed. The page remains usable; refresh if a kit or folder is missing.</span></div> : null}
 
       <section className="products-proposals-view proposals-workspace proposals-folders-card" aria-live="polite">
         <section className="proposals-panel">
+          {!activeFolder ? (
+            <header className="kit-library-heading">
+              <div className="kit-library-heading__title">
+                <span className="kit-library-heading__icon" aria-hidden="true"><FeatherIcon name="folder" /></span>
+                <h2>Kit Folders</h2>
+              </div>
+              <span className="kit-library-heading__count">{folders.length} folder{folders.length === 1 ? "" : "s"}</span>
+            </header>
+          ) : null}
           <div className="products-proposals-list">
-            {(filteredFolders.length || filteredKits.length) ? (
+            {(filteredFolders.length || filteredKits.length || (!activeFolder && (canCreate || can("folder_create")))) ? (
               <div className="products-proposal-folders kit-library-grid">
+                {!activeFolder && (canCreate || can("folder_create")) ? (
+                  <div className={`kit-quick-create${createMenuOpen ? " is-open" : ""}`}>
+                    <button
+                      type="button"
+                      className="kit-quick-create__tile"
+                      onClick={() => { setFolderMenu(""); setCreateMenuOpen((open) => !open); }}
+                      aria-label="Create a new kit or folder"
+                      aria-haspopup="menu"
+                      aria-expanded={createMenuOpen}
+                      aria-controls={createMenuOpen ? "kit-quick-create-menu" : undefined}
+                    >
+                      <span className="kit-quick-create__illustration" aria-hidden="true">
+                        <FeatherIcon name="folderPlus" />
+                        <span className="kit-quick-create__spark" />
+                      </span>
+                      <strong>Create</strong>
+                      <small>Add a new kit or folder</small>
+                    </button>
+                    {createMenuOpen ? (
+                      <div className="kit-quick-create__menu" id="kit-quick-create-menu" role="menu" aria-label="Create options">
+                        {canCreate ? <button type="button" role="menuitem" onClick={() => { setCreateMenuOpen(false); startCreateKit(); }}><FeatherIcon name="briefcase" /><span>Create New Kit</span></button> : null}
+                        {can("folder_create") ? <button type="button" role="menuitem" onClick={() => { setCreateMenuOpen(false); setFolderDialog({ mode: "create", value: "" }); }}><FeatherIcon name="folderPlus" /><span>Create Folder</span></button> : null}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
                 {!activeFolder ? filteredFolders.map(renderLibraryFolder) : null}
                 {filteredKits.map(renderKitCard)}
               </div>
