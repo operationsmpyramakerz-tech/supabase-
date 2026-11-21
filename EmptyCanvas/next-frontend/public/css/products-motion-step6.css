@@ -1,0 +1,85 @@
+/* ERP_CINEMATIC_STEP6 | Products catalogue entrance + route loading.
+   The animation is limited to the committed Products page, not modals,
+   the header, sidebar, bottom dock or the separately streamed skeleton. */
+@keyframes erpProductsScene6 { from { opacity: 0; } to { opacity: 1; } }
+@keyframes erpProductsRise6 {
+  from { opacity: 0; transform: translate3d(0, 15px, 0) scale(.988); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes erpProductsDrop6 {
+  from { opacity: 0; transform: translate3d(0, -10px, 0); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes erpProductsCard6 {
+  from { opacity: 0; transform: translate3d(0, 17px, 0) scale(.982); }
+  to { opacity: 1; transform: none; }
+}
+/* Loading fallback shares .products-shell, so explicitly exclude it from
+   committed-page motion. The wrapper only exists while streaming. */
+body.products-page .products-shell.next-products-classic-parity {
+  --erp-products-ease-6: cubic-bezier(.22, 1, .36, 1);
+  animation: erpProductsScene6 320ms ease-out backwards;
+}
+body.products-page .next-classic-inventory-loading .products-shell {
+  animation: none;
+}
+body.products-page .next-classic-page-content .products-shell.next-products-classic-parity > .products-filter-panel {
+  animation: erpProductsDrop6 435ms var(--erp-products-ease-6, ease-out) 55ms backwards;
+}
+body.products-page .next-classic-page-content .products-shell.next-products-classic-parity > .products-results {
+  animation: erpProductsRise6 470ms var(--erp-products-ease-6, ease-out) 125ms backwards;
+}
+/* Bound the animated item count to avoid overloading large product catalogues. */
+body.products-page .products-results > .products-group:nth-child(-n+4) > .products-group__head {
+  animation: erpProductsDrop6 425ms var(--erp-products-ease-6, ease-out) backwards;
+}
+body.products-page .products-results > .products-group:nth-child(1) > .products-group__head { animation-delay: 190ms; }
+body.products-page .products-results > .products-group:nth-child(2) > .products-group__head { animation-delay: 255ms; }
+body.products-page .products-results > .products-group:nth-child(3) > .products-group__head { animation-delay: 320ms; }
+body.products-page .products-results > .products-group:nth-child(4) > .products-group__head { animation-delay: 385ms; }
+body.products-page .products-results > .products-group:nth-child(-n+3) .products-grid > .product-card:nth-child(-n+8) {
+  animation: erpProductsCard6 530ms var(--erp-products-ease-6, ease-out) backwards;
+}
+body.products-page .products-results .products-grid > :nth-child(1) { animation-delay: 235ms; }
+body.products-page .products-results .products-grid > :nth-child(2) { animation-delay: 285ms; }
+body.products-page .products-results .products-grid > :nth-child(3) { animation-delay: 335ms; }
+body.products-page .products-results .products-grid > :nth-child(4) { animation-delay: 385ms; }
+body.products-page .products-results .products-grid > :nth-child(5) { animation-delay: 435ms; }
+body.products-page .products-results .products-grid > :nth-child(6) { animation-delay: 485ms; }
+body.products-page .products-results .products-grid > :nth-child(7) { animation-delay: 535ms; }
+body.products-page .products-results .products-grid > :nth-child(8) { animation-delay: 585ms; }
+body.products-page .products-results > .products-empty {
+  animation: erpProductsRise6 470ms var(--erp-products-ease-6, ease-out) 175ms backwards;
+}
+/* Loading skeleton: still the existing stable Chrome, but let the matching
+   filters/groups/cards appear as a shallow sequence instead of a blank area. */
+.next-classic-inventory-loading .products-shell .products-filter-panel {
+  animation: erpProductsDrop6 360ms ease-out 35ms backwards;
+}
+.next-classic-inventory-loading .products-shell .next-inventory-loading-product-group:nth-child(-n+3) {
+  animation: erpProductsRise6 390ms ease-out backwards;
+}
+.next-classic-inventory-loading .products-shell .next-inventory-loading-product-group:nth-child(1) { animation-delay: 105ms; }
+.next-classic-inventory-loading .products-shell .next-inventory-loading-product-group:nth-child(2) { animation-delay: 155ms; }
+.next-classic-inventory-loading .products-shell .next-inventory-loading-product-group:nth-child(3) { animation-delay: 205ms; }
+.next-classic-inventory-loading .products-shell .next-inventory-loading-product {
+  border-radius: 14px;
+}
+@media (max-width: 680px) {
+  @keyframes erpProductsCard6 {
+    from { opacity: 0; transform: translate3d(0, 11px, 0) scale(.992); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes erpProductsRise6 {
+    from { opacity: 0; transform: translate3d(0, 10px, 0) scale(.994); }
+    to { opacity: 1; transform: none; }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.products-page .products-shell.next-products-classic-parity,
+  body.products-page .products-shell :is(.products-filter-panel, .products-results, .products-group__head, .products-grid > .product-card, .products-empty),
+  .next-classic-inventory-loading .products-shell .products-filter-panel,
+  .next-classic-inventory-loading .products-shell .next-inventory-loading-product-group {
+    animation: none !important;
+  }
+}

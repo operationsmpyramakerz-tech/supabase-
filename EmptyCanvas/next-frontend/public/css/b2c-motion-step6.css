@@ -1,0 +1,137 @@
+/* ERP_CINEMATIC_STEP6 | B2C entrance + streamed skeleton motion.
+   Scope: committed Database / Forms / individual Table. Never modify app
+   header, sidebar, bottom dock, popovers, fixed dialogs or input focus. */
+@keyframes erpB2cScene6 { from { opacity: 0; } to { opacity: 1; } }
+@keyframes erpB2cRise6 {
+  from { opacity: 0; transform: translate3d(0, 15px, 0) scale(.988); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes erpB2cDrop6 {
+  from { opacity: 0; transform: translate3d(0, -10px, 0); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes erpB2cFolder6 {
+  from { opacity: 0; transform: translate3d(0, 20px, 0) scale(.974); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes erpB2cRow6 {
+  from { opacity: 0; transform: translate3d(9px, 0, 0); }
+  to { opacity: 1; transform: none; }
+}
+/* Use the real-client identifiers: loading skeleton uses a different DOM. */
+.b2c-shell.next-b2c-classic-library,
+.b2c-shell.next-b2c-classic-forms,
+.b2c-shell.next-b2c-table-classic-page {
+  --erp-b2c-ease-6: cubic-bezier(.22, 1, .36, 1);
+  animation: erpB2cScene6 320ms ease-out backwards;
+}
+/* Customer Database / folder library. */
+.next-b2c-classic-library .b2c-library-workspace__head {
+  animation: erpB2cDrop6 430ms var(--erp-b2c-ease-6) 50ms backwards;
+}
+.next-b2c-classic-library .b2c-library-summary {
+  animation: erpB2cRise6 470ms var(--erp-b2c-ease-6) 135ms backwards;
+}
+.next-b2c-classic-library .b2c-folders-panel {
+  animation: erpB2cRise6 495ms var(--erp-b2c-ease-6) 195ms backwards;
+}
+.next-b2c-classic-library .b2c-folders-panel__head {
+  animation: erpB2cDrop6 400ms var(--erp-b2c-ease-6) 225ms backwards;
+}
+.next-b2c-classic-library .b2c-folders-grid > .b2c-folder-card:nth-child(-n+10) {
+  animation: erpB2cFolder6 520ms var(--erp-b2c-ease-6) backwards;
+}
+.next-b2c-classic-library .b2c-folders-grid > :nth-child(1) { animation-delay: 260ms; }
+.next-b2c-classic-library .b2c-folders-grid > :nth-child(2) { animation-delay: 310ms; }
+.next-b2c-classic-library .b2c-folders-grid > :nth-child(3) { animation-delay: 360ms; }
+.next-b2c-classic-library .b2c-folders-grid > :nth-child(4) { animation-delay: 410ms; }
+.next-b2c-classic-library .b2c-folders-grid > :nth-child(5) { animation-delay: 460ms; }
+.next-b2c-classic-library .b2c-folders-grid > :nth-child(6) { animation-delay: 510ms; }
+.next-b2c-classic-library .b2c-folders-grid > :nth-child(7) { animation-delay: 560ms; }
+.next-b2c-classic-library .b2c-folders-grid > :nth-child(8) { animation-delay: 610ms; }
+.next-b2c-classic-library .b2c-folders-grid > :nth-child(9) { animation-delay: 660ms; }
+.next-b2c-classic-library .b2c-folders-grid > :nth-child(10) { animation-delay: 710ms; }
+/* Forms library: animate the entry only, not form editing and confirmations. */
+.next-b2c-classic-forms .b2c-form-workspace__intro {
+  animation: erpB2cDrop6 435ms var(--erp-b2c-ease-6) 55ms backwards;
+}
+.next-b2c-classic-forms .next-b2c-classic-forms-toolbar {
+  animation: erpB2cRise6 430ms var(--erp-b2c-ease-6) 170ms backwards;
+}
+.next-b2c-classic-forms .b2c-forms-library > .b2c-form-card:nth-child(-n+8) {
+  animation: erpB2cFolder6 520ms var(--erp-b2c-ease-6) backwards;
+}
+.next-b2c-classic-forms .b2c-forms-library > :nth-child(1) { animation-delay: 240ms; }
+.next-b2c-classic-forms .b2c-forms-library > :nth-child(2) { animation-delay: 300ms; }
+.next-b2c-classic-forms .b2c-forms-library > :nth-child(3) { animation-delay: 360ms; }
+.next-b2c-classic-forms .b2c-forms-library > :nth-child(4) { animation-delay: 420ms; }
+.next-b2c-classic-forms .b2c-forms-library > :nth-child(5) { animation-delay: 480ms; }
+.next-b2c-classic-forms .b2c-forms-library > :nth-child(6) { animation-delay: 540ms; }
+.next-b2c-classic-forms .b2c-forms-library > :nth-child(7) { animation-delay: 600ms; }
+.next-b2c-classic-forms .b2c-forms-library > :nth-child(8) { animation-delay: 660ms; }
+.next-b2c-classic-forms .b2c-active-form-panel {
+  animation: erpB2cRise6 510ms var(--erp-b2c-ease-6) 125ms backwards;
+}
+/* Opening a database table: toolbar -> title -> KPI cards -> rows. */
+.next-b2c-table-classic-page .b2c-table-view-head {
+  animation: erpB2cDrop6 430ms var(--erp-b2c-ease-6) 45ms backwards;
+}
+.next-b2c-table-classic-page .next-b2c-table-classic-title {
+  animation: erpB2cRise6 480ms var(--erp-b2c-ease-6) 125ms backwards;
+}
+.next-b2c-table-classic-page .b2c-table-insights > article {
+  animation: erpB2cRise6 470ms var(--erp-b2c-ease-6) backwards;
+}
+.next-b2c-table-classic-page .b2c-table-insights > :nth-child(1) { animation-delay: 175ms; }
+.next-b2c-table-classic-page .b2c-table-insights > :nth-child(2) { animation-delay: 230ms; }
+.next-b2c-table-classic-page .b2c-table-insights > :nth-child(3) { animation-delay: 285ms; }
+.next-b2c-table-classic-page .b2c-detail-table-panel {
+  animation: erpB2cRise6 510ms var(--erp-b2c-ease-6) 315ms backwards;
+}
+.next-b2c-table-classic-page .b2c-customer-table tbody > tr:nth-child(-n+6) {
+  animation: erpB2cRow6 420ms var(--erp-b2c-ease-6) backwards;
+}
+.next-b2c-table-classic-page .b2c-customer-table tbody > :nth-child(1) { animation-delay: 385ms; }
+.next-b2c-table-classic-page .b2c-customer-table tbody > :nth-child(2) { animation-delay: 420ms; }
+.next-b2c-table-classic-page .b2c-customer-table tbody > :nth-child(3) { animation-delay: 455ms; }
+.next-b2c-table-classic-page .b2c-customer-table tbody > :nth-child(4) { animation-delay: 490ms; }
+.next-b2c-table-classic-page .b2c-customer-table tbody > :nth-child(5) { animation-delay: 525ms; }
+.next-b2c-table-classic-page .b2c-customer-table tbody > :nth-child(6) { animation-delay: 560ms; }
+/* Existing streamed B2C loading skeleton: preserve shell and its elements,
+   let real content reveal naturally when it replaces the fallback. */
+.next-classic-b2c-loading .b2c-shell {
+  animation: erpB2cScene6 240ms ease-out backwards;
+}
+.next-classic-b2c-loading .b2c-library-workspace__head,
+.next-classic-b2c-loading .b2c-form-workspace__intro,
+.next-classic-b2c-loading .b2c-table-view-head {
+  animation: erpB2cDrop6 345ms ease-out 45ms backwards;
+}
+.next-classic-b2c-loading .b2c-folders-panel,
+.next-classic-b2c-loading .b2c-forms-library,
+.next-classic-b2c-loading .b2c-detail-table-panel {
+  animation: erpB2cRise6 380ms ease-out 110ms backwards;
+}
+/* Avoid starting dozens of simultaneous transforms on long mobile lists. */
+@media (max-width: 680px) {
+  @keyframes erpB2cRise6 {
+    from { opacity: 0; transform: translate3d(0, 10px, 0) scale(.993); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes erpB2cFolder6 {
+    from { opacity: 0; transform: translate3d(0, 12px, 0) scale(.986); }
+    to { opacity: 1; transform: none; }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .b2c-shell.next-b2c-classic-library,
+  .b2c-shell.next-b2c-classic-forms,
+  .b2c-shell.next-b2c-table-classic-page,
+  .next-b2c-classic-library :is(.b2c-library-workspace__head, .b2c-library-summary, .b2c-folders-panel, .b2c-folders-panel__head, .b2c-folder-card),
+  .next-b2c-classic-forms :is(.b2c-form-workspace__intro, .next-b2c-classic-forms-toolbar, .b2c-form-card, .b2c-active-form-panel),
+  .next-b2c-table-classic-page :is(.b2c-table-view-head, .next-b2c-table-classic-title, .b2c-table-insights > article, .b2c-detail-table-panel, .b2c-customer-table tbody > tr),
+  .next-classic-b2c-loading .b2c-shell,
+  .next-classic-b2c-loading :is(.b2c-library-workspace__head, .b2c-form-workspace__intro, .b2c-table-view-head, .b2c-folders-panel, .b2c-forms-library, .b2c-detail-table-panel) {
+    animation: none !important;
+  }
+}
