@@ -147,3 +147,123 @@ html[data-theme="dark"] .addition-review--v2 { --par-surface:#171c25; --par-soft
   .addition-review--v2 .par2-tile-value { font-size:10px; }
 }
 /* ERP PRODUCT ADDITION COMPACT CARD V3 - END */
+
+/* ERP PRODUCT ADDITION MODAL MOBILE FIX V4 - BEGIN */
+/* Smaller product image preview on mobile + remove extra subtitle spacing in the review modal. */
+@media (max-width: 640px) {
+  body :is(
+    .product-image-viewer,
+    .products-image-viewer,
+    .product-image-dialog,
+    .products-dialog__image-viewer,
+    .products-dialog-image-viewer,
+    [data-product-image-viewer],
+    [data-image-viewer],
+    [aria-modal="true"]
+  ) img {
+    max-width: min(88vw, 420px) !important;
+    max-height: 68vh !important;
+    width: auto !important;
+    height: auto !important;
+    object-fit: contain !important;
+    margin-inline: auto !important;
+  }
+
+  body :is(
+    .product-image-viewer,
+    .products-image-viewer,
+    .product-image-dialog,
+    .products-dialog__image-viewer,
+    .products-dialog-image-viewer,
+    [data-product-image-viewer],
+    [data-image-viewer],
+    [aria-modal="true"]
+  ) {
+    padding: 14px !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  body :is(
+    .product-image-viewer,
+    .products-image-viewer,
+    .product-image-dialog,
+    .products-dialog__image-viewer,
+    .products-dialog-image-viewer,
+    [data-product-image-viewer],
+    [data-image-viewer],
+    [aria-modal="true"]
+  ) :is(.dialog-content, .viewer-content, .image-content, .modal-content, .content) {
+    max-width: min(92vw, 460px) !important;
+    max-height: 78vh !important;
+    margin: 0 auto !important;
+  }
+}
+/* ERP PRODUCT ADDITION MODAL MOBILE FIX V4 - END */
+
+/* ERP PRODUCT ADDITION MOBILE REVIEW FIX V5 — BEGIN */
+@media (max-width: 760px) {
+  body.products-page .products-modal-overlay.next-products-image-viewer {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: auto;
+    padding: 16px;
+    box-sizing: border-box;
+    z-index: 5600;
+  }
+  body.products-page .next-products-image-viewer > section[role="dialog"] {
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    flex: 0 1 auto;
+    width: min(80vw, 360px) !important;
+    max-width: min(80vw, 360px) !important;
+    max-height: min(78dvh, 680px) !important;
+    margin: auto;
+    border-radius: 18px;
+    overflow: hidden;
+    background: #fff;
+  }
+  body.products-page .next-products-image-viewer > section[role="dialog"] > header {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 12px;
+    background: #fff;
+    color: #111827;
+  }
+  body.products-page .next-products-image-viewer > section[role="dialog"] > header strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  body.products-page .next-products-image-viewer > section[role="dialog"] > header button {
+    flex: 0 0 34px;
+    width: 34px;
+    height: 34px;
+    border: 1px solid #e5e7eb;
+    border-radius: 50%;
+    background: #f8fafc;
+    color: #111827;
+    font-size: 24px;
+    cursor: pointer;
+  }
+  body.products-page .next-products-image-viewer > section[role="dialog"] > img {
+    display: block;
+    flex: 0 1 auto;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0;
+    max-width: 100% !important;
+    max-height: min(62dvh, 570px) !important;
+    object-fit: contain !important;
+    background: #fff;
+  }
+}
+/* ERP PRODUCT ADDITION MOBILE REVIEW FIX V5 — END */
