@@ -133,3 +133,69 @@
     animation: none !important;
   }
 }
+
+/* ERP_CINEMATIC_STEP7_STAGGER_FIX_V2 - Individual proposal folders with independent stagger.
+   The library workspace and root must not fade as one giant block. */
+@keyframes erpProposalFolderStaggerV2 {
+  from { opacity: 0; transform: translate3d(0, 26px, 0) scale(.965); }
+  to { opacity: 1; transform: none; }
+}
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity.products-shell.proposals-shell {
+  animation: none;
+}
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) > .proposals-workspace.proposals-folders-card {
+  animation: none;
+}
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder {
+  animation: erpProposalFolderStaggerV2 635ms cubic-bezier(.22, 1, .36, 1) backwards;
+}
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(1) { animation-delay: 105ms; }
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(2) { animation-delay: 200ms; }
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(3) { animation-delay: 295ms; }
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(4) { animation-delay: 390ms; }
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(5) { animation-delay: 485ms; }
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(6) { animation-delay: 580ms; }
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(7) { animation-delay: 675ms; }
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(8) { animation-delay: 770ms; }
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(9) { animation-delay: 865ms; }
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(10) { animation-delay: 960ms; }
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(11) { animation-delay: 1055ms; }
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(12) { animation-delay: 1150ms; }
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(13) { animation-delay: 1218ms; }
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(14) { animation-delay: 1286ms; }
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(15) { animation-delay: 1354ms; }
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(16) { animation-delay: 1422ms; }
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(17) { animation-delay: 1490ms; }
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(18) { animation-delay: 1558ms; }
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(19) { animation-delay: 1626ms; }
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(20) { animation-delay: 1694ms; }
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(21) { animation-delay: 1762ms; }
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(22) { animation-delay: 1830ms; }
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(23) { animation-delay: 1898ms; }
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(24) { animation-delay: 1966ms; }
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(25) { animation-delay: 2034ms; }
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(26) { animation-delay: 2102ms; }
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(27) { animation-delay: 2170ms; }
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(28) { animation-delay: 2238ms; }
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(29) { animation-delay: 2306ms; }
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(30) { animation-delay: 2374ms; }
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(31) { animation-delay: 2442ms; }
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(32) { animation-delay: 2510ms; }
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(33) { animation-delay: 2578ms; }
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(34) { animation-delay: 2646ms; }
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(35) { animation-delay: 2714ms; }
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(36) { animation-delay: 2782ms; }
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(37) { animation-delay: 2850ms; }
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(38) { animation-delay: 2918ms; }
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(39) { animation-delay: 2986ms; }
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(40) { animation-delay: 3054ms; }
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(n+41) { animation-delay: 3054ms; }
+@media (max-width: 700px) {
+  @keyframes erpProposalFolderStaggerV2 {
+    from { opacity: 0; transform: translate3d(0, 18px, 0) scale(.966); }
+    to { opacity: 1; transform: none; }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.proposals-page:not(.kits-page) .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder { animation: none !important; }
+}

@@ -127,3 +127,69 @@
     animation: none !important;
   }
 }
+
+/* ERP_CINEMATIC_STEP7_STAGGER_FIX_V2 - Animate each actual folder ARTICLE, never the enclosing panel.
+   The previous whole-panel entrance masked the stagger on mobile. */
+@keyframes erpKitsFolderStaggerV2 {
+  from { opacity: 0; transform: translate3d(0, 26px, 0) scale(.965); }
+  to { opacity: 1; transform: none; }
+}
+body.kits-page .next-kits-classic-parity.products-shell.proposals-shell {
+  animation: none;
+}
+body.kits-page .next-kits-classic-parity > .proposals-workspace.proposals-folders-card {
+  animation: none;
+}
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder {
+  animation: erpKitsFolderStaggerV2 635ms cubic-bezier(.22, 1, .36, 1) backwards;
+}
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder:nth-child(1) { animation-delay: 105ms; }
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder:nth-child(2) { animation-delay: 200ms; }
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder:nth-child(3) { animation-delay: 295ms; }
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder:nth-child(4) { animation-delay: 390ms; }
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder:nth-child(5) { animation-delay: 485ms; }
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder:nth-child(6) { animation-delay: 580ms; }
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder:nth-child(7) { animation-delay: 675ms; }
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder:nth-child(8) { animation-delay: 770ms; }
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder:nth-child(9) { animation-delay: 865ms; }
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder:nth-child(10) { animation-delay: 960ms; }
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder:nth-child(11) { animation-delay: 1055ms; }
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder:nth-child(12) { animation-delay: 1150ms; }
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder:nth-child(13) { animation-delay: 1218ms; }
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder:nth-child(14) { animation-delay: 1286ms; }
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder:nth-child(15) { animation-delay: 1354ms; }
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder:nth-child(16) { animation-delay: 1422ms; }
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder:nth-child(17) { animation-delay: 1490ms; }
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder:nth-child(18) { animation-delay: 1558ms; }
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder:nth-child(19) { animation-delay: 1626ms; }
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder:nth-child(20) { animation-delay: 1694ms; }
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder:nth-child(21) { animation-delay: 1762ms; }
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder:nth-child(22) { animation-delay: 1830ms; }
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder:nth-child(23) { animation-delay: 1898ms; }
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder:nth-child(24) { animation-delay: 1966ms; }
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder:nth-child(25) { animation-delay: 2034ms; }
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder:nth-child(26) { animation-delay: 2102ms; }
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder:nth-child(27) { animation-delay: 2170ms; }
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder:nth-child(28) { animation-delay: 2238ms; }
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder:nth-child(29) { animation-delay: 2306ms; }
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder:nth-child(30) { animation-delay: 2374ms; }
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder:nth-child(31) { animation-delay: 2442ms; }
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder:nth-child(32) { animation-delay: 2510ms; }
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder:nth-child(33) { animation-delay: 2578ms; }
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder:nth-child(34) { animation-delay: 2646ms; }
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder:nth-child(35) { animation-delay: 2714ms; }
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder:nth-child(36) { animation-delay: 2782ms; }
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder:nth-child(37) { animation-delay: 2850ms; }
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder:nth-child(38) { animation-delay: 2918ms; }
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder:nth-child(39) { animation-delay: 2986ms; }
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder:nth-child(40) { animation-delay: 3054ms; }
+body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder:nth-child(n+41) { animation-delay: 3054ms; }
+@media (max-width: 700px) {
+  @keyframes erpKitsFolderStaggerV2 {
+    from { opacity: 0; transform: translate3d(0, 18px, 0) scale(.966); }
+    to { opacity: 1; transform: none; }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.kits-page .next-kits-classic-parity .kit-library-grid > .products-proposal-folder { animation: none !important; }
+}

@@ -3,7 +3,7 @@
 export default function KitsMotionLayout({ children }) {
   return (
     <>
-      <link rel="stylesheet" href="/next/css/kits-motion-step7.css?v=cinematic-step7-v1" precedence="erp-detail" />
+      <link rel="stylesheet" href="/next/css/kits-motion-step7.css?v=cinematic-step7-stagger-v2" precedence="erp-detail" />
       {children}
     </>
   );
