@@ -151,15 +151,6 @@ export default function ProductAdditionReviewClient({ canUploadImage = false, ta
       { label: "Product Addition Requests", icon: "package" },
     ]}/>
     <header className="par2-heading"><span className="par2-heading-icon"><Icon name="package"/></span><h2>Requested New Products</h2></header>
-    <div className="par2-overview">
-      <div className="par2-stats">
-        {[
-          { label: "Pending", value: count("pending"), key: "pending", icon: "clock" },
-          { label: "Added", value: count("approved"), key: "approved", icon: "check-circle" },
-          { label: "Total", value: requests.length, key: "all", icon: "layers" },
-        ].map(stat => <div className={`par2-stat par2-stat--${stat.key}`} key={stat.key}><span className="par2-stat-icon"><Icon name={stat.icon}/></span><div><strong>{stat.value}</strong><small>{stat.label}</small></div></div>)}
-      </div>
-    </div>
     <nav className="par2-tabs" aria-label="Request status">
       {[
         { value: "pending", label: "Pending", number: count("pending"), icon: "clock" },
@@ -178,17 +169,14 @@ export default function ProductAdditionReviewClient({ canUploadImage = false, ta
           <div className="par2-card-header">
             <div className="par2-card-title"><h3>{item.name}</h3><div className="par2-order"><Icon name="file-text"/><span>ORD-{item.order_number}</span></div></div>
             <div className="par2-header-actions">
-              <span className={`par2-status${approved ? " is-approved" : pending ? "" : " is-processing"}`}><Icon name={approved ? "check-circle" : "clock"}/>{approved ? "Added" : pending ? "Pending" : "Processing"}</span>
               <button type="button" className={`co-creator-btn par2-person${creator?.requestId === item.id ? " is-active" : ""}`} aria-label="View requester details" title="View requester details" aria-haspopup="dialog" aria-expanded={creator?.requestId === item.id} onClick={event => openCreator(event, item)}><Icon name="user"/></button>
             </div>
           </div>
           <div className="par2-card-content">
             <RequestImage item={item} onOpen={image => { closeCreator(); setImageViewer(image); }}/>
             <div className="par2-details">
-              <DetailTile icon="grid" label="Quantity">{item.quantity ?? "—"} {item.unit || ""}</DetailTile>
               <DetailTile icon="money" label="Unit price">{formatMoney(item.unit_price)}</DetailTile>
-              <DetailTile icon="tag" label="Tag" full>{item.tag || "Not set"}</DetailTile>
-              <DetailTile icon="link" label="Product link" full>{url ? <a className="par2-product-link" href={url} target="_blank" rel="noopener noreferrer"><span>Open URL</span><Icon name="external-link"/></a> : <span>Not available</span>}</DetailTile>
+              <DetailTile icon="link" label="Product link">{url ? <a className="par2-product-link" href={url} target="_blank" rel="noopener noreferrer"><span>Open URL</span><Icon name="external-link"/></a> : <span>Not available</span>}</DetailTile>
               {approved && <DetailTile icon="package" label="Product ID" full>{item.approved_product_id || "—"}</DetailTile>}
             </div>
           </div>

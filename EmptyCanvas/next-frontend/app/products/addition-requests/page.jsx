@@ -17,7 +17,7 @@ export default async function ProductAdditionReviewPage() {
     title="Product Addition Requests"
     activePath="/next/products"
     bodyClass="products-page"
-    pageStyles={["/next/css/products.css?v=products-toolbar-v334", "/next/css/product-additions.css?v=v316", "/next/css/product-addition-review-v2.css?v=1"]}
+    pageStyles={["/next/css/products.css?v=products-toolbar-v334", "/next/css/product-additions.css?v=v316", "/next/css/product-addition-review-v2.css?v=compact-v3"]}
   >
     <ProductAdditionReviewClient
       canUploadImage={featureAllowed(gate.account, "products.image_upload")}
