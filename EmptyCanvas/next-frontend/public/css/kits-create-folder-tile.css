@@ -109,3 +109,217 @@ body.kits-page .next-kits-classic-parity .kit-library-grid {
 @media(prefers-reduced-motion:reduce) {
   body.kits-page .next-kits-classic-parity .kit-quick-create__tile {transition:none;}
 }
+
+/* ERP_KITS_TWO_CREATE_TILES_THREE_COLS_V2 */
+/* Root create buttons are independent; no popup, dropdown or overlay. */
+body.kits-page .next-kits-classic-parity .kit-library-grid--root > .kit-quick-create {
+  justify-self: stretch !important;
+}
+body.kits-page .next-kits-classic-parity .kit-quick-create--folder .kit-quick-create__tile,
+body.kits-page .next-kits-classic-parity .kit-quick-create--folder .kit-quick-create__tile:hover {
+  border-color: #98a2b3 !important;
+  background: linear-gradient(145deg,#fff,#f8fafc) !important;
+}
+body.kits-page .next-kits-classic-parity .kit-quick-create--kit .kit-quick-create__tile,
+body.kits-page .next-kits-classic-parity .kit-quick-create--kit .kit-quick-create__tile:hover {
+  border-color: #f97316 !important;
+  background: linear-gradient(145deg,#fff,#fffaf5) !important;
+}
+body.kits-page .next-kits-classic-parity .kit-quick-create--kit .kit-quick-create__illustration {
+  color: #f97316 !important;
+}
+body.kits-page .next-kits-classic-parity .kit-quick-create--folder .kit-quick-create__illustration {
+  color: #98a2b3 !important;
+}
+/* The original tile used a 154px width. Keep desktop folders unchanged. */
+@media (max-width: 720px) {
+  body.kits-page .next-kits-classic-parity .kit-library-grid--root.products-proposal-folders {
+    display: grid !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    grid-template-columns: repeat(3, minmax(0,1fr)) !important;
+    grid-auto-rows: max-content !important;
+    align-items: start !important;
+    justify-items: stretch !important;
+    justify-content: stretch !important;
+    column-gap: 8px !important;
+    row-gap: 12px !important;
+    padding-top: 0 !important;
+  }
+  body.kits-page .next-kits-classic-parity .kit-library-grid--root > .kit-quick-create,
+  body.kits-page .next-kits-classic-parity .kit-library-grid--root > article.products-proposal-folder {
+    box-sizing: border-box !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    height: 116px !important;
+    min-height: 116px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    align-self: start !important;
+    justify-self: stretch !important;
+  }
+  body.kits-page .next-kits-classic-parity .kit-library-grid--root > article.products-proposal-folder {
+    border-width: 3px !important;
+    border-radius: 15px !important;
+    overflow: visible !important;
+  }
+  body.kits-page .next-kits-classic-parity .kit-library-grid--root > .kit-quick-create {
+    gap: 0 !important;
+  }
+  body.kits-page .next-kits-classic-parity .kit-library-grid--root .kit-quick-create__tile {
+    width: 100% !important;
+    height: 116px !important;
+    min-height: 116px !important;
+    flex: 0 0 116px !important;
+    padding: 7px 3px !important;
+    gap: 3px !important;
+    border-width: 2px !important;
+    border-radius: 15px !important;
+  }
+  body.kits-page .next-kits-classic-parity .kit-library-grid--root .kit-quick-create__illustration {
+    width: 38px !important;
+    height: 37px !important;
+    margin-bottom: 0 !important;
+  }
+  body.kits-page .next-kits-classic-parity .kit-library-grid--root .kit-quick-create__illustration svg {
+    width: 34px !important;
+    height: 34px !important;
+  }
+  body.kits-page .next-kits-classic-parity .kit-library-grid--root .kit-quick-create__spark {
+    height: 8px !important;
+    right: -4px !important;
+  }
+  body.kits-page .next-kits-classic-parity .kit-library-grid--root .kit-quick-create__tile strong {
+    font-size: .73rem !important;
+    line-height: 1.12 !important;
+    white-space: normal !important;
+    overflow-wrap: normal !important;
+  }
+  body.kits-page .next-kits-classic-parity .kit-library-grid--root .kit-quick-create__tile small {
+    font-size: .51rem !important;
+    line-height: 1.25 !important;
+  }
+  body.kits-page .next-kits-classic-parity .kit-library-grid--root > article.products-proposal-folder > .products-proposal-folder__main {
+    position: absolute !important;
+    inset: 0 !important;
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 12px !important;
+    overflow: hidden !important;
+  }
+  body.kits-page .next-kits-classic-parity .kit-library-grid--root > article.products-proposal-folder > .products-proposal-folder__main::before {
+    height: 70px !important;
+    bottom: 0 !important;
+    background: #24272c !important;
+    border-radius: 0 0 12px 12px !important;
+  }
+  body.kits-page .next-kits-classic-parity .kit-library-grid--root > article.products-proposal-folder > .products-proposal-folder__main::after {
+    display: block !important;
+    top: 35px !important;
+    left: 0 !important;
+    width: 88% !important;
+    height: 24px !important;
+    background: #24272c !important;
+    border-radius: 0 9px 0 0 !important;
+    clip-path: polygon(0 0,65% 0,100% 100%,0 100%) !important;
+  }
+  body.kits-page .next-kits-classic-parity .kit-library-grid--root > article.products-proposal-folder .proposal-folder-figure {
+    position: absolute !important;
+    top: 11px !important;
+    left: 50% !important;
+    width: 79px !important;
+    height: 51px !important;
+    margin: 0 !important;
+    transform: translateX(-50%) !important;
+  }
+  body.kits-page .next-kits-classic-parity .kit-library-grid--root > article.products-proposal-folder .proposal-folder-figure__paper {
+    top: 0 !important;
+    width: 36px !important;
+    height: 41px !important;
+    border-radius: 5px !important;
+  }
+  body.kits-page .next-kits-classic-parity .kit-library-grid--root > article.products-proposal-folder .proposal-folder-figure__paper::before {
+    top: 7px !important;
+    left: 6px !important;
+    right: 6px !important;
+    height: 2px !important;
+    box-shadow: 0 8px 0 rgba(203,213,225,.42),0 16px 0 rgba(203,213,225,.32) !important;
+  }
+  body.kits-page .next-kits-classic-parity .kit-library-grid--root > article.products-proposal-folder .proposal-folder-figure__paper--left {
+    left: 4px !important;
+    transform: rotate(-6deg) !important;
+  }
+  body.kits-page .next-kits-classic-parity .kit-library-grid--root > article.products-proposal-folder .proposal-folder-figure__paper--middle {
+    left: 21px !important;
+    top: -3px !important;
+    transform: rotate(1deg) !important;
+  }
+  body.kits-page .next-kits-classic-parity .kit-library-grid--root > article.products-proposal-folder .proposal-folder-figure__paper--right {
+    right: 4px !important;
+    transform: rotate(7deg) !important;
+  }
+  body.kits-page .next-kits-classic-parity .kit-library-grid--root > article.products-proposal-folder .proposal-folder-copy {
+    position: absolute !important;
+    z-index: 4 !important;
+    top: 61px !important;
+    left: 6px !important;
+    right: 6px !important;
+    width: auto !important;
+    min-width: 0 !important;
+  }
+  body.kits-page .next-kits-classic-parity .kit-library-grid--root > article.products-proposal-folder .proposal-folder-copy strong {
+    width: 100% !important;
+    display: block !important;
+    font-size: .63rem !important;
+    line-height: 1.05 !important;
+    margin-bottom: 3px !important;
+    overflow: hidden !important;
+    white-space: nowrap !important;
+    text-overflow: ellipsis !important;
+  }
+  body.kits-page .next-kits-classic-parity .kit-library-grid--root > article.products-proposal-folder .proposal-folder-copy em {
+    display: block !important;
+    font-size: .47rem !important;
+    line-height: 1.05 !important;
+    overflow: hidden !important;
+    white-space: nowrap !important;
+    text-overflow: ellipsis !important;
+  }
+  body.kits-page .next-kits-classic-parity .kit-library-grid--root > article.products-proposal-folder .proposal-folder-count {
+    position: absolute !important;
+    z-index: 4 !important;
+    left: 6px !important;
+    right: 4px !important;
+    bottom: 7px !important;
+    width: auto !important;
+    gap: 3px !important;
+    font-size: .5rem !important;
+    line-height: 1 !important;
+    overflow: hidden !important;
+    white-space: nowrap !important;
+  }
+  body.kits-page .next-kits-classic-parity .kit-library-grid--root > article.products-proposal-folder .proposal-folder-count svg {
+    flex: 0 0 10px !important;
+    width: 10px !important;
+    height: 10px !important;
+  }
+  body.kits-page .next-kits-classic-parity .kit-library-grid--root > article.products-proposal-folder .proposal-folder-count span {
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+}
+/* Keep folder-by-folder motion and add the same entrance to the two new tiles. */
+body.kits-page .next-kits-classic-parity .kit-library-grid--root > .kit-quick-create {
+  animation: erpKitsFolder7 545ms cubic-bezier(.22,1,.36,1) backwards;
+}
+body.kits-page .next-kits-classic-parity .kit-library-grid--root > .kit-quick-create:first-child {animation-delay:180ms;}
+body.kits-page .next-kits-classic-parity .kit-library-grid--root > .kit-quick-create:nth-child(2) {animation-delay:238ms;}
+@media(prefers-reduced-motion: reduce) {
+  body.kits-page .next-kits-classic-parity .kit-library-grid--root > .kit-quick-create {animation:none !important;}
+}

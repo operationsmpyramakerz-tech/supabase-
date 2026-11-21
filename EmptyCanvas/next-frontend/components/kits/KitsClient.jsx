@@ -271,7 +271,6 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
   const [moveDialog, setMoveDialog] = useState(null);
   const [passwordRequest, setPasswordRequest] = useState(null);
   const [folderMenu, setFolderMenu] = useState("");
-  const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const folderLongPressTimerRef = useRef(null);
   const folderLongPressStartRef = useRef(null);
   const suppressFolderClickRef = useRef(false);
@@ -310,7 +309,6 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
   useEffect(() => {
     const close = (event) => {
       if (!event.target.closest(".products-proposal-folder")) setFolderMenu("");
-      if (!event.target.closest(".kit-quick-create")) setCreateMenuOpen(false);
       if (pickerRef.current && !pickerRef.current.contains(event.target)) setProductPickerOpen(false);
       if (!event.target.closest(".proposal-download-menu-wrap") && !event.target.closest(".proposal-download-modal")) setDownloadMenuOpen(false);
       if (!event.target.closest(".proposal-sort-menu-wrap")) setSortMenuOpen(false);
@@ -318,7 +316,6 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
     const onKey = (event) => {
       if (event.key !== "Escape") return;
       setFolderMenu("");
-      setCreateMenuOpen(false);
       setProductPickerOpen(false);
       setDownloadMenuOpen(false);
       setSortMenuOpen(false);
@@ -1526,31 +1523,39 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
           ) : null}
           <div className="products-proposals-list">
             {(filteredFolders.length || filteredKits.length || (!activeFolder && (canCreate || can("folder_create")))) ? (
-              <div className="products-proposal-folders kit-library-grid">
-                {!activeFolder && (canCreate || can("folder_create")) ? (
-                  <div className={`kit-quick-create${createMenuOpen ? " is-open" : ""}`}>
+              <div className={`products-proposal-folders kit-library-grid${!activeFolder ? " kit-library-grid--root" : ""}`}>
+                {!activeFolder && can("folder_create") ? (
+                  <div className="kit-quick-create kit-quick-create--folder">
                     <button
                       type="button"
                       className="kit-quick-create__tile"
-                      onClick={() => { setFolderMenu(""); setCreateMenuOpen((open) => !open); }}
-                      aria-label="Create a new kit or folder"
-                      aria-haspopup="menu"
-                      aria-expanded={createMenuOpen}
-                      aria-controls={createMenuOpen ? "kit-quick-create-menu" : undefined}
+                      onClick={() => { setFolderMenu(""); setFolderDialog({ mode: "create", value: "" }); }}
+                      aria-label="Create Folder"
                     >
                       <span className="kit-quick-create__illustration" aria-hidden="true">
                         <FeatherIcon name="folderPlus" />
                         <span className="kit-quick-create__spark" />
                       </span>
-                      <strong>Create</strong>
-                      <small>Add a new kit or folder</small>
+                      <strong>Create Folder</strong>
+                      <small>Add a new folder</small>
                     </button>
-                    {createMenuOpen ? (
-                      <div className="kit-quick-create__menu" id="kit-quick-create-menu" role="menu" aria-label="Create options">
-                        {canCreate ? <button type="button" role="menuitem" onClick={() => { setCreateMenuOpen(false); startCreateKit(); }}><FeatherIcon name="briefcase" /><span>Create New Kit</span></button> : null}
-                        {can("folder_create") ? <button type="button" role="menuitem" onClick={() => { setCreateMenuOpen(false); setFolderDialog({ mode: "create", value: "" }); }}><FeatherIcon name="folderPlus" /><span>Create Folder</span></button> : null}
-                      </div>
-                    ) : null}
+                  </div>
+                ) : null}
+                {!activeFolder && canCreate ? (
+                  <div className="kit-quick-create kit-quick-create--kit">
+                    <button
+                      type="button"
+                      className="kit-quick-create__tile"
+                      onClick={() => { setFolderMenu(""); startCreateKit(); }}
+                      aria-label="Create Kit"
+                    >
+                      <span className="kit-quick-create__illustration" aria-hidden="true">
+                        <FeatherIcon name="briefcase" />
+                        <span className="kit-quick-create__spark" />
+                      </span>
+                      <strong>Create Kit</strong>
+                      <small>Add a new kit</small>
+                    </button>
                   </div>
                 ) : null}
                 {!activeFolder ? filteredFolders.map(renderLibraryFolder) : null}
