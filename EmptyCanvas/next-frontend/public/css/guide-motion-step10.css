@@ -1,0 +1,63 @@
+/* ERP_CINEMATIC_STEP10: how-it-works. Route-scoped, CSS-only, no shared shell effects.
+   Important: use opacity:1 on base and backwards fill only. Cards must NEVER
+   disappear after completion (regression prevention: Expenses by Users). */
+@keyframes erpStep10GuideRise {
+  from { opacity: 0; transform: translate3d(0, 26px, 0) scale(.963); }
+  to { opacity: 1; transform: translate3d(0,0,0) scale(1); }
+}
+@keyframes erpStep10GuideSoft {
+  from { opacity: 0; transform: translate3d(0, 12px, 0); }
+  to { opacity: 1; transform: translate3d(0,0,0); }
+}
+@keyframes erpStep10GuideDown {
+  from { opacity: 0; transform: translate3d(0,-13px,0); }
+  to { opacity: 1; transform: translate3d(0,0,0); }
+}
+/* Each content card animates INDEPENDENTLY; not a whole list/grid block. */
+.next-sop-page .next-sop-kpis > article,
+.next-sop-page .next-sop-sections > .next-sop-module,
+.next-sop-page .next-sop-sections > .next-sop-empty {
+  opacity: 1;
+  animation: erpStep10GuideRise 645ms cubic-bezier(.22,1,.36,1) backwards;
+}
+.next-sop-page .next-sop-toolbar,
+.next-sop-page .next-sop-jumpbar {
+  opacity: 1;
+  animation: erpStep10GuideSoft 500ms cubic-bezier(.22,1,.36,1) 120ms backwards;
+}
+.next-sop-page .next-sop-hero {
+  opacity: 1;
+  animation: erpStep10GuideDown 520ms cubic-bezier(.22,1,.36,1) 60ms backwards;
+}
+.next-sop-page .next-sop-kpis > article:nth-child(1) { animation-delay: 190ms; }
+.next-sop-page .next-sop-kpis > article:nth-child(2) { animation-delay: 280ms; }
+.next-sop-page .next-sop-kpis > article:nth-child(3) { animation-delay: 370ms; }
+.next-sop-page .next-sop-kpis > article:nth-child(4) { animation-delay: 460ms; }
+.next-sop-page .next-sop-kpis > article:nth-child(n+5) { animation-delay: 550ms; }
+.next-sop-page .next-sop-sections > .next-sop-module:nth-child(1) { animation-delay: 390ms; }
+.next-sop-page .next-sop-sections > .next-sop-module:nth-child(2) { animation-delay: 472ms; }
+.next-sop-page .next-sop-sections > .next-sop-module:nth-child(3) { animation-delay: 554ms; }
+.next-sop-page .next-sop-sections > .next-sop-module:nth-child(4) { animation-delay: 636ms; }
+.next-sop-page .next-sop-sections > .next-sop-module:nth-child(5) { animation-delay: 718ms; }
+.next-sop-page .next-sop-sections > .next-sop-module:nth-child(6) { animation-delay: 800ms; }
+.next-sop-page .next-sop-sections > .next-sop-module:nth-child(7) { animation-delay: 882ms; }
+.next-sop-page .next-sop-sections > .next-sop-module:nth-child(8) { animation-delay: 964ms; }
+.next-sop-page .next-sop-sections > .next-sop-module:nth-child(9) { animation-delay: 1046ms; }
+.next-sop-page .next-sop-sections > .next-sop-module:nth-child(10) { animation-delay: 1128ms; }
+.next-sop-page .next-sop-sections > .next-sop-module:nth-child(11) { animation-delay: 1210ms; }
+.next-sop-page .next-sop-sections > .next-sop-module:nth-child(12) { animation-delay: 1292ms; }
+.next-sop-page .next-sop-sections > .next-sop-module:nth-child(n+13) { animation-delay: 1374ms; }
+@media (max-width: 700px) {
+  @keyframes erpStep10GuideRise {
+    from { opacity: 0; transform: translate3d(0,19px,0) scale(.978); }
+    to { opacity: 1; transform: translate3d(0,0,0) scale(1); }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .next-sop-page .next-sop-kpis > article,
+  .next-sop-page .next-sop-sections > .next-sop-module,
+  .next-sop-page .next-sop-sections > .next-sop-empty,
+  .next-sop-page .next-sop-toolbar,
+  .next-sop-page .next-sop-jumpbar,
+  .next-sop-page .next-sop-hero { animation: none !important; opacity: 1; }
+}

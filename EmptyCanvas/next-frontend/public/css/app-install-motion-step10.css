@@ -1,0 +1,55 @@
+/* ERP_CINEMATIC_STEP10: app-install. Route-scoped, CSS-only, no shared shell effects.
+   Important: use opacity:1 on base and backwards fill only. Cards must NEVER
+   disappear after completion (regression prevention: Expenses by Users). */
+@keyframes erpStep10InstallRise {
+  from { opacity: 0; transform: translate3d(0, 26px, 0) scale(.963); }
+  to { opacity: 1; transform: translate3d(0,0,0) scale(1); }
+}
+@keyframes erpStep10InstallSoft {
+  from { opacity: 0; transform: translate3d(0, 12px, 0); }
+  to { opacity: 1; transform: translate3d(0,0,0); }
+}
+@keyframes erpStep10InstallDown {
+  from { opacity: 0; transform: translate3d(0,-13px,0); }
+  to { opacity: 1; transform: translate3d(0,0,0); }
+}
+/* Each content card animates INDEPENDENTLY; not a whole list/grid block. */
+.next-app-install-page .next-app-install-status-grid > article,
+.next-app-install-page .next-app-install-layout > .next-app-install-panel {
+  opacity: 1;
+  animation: erpStep10InstallRise 645ms cubic-bezier(.22,1,.36,1) backwards;
+}
+.next-app-install-page .next-app-install-device {
+  opacity: 1;
+  animation: erpStep10InstallSoft 500ms cubic-bezier(.22,1,.36,1) 120ms backwards;
+}
+.next-app-install-page .next-app-install-hero {
+  opacity: 1;
+  animation: erpStep10InstallDown 520ms cubic-bezier(.22,1,.36,1) 60ms backwards;
+}
+.next-app-install-page .next-app-install-status-grid > article:nth-child(1) { animation-delay: 190ms; }
+.next-app-install-page .next-app-install-status-grid > article:nth-child(2) { animation-delay: 300ms; }
+.next-app-install-page .next-app-install-status-grid > article:nth-child(3) { animation-delay: 410ms; }
+.next-app-install-page .next-app-install-status-grid > article:nth-child(4) { animation-delay: 520ms; }
+.next-app-install-page .next-app-install-status-grid > article:nth-child(n+5) { animation-delay: 630ms; }
+.next-app-install-page .next-app-install-layout > .next-app-install-panel:nth-child(1) { animation-delay: 560ms; }
+.next-app-install-page .next-app-install-layout > .next-app-install-panel:nth-child(2) { animation-delay: 680ms; }
+.next-app-install-page .next-app-install-layout > .next-app-install-panel:nth-child(3) { animation-delay: 800ms; }
+.next-app-install-page .next-app-install-layout > .next-app-install-panel:nth-child(n+4) { animation-delay: 920ms; }
+/* Streamed Loading: stagger existing skeleton elements, never navigation. */
+.app-install-loading > article,
+.app-install-loading > div > article { animation: erpStep10InstallSoft 480ms cubic-bezier(.22,1,.36,1) 80ms backwards; }
+@media (max-width: 700px) {
+  @keyframes erpStep10InstallRise {
+    from { opacity: 0; transform: translate3d(0,19px,0) scale(.978); }
+    to { opacity: 1; transform: translate3d(0,0,0) scale(1); }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .next-app-install-page .next-app-install-status-grid > article,
+  .next-app-install-page .next-app-install-layout > .next-app-install-panel,
+  .next-app-install-page .next-app-install-device,
+  .next-app-install-page .next-app-install-hero,
+  .app-install-loading > article,
+  .app-install-loading > div > article { animation: none !important; opacity: 1; }
+}

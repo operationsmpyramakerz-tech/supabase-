@@ -1,0 +1,89 @@
+/* ERP_CINEMATIC_STEP10: history. Route-scoped, CSS-only, no shared shell effects.
+   Important: use opacity:1 on base and backwards fill only. Cards must NEVER
+   disappear after completion (regression prevention: Expenses by Users). */
+@keyframes erpStep10HistoryRise {
+  from { opacity: 0; transform: translate3d(0, 26px, 0) scale(.963); }
+  to { opacity: 1; transform: translate3d(0,0,0) scale(1); }
+}
+@keyframes erpStep10HistorySoft {
+  from { opacity: 0; transform: translate3d(0, 12px, 0); }
+  to { opacity: 1; transform: translate3d(0,0,0); }
+}
+@keyframes erpStep10HistoryDown {
+  from { opacity: 0; transform: translate3d(0,-13px,0); }
+  to { opacity: 1; transform: translate3d(0,0,0); }
+}
+/* Each content card animates INDEPENDENTLY; not a whole list/grid block. */
+.next-history-page .history-design-stats > .history-design-stat,
+.next-history-page .history-design-feed > .history-design-event {
+  opacity: 1;
+  animation: erpStep10HistoryRise 645ms cubic-bezier(.22,1,.36,1) backwards;
+}
+.next-history-page .history-design-toolbar,
+.next-history-page .history-design-categories,
+.next-history-page .history-design-results {
+  opacity: 1;
+  animation: erpStep10HistorySoft 500ms cubic-bezier(.22,1,.36,1) 120ms backwards;
+}
+.next-history-page .history-design-heading {
+  opacity: 1;
+  animation: erpStep10HistoryDown 520ms cubic-bezier(.22,1,.36,1) 60ms backwards;
+}
+.next-history-page .history-design-stats > .history-design-stat:nth-child(1) { animation-delay: 145ms; }
+.next-history-page .history-design-stats > .history-design-stat:nth-child(2) { animation-delay: 240ms; }
+.next-history-page .history-design-stats > .history-design-stat:nth-child(3) { animation-delay: 335ms; }
+.next-history-page .history-design-stats > .history-design-stat:nth-child(4) { animation-delay: 430ms; }
+.next-history-page .history-design-stats > .history-design-stat:nth-child(5) { animation-delay: 525ms; }
+.next-history-page .history-design-stats > .history-design-stat:nth-child(n+6) { animation-delay: 620ms; }
+.next-history-page .history-design-feed > .history-design-event:nth-child(1) { animation-delay: 420ms; }
+.next-history-page .history-design-feed > .history-design-event:nth-child(2) { animation-delay: 495ms; }
+.next-history-page .history-design-feed > .history-design-event:nth-child(3) { animation-delay: 570ms; }
+.next-history-page .history-design-feed > .history-design-event:nth-child(4) { animation-delay: 645ms; }
+.next-history-page .history-design-feed > .history-design-event:nth-child(5) { animation-delay: 720ms; }
+.next-history-page .history-design-feed > .history-design-event:nth-child(6) { animation-delay: 795ms; }
+.next-history-page .history-design-feed > .history-design-event:nth-child(7) { animation-delay: 870ms; }
+.next-history-page .history-design-feed > .history-design-event:nth-child(8) { animation-delay: 945ms; }
+.next-history-page .history-design-feed > .history-design-event:nth-child(9) { animation-delay: 1020ms; }
+.next-history-page .history-design-feed > .history-design-event:nth-child(10) { animation-delay: 1095ms; }
+.next-history-page .history-design-feed > .history-design-event:nth-child(11) { animation-delay: 1170ms; }
+.next-history-page .history-design-feed > .history-design-event:nth-child(12) { animation-delay: 1245ms; }
+.next-history-page .history-design-feed > .history-design-event:nth-child(n+13) { animation-delay: 1320ms; }
+/* Streamed Loading: stagger existing skeleton elements, never navigation. */
+.next-history-loading-hero,
+.next-history-loading-summary > *,
+.next-history-loading-toolbar,
+.next-history-loading-list > * { animation: erpStep10HistorySoft 480ms cubic-bezier(.22,1,.36,1) 80ms backwards; }
+.next-history-loading-summary > :nth-child(1) { animation-delay: 155ms; }
+.next-history-loading-summary > :nth-child(2) { animation-delay: 220ms; }
+.next-history-loading-summary > :nth-child(3) { animation-delay: 285ms; }
+.next-history-loading-summary > :nth-child(4) { animation-delay: 350ms; }
+.next-history-loading-summary > :nth-child(5) { animation-delay: 415ms; }
+.next-history-loading-summary > :nth-child(6) { animation-delay: 480ms; }
+.next-history-loading-summary > :nth-child(7) { animation-delay: 545ms; }
+.next-history-loading-summary > :nth-child(8) { animation-delay: 610ms; }
+.next-history-loading-list > :nth-child(1) { animation-delay: 155ms; }
+.next-history-loading-list > :nth-child(2) { animation-delay: 220ms; }
+.next-history-loading-list > :nth-child(3) { animation-delay: 285ms; }
+.next-history-loading-list > :nth-child(4) { animation-delay: 350ms; }
+.next-history-loading-list > :nth-child(5) { animation-delay: 415ms; }
+.next-history-loading-list > :nth-child(6) { animation-delay: 480ms; }
+.next-history-loading-list > :nth-child(7) { animation-delay: 545ms; }
+.next-history-loading-list > :nth-child(8) { animation-delay: 610ms; }
+@media (max-width: 700px) {
+  @keyframes erpStep10HistoryRise {
+    from { opacity: 0; transform: translate3d(0,19px,0) scale(.978); }
+    to { opacity: 1; transform: translate3d(0,0,0) scale(1); }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .next-history-page .history-design-stats > .history-design-stat,
+  .next-history-page .history-design-feed > .history-design-event,
+  .next-history-page .history-design-toolbar,
+  .next-history-page .history-design-categories,
+  .next-history-page .history-design-results,
+  .next-history-page .history-design-heading,
+  .next-history-loading-hero,
+  .next-history-loading-summary > *,
+  .next-history-loading-toolbar,
+  .next-history-loading-list > * { animation: none !important; opacity: 1; }
+}

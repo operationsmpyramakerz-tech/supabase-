@@ -1,0 +1,77 @@
+/* ERP_CINEMATIC_STEP10: backup. Route-scoped, CSS-only, no shared shell effects.
+   Important: use opacity:1 on base and backwards fill only. Cards must NEVER
+   disappear after completion (regression prevention: Expenses by Users). */
+@keyframes erpStep10BackupRise {
+  from { opacity: 0; transform: translate3d(0, 26px, 0) scale(.963); }
+  to { opacity: 1; transform: translate3d(0,0,0) scale(1); }
+}
+@keyframes erpStep10BackupSoft {
+  from { opacity: 0; transform: translate3d(0, 12px, 0); }
+  to { opacity: 1; transform: translate3d(0,0,0); }
+}
+@keyframes erpStep10BackupDown {
+  from { opacity: 0; transform: translate3d(0,-13px,0); }
+  to { opacity: 1; transform: translate3d(0,0,0); }
+}
+/* Each content card animates INDEPENDENTLY; not a whole list/grid block. */
+.backup-page-shell .backup-folder-grid > .backup-folder-card {
+  opacity: 1;
+  animation: erpStep10BackupRise 645ms cubic-bezier(.22,1,.36,1) backwards;
+}
+.backup-page-shell .backup-list-head {
+  opacity: 1;
+  animation: erpStep10BackupSoft 500ms cubic-bezier(.22,1,.36,1) 120ms backwards;
+}
+.backup-page-shell .backup-hero {
+  opacity: 1;
+  animation: erpStep10BackupDown 520ms cubic-bezier(.22,1,.36,1) 60ms backwards;
+}
+.backup-page-shell .backup-folder-grid > .backup-folder-card:nth-child(1) { animation-delay: 200ms; }
+.backup-page-shell .backup-folder-grid > .backup-folder-card:nth-child(2) { animation-delay: 296ms; }
+.backup-page-shell .backup-folder-grid > .backup-folder-card:nth-child(3) { animation-delay: 392ms; }
+.backup-page-shell .backup-folder-grid > .backup-folder-card:nth-child(4) { animation-delay: 488ms; }
+.backup-page-shell .backup-folder-grid > .backup-folder-card:nth-child(5) { animation-delay: 584ms; }
+.backup-page-shell .backup-folder-grid > .backup-folder-card:nth-child(6) { animation-delay: 680ms; }
+.backup-page-shell .backup-folder-grid > .backup-folder-card:nth-child(7) { animation-delay: 776ms; }
+.backup-page-shell .backup-folder-grid > .backup-folder-card:nth-child(8) { animation-delay: 872ms; }
+.backup-page-shell .backup-folder-grid > .backup-folder-card:nth-child(9) { animation-delay: 968ms; }
+.backup-page-shell .backup-folder-grid > .backup-folder-card:nth-child(10) { animation-delay: 1064ms; }
+.backup-page-shell .backup-folder-grid > .backup-folder-card:nth-child(11) { animation-delay: 1160ms; }
+.backup-page-shell .backup-folder-grid > .backup-folder-card:nth-child(12) { animation-delay: 1256ms; }
+.backup-page-shell .backup-folder-grid > .backup-folder-card:nth-child(n+13) { animation-delay: 1352ms; }
+/* Streamed Loading: stagger existing skeleton elements, never navigation. */
+.next-backup-loading__hero,
+.next-backup-loading__summary > *,
+.next-backup-loading__toolbar,
+.next-backup-loading__grid > * { animation: erpStep10BackupSoft 480ms cubic-bezier(.22,1,.36,1) 80ms backwards; }
+.next-backup-loading__summary > :nth-child(1) { animation-delay: 155ms; }
+.next-backup-loading__summary > :nth-child(2) { animation-delay: 220ms; }
+.next-backup-loading__summary > :nth-child(3) { animation-delay: 285ms; }
+.next-backup-loading__summary > :nth-child(4) { animation-delay: 350ms; }
+.next-backup-loading__summary > :nth-child(5) { animation-delay: 415ms; }
+.next-backup-loading__summary > :nth-child(6) { animation-delay: 480ms; }
+.next-backup-loading__summary > :nth-child(7) { animation-delay: 545ms; }
+.next-backup-loading__summary > :nth-child(8) { animation-delay: 610ms; }
+.next-backup-loading__grid > :nth-child(1) { animation-delay: 155ms; }
+.next-backup-loading__grid > :nth-child(2) { animation-delay: 220ms; }
+.next-backup-loading__grid > :nth-child(3) { animation-delay: 285ms; }
+.next-backup-loading__grid > :nth-child(4) { animation-delay: 350ms; }
+.next-backup-loading__grid > :nth-child(5) { animation-delay: 415ms; }
+.next-backup-loading__grid > :nth-child(6) { animation-delay: 480ms; }
+.next-backup-loading__grid > :nth-child(7) { animation-delay: 545ms; }
+.next-backup-loading__grid > :nth-child(8) { animation-delay: 610ms; }
+@media (max-width: 700px) {
+  @keyframes erpStep10BackupRise {
+    from { opacity: 0; transform: translate3d(0,19px,0) scale(.978); }
+    to { opacity: 1; transform: translate3d(0,0,0) scale(1); }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .backup-page-shell .backup-folder-grid > .backup-folder-card,
+  .backup-page-shell .backup-list-head,
+  .backup-page-shell .backup-hero,
+  .next-backup-loading__hero,
+  .next-backup-loading__summary > *,
+  .next-backup-loading__toolbar,
+  .next-backup-loading__grid > * { animation: none !important; opacity: 1; }
+}
