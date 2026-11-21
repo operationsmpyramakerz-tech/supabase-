@@ -1,0 +1,81 @@
+/* ERP Pyramakerz - Maintenance Orders / Step 3
+   Same timing and visual language as Orders Review, Current Orders and Home.
+   Styles are intentionally route-only and do not touch modal / logging UX. */
+
+@keyframes erpMaintenanceSceneEnter {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes erpMaintenanceToolbarEnter {
+  from { opacity: 0; transform: translate3d(0, -10px, 0); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes erpMaintenancePanelEnter {
+  from { opacity: 0; transform: translate3d(0, 13px, 0); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes erpMaintenanceCardEnter {
+  from { opacity: 0; transform: translate3d(0, var(--erp-maintenance-motion-y, 20px), 0) scale(.981); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes erpMaintenanceElementEnter {
+  from { opacity: 0; transform: translate3d(0, 9px, 0); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Requires .orders-workspace, so the common skeleton is not affected. */
+body.page-maintenance-orders .next-classic-maintenance-parity.orders-workspace {
+  --erp-maintenance-ease: cubic-bezier(.22, 1, .36, 1);
+  animation: erpMaintenanceSceneEnter 340ms ease-out backwards;
+}
+body.page-maintenance-orders .next-classic-maintenance-parity.orders-workspace > .next-maintenance-orders-toolbar-wrap {
+  animation: erpMaintenanceToolbarEnter 460ms var(--erp-maintenance-ease, ease-out) 55ms backwards;
+}
+body.page-maintenance-orders .next-maintenance-orders-toolbar-wrap .order-status-tab {
+  animation: erpMaintenanceElementEnter 420ms var(--erp-maintenance-ease, ease-out) backwards;
+}
+body.page-maintenance-orders .next-maintenance-orders-toolbar-wrap .order-status-tab:nth-child(1) { animation-delay: 90ms; }
+body.page-maintenance-orders .next-maintenance-orders-toolbar-wrap .order-status-tab:nth-child(2) { animation-delay: 130ms; }
+body.page-maintenance-orders .next-maintenance-orders-toolbar-wrap .order-status-tab:nth-child(3) { animation-delay: 170ms; }
+body.page-maintenance-orders .next-maintenance-orders-toolbar-wrap .order-status-tab:nth-child(n+4) { animation-delay: 210ms; }
+body.page-maintenance-orders .next-maintenance-orders-toolbar-wrap .orders-toolbar__divider,
+body.page-maintenance-orders .next-maintenance-orders-toolbar-wrap .orders-toolbar > :last-child:not(.orders-toolbar__scroll) {
+  animation: erpMaintenanceElementEnter 440ms var(--erp-maintenance-ease, ease-out) 255ms backwards;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity.orders-workspace > .next-maintenance-orders-list-surface {
+  animation: erpMaintenancePanelEnter 480ms var(--erp-maintenance-ease, ease-out) 170ms backwards;
+}
+body.page-maintenance-orders .orders-workspace #requested-list > .co-card.next-maintenance-order-card {
+  animation: erpMaintenanceCardEnter 570ms var(--erp-maintenance-ease, ease-out) backwards;
+}
+body.page-maintenance-orders .orders-workspace #requested-list > .co-card:nth-child(1) { animation-delay: 200ms; }
+body.page-maintenance-orders .orders-workspace #requested-list > .co-card:nth-child(2) { animation-delay: 255ms; }
+body.page-maintenance-orders .orders-workspace #requested-list > .co-card:nth-child(3) { animation-delay: 310ms; }
+body.page-maintenance-orders .orders-workspace #requested-list > .co-card:nth-child(4) { animation-delay: 365ms; }
+body.page-maintenance-orders .orders-workspace #requested-list > .co-card:nth-child(5) { animation-delay: 420ms; }
+body.page-maintenance-orders .orders-workspace #requested-list > .co-card:nth-child(6) { animation-delay: 475ms; }
+body.page-maintenance-orders .orders-workspace #requested-list > .co-card:nth-child(7) { animation-delay: 530ms; }
+body.page-maintenance-orders .orders-workspace #requested-list > .co-card:nth-child(8) { animation-delay: 585ms; }
+body.page-maintenance-orders .orders-workspace #requested-list > .co-card:nth-child(n+9) { animation-delay: 630ms; }
+
+body.page-maintenance-orders .orders-workspace #requested-list > :not(.co-card),
+body.page-maintenance-orders .orders-workspace .next-maintenance-orders-list-surface > :last-child:not(#requested-list) {
+  animation: erpMaintenanceElementEnter 470ms var(--erp-maintenance-ease, ease-out) 260ms backwards;
+}
+
+@media (max-width: 700px) {
+  body.page-maintenance-orders .orders-workspace { --erp-maintenance-motion-y: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.page-maintenance-orders .next-classic-maintenance-parity.orders-workspace,
+  body.page-maintenance-orders .next-classic-maintenance-parity.orders-workspace > .next-maintenance-orders-toolbar-wrap,
+  body.page-maintenance-orders .next-maintenance-orders-toolbar-wrap .order-status-tab,
+  body.page-maintenance-orders .next-maintenance-orders-toolbar-wrap .orders-toolbar__divider,
+  body.page-maintenance-orders .next-maintenance-orders-toolbar-wrap .orders-toolbar > :last-child:not(.orders-toolbar__scroll),
+  body.page-maintenance-orders .next-classic-maintenance-parity.orders-workspace > .next-maintenance-orders-list-surface,
+  body.page-maintenance-orders .orders-workspace #requested-list > *,
+  body.page-maintenance-orders .orders-workspace .next-maintenance-orders-list-surface > :last-child:not(#requested-list) {
+    animation: none !important;
+  }
+}

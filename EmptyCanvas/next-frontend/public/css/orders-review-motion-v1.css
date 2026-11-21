@@ -1,0 +1,85 @@
+/* ERP Pyramakerz - Orders Review / Step 3
+   Entrance sequence: scene -> toolbar -> tabs -> list -> sequential order cards.
+   Only the live Orders Review page animates. Server loading placeholders,
+   header, navigation, popovers and heavy modals are never animated. */
+
+@keyframes erpReviewSceneEnter {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes erpReviewToolbarEnter {
+  from { opacity: 0; transform: translate3d(0, -10px, 0); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes erpReviewPanelEnter {
+  from { opacity: 0; transform: translate3d(0, 13px, 0); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes erpReviewCardEnter {
+  from { opacity: 0; transform: translate3d(0, var(--erp-review-motion-y, 20px), 0) scale(.981); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes erpReviewElementEnter {
+  from { opacity: 0; transform: translate3d(0, 9px, 0); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* .orders-workspace excludes the streamed ClassicOrdersLoading skeleton. */
+body.orders-review-page .next-classic-orders-parity.orders-workspace:not(.next-classic-operations-parity):not(.next-classic-maintenance-parity) {
+  --erp-review-ease: cubic-bezier(.22, 1, .36, 1);
+  animation: erpReviewSceneEnter 340ms ease-out backwards;
+}
+body.orders-review-page .orders-workspace > .next-orders-review-toolbar-wrap {
+  animation: erpReviewToolbarEnter 460ms var(--erp-review-ease, ease-out) 55ms backwards;
+}
+body.orders-review-page .next-orders-review-toolbar-wrap .order-status-tab {
+  animation: erpReviewElementEnter 420ms var(--erp-review-ease, ease-out) backwards;
+}
+body.orders-review-page .next-orders-review-toolbar-wrap .order-status-tab:nth-child(1) { animation-delay: 90ms; }
+body.orders-review-page .next-orders-review-toolbar-wrap .order-status-tab:nth-child(2) { animation-delay: 130ms; }
+body.orders-review-page .next-orders-review-toolbar-wrap .order-status-tab:nth-child(3) { animation-delay: 170ms; }
+body.orders-review-page .next-orders-review-toolbar-wrap .order-status-tab:nth-child(4) { animation-delay: 210ms; }
+body.orders-review-page .next-orders-review-toolbar-wrap .order-status-tab:nth-child(n+5) { animation-delay: 250ms; }
+body.orders-review-page .next-orders-review-toolbar-wrap .orders-toolbar__divider,
+body.orders-review-page .next-orders-review-toolbar-wrap .orders-toolbar > :last-child:not(.orders-toolbar__scroll) {
+  animation: erpReviewElementEnter 440ms var(--erp-review-ease, ease-out) 255ms backwards;
+}
+
+body.orders-review-page .orders-workspace > #sv-orders {
+  animation: erpReviewPanelEnter 480ms var(--erp-review-ease, ease-out) 170ms backwards;
+}
+body.orders-review-page .orders-workspace #sv-list > .co-card.next-review-order-card {
+  animation: erpReviewCardEnter 570ms var(--erp-review-ease, ease-out) backwards;
+}
+body.orders-review-page .orders-workspace #sv-list > .co-card:nth-child(1) { animation-delay: 200ms; }
+body.orders-review-page .orders-workspace #sv-list > .co-card:nth-child(2) { animation-delay: 255ms; }
+body.orders-review-page .orders-workspace #sv-list > .co-card:nth-child(3) { animation-delay: 310ms; }
+body.orders-review-page .orders-workspace #sv-list > .co-card:nth-child(4) { animation-delay: 365ms; }
+body.orders-review-page .orders-workspace #sv-list > .co-card:nth-child(5) { animation-delay: 420ms; }
+body.orders-review-page .orders-workspace #sv-list > .co-card:nth-child(6) { animation-delay: 475ms; }
+body.orders-review-page .orders-workspace #sv-list > .co-card:nth-child(7) { animation-delay: 530ms; }
+body.orders-review-page .orders-workspace #sv-list > .co-card:nth-child(8) { animation-delay: 585ms; }
+body.orders-review-page .orders-workspace #sv-list > .co-card:nth-child(n+9) { animation-delay: 630ms; }
+
+/* Empty state and Load More share the same restrained entrance motion. */
+body.orders-review-page .orders-workspace #sv-list > :not(.co-card),
+body.orders-review-page .orders-workspace #sv-orders > :last-child:not(#sv-list) {
+  animation: erpReviewElementEnter 470ms var(--erp-review-ease, ease-out) 260ms backwards;
+}
+
+/* 'backwards' instead of 'both': normal hover/focus transforms recover after reveal. */
+@media (max-width: 700px) {
+  body.orders-review-page .orders-workspace { --erp-review-motion-y: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.orders-review-page .next-classic-orders-parity.orders-workspace,
+  body.orders-review-page .orders-workspace > .next-orders-review-toolbar-wrap,
+  body.orders-review-page .next-orders-review-toolbar-wrap .order-status-tab,
+  body.orders-review-page .next-orders-review-toolbar-wrap .orders-toolbar__divider,
+  body.orders-review-page .next-orders-review-toolbar-wrap .orders-toolbar > :last-child:not(.orders-toolbar__scroll),
+  body.orders-review-page .orders-workspace > #sv-orders,
+  body.orders-review-page .orders-workspace #sv-list > *,
+  body.orders-review-page .orders-workspace #sv-orders > :last-child:not(#sv-list) {
+    animation: none !important;
+  }
+}
