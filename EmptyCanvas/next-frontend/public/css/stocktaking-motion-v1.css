@@ -1,0 +1,96 @@
+/* ERP Step 5: Stocktaking - folder index + opened workspace motion.
+   Scoped to committed Stocktaking UI only; exclude our loading skeleton. */
+@keyframes erpStockScene { from { opacity: 0; } to { opacity: 1; } }
+@keyframes erpStockRise {
+  from { opacity: 0; transform: translate3d(0, 16px, 0) scale(.982); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes erpStockTitle {
+  from { opacity: 0; transform: translate3d(0, -8px, 0); }
+  to { opacity: 1; transform: none; }
+}
+body.stocktaking-page .next-stocktaking-classic-parity.next-stocktaking-folders-page:not(.erp-stocktaking-skeleton) {
+  --erp-stock-ease: cubic-bezier(.22,1,.36,1);
+  animation: erpStockScene 330ms ease-out backwards;
+}
+body.stocktaking-page .next-stocktaking-folders-page:not(.erp-stocktaking-skeleton) .stocktaking-folders-head {
+  animation: erpStockTitle 430ms var(--erp-stock-ease) 45ms backwards;
+}
+body.stocktaking-page .next-stocktaking-folders-page:not(.erp-stocktaking-skeleton) .stocktaking-folder-grid > :is(.stocktaking-proposal-folder,.stocktaking-folder-empty) {
+  animation: erpStockRise 530ms var(--erp-stock-ease) backwards;
+}
+body.stocktaking-page .next-stocktaking-folders-page:not(.erp-stocktaking-skeleton) .stocktaking-folder-grid > :nth-child(1) { animation-delay: 120ms; }
+body.stocktaking-page .next-stocktaking-folders-page:not(.erp-stocktaking-skeleton) .stocktaking-folder-grid > :nth-child(2) { animation-delay: 175ms; }
+body.stocktaking-page .next-stocktaking-folders-page:not(.erp-stocktaking-skeleton) .stocktaking-folder-grid > :nth-child(3) { animation-delay: 230ms; }
+body.stocktaking-page .next-stocktaking-folders-page:not(.erp-stocktaking-skeleton) .stocktaking-folder-grid > :nth-child(4) { animation-delay: 285ms; }
+body.stocktaking-page .next-stocktaking-folders-page:not(.erp-stocktaking-skeleton) .stocktaking-folder-grid > :nth-child(5) { animation-delay: 340ms; }
+body.stocktaking-page .next-stocktaking-folders-page:not(.erp-stocktaking-skeleton) .stocktaking-folder-grid > :nth-child(6) { animation-delay: 395ms; }
+body.stocktaking-page .next-stocktaking-folders-page:not(.erp-stocktaking-skeleton) .stocktaking-folder-grid > :nth-child(7) { animation-delay: 450ms; }
+body.stocktaking-page .next-stocktaking-folders-page:not(.erp-stocktaking-skeleton) .stocktaking-folder-grid > :nth-child(8) { animation-delay: 505ms; }
+body.stocktaking-page .next-stocktaking-folders-page:not(.erp-stocktaking-skeleton) .stocktaking-folder-grid > :nth-child(n+9) { animation-delay: 545ms; }
+/* A folder opens in the same client page. Animate the new workspace, not the
+   persistent header, the folder delete dialog, or the editing bottom sheet. */
+body.stocktaking-page .next-stocktaking-folders-page:not(.erp-stocktaking-skeleton) > .stocktaking-folder-workspace {
+  animation: erpStockRise 430ms var(--erp-stock-ease) 45ms backwards;
+}
+body.stocktaking-page .next-stocktaking-folders-page:not(.erp-stocktaking-skeleton) .stocktaking-folder-toolbar {
+  animation: erpStockTitle 420ms var(--erp-stock-ease) 85ms backwards;
+}
+body.stocktaking-page .next-stocktaking-folders-page:not(.erp-stocktaking-skeleton) .stocktaking-industrial-stats {
+  animation: erpStockRise 460ms var(--erp-stock-ease) 145ms backwards;
+}
+body.stocktaking-page .next-stocktaking-folders-page:not(.erp-stocktaking-skeleton) .stocktaking-data-table-wrap {
+  animation: erpStockRise 500ms var(--erp-stock-ease) 205ms backwards;
+}
+body.stocktaking-page .next-stocktaking-folders-page:not(.erp-stocktaking-skeleton) .stocktaking-industrial-footer {
+  animation: erpStockRise 440ms var(--erp-stock-ease) 255ms backwards;
+}
+/* Folder-shaped skeleton matches the current 2-column mobile index. */
+.erp-stocktaking-skeleton { width: 100%; min-width: 0; padding: 15px clamp(14px,3vw,35px) 110px; }
+.erp-stocktaking-skeleton *, .erp-stocktaking-skeleton *::before, .erp-stocktaking-skeleton *::after { box-sizing: border-box; }
+.erp-stocktaking-skeleton .erp-stock-sk {
+  display: block; position: relative; overflow: hidden; background: #e7eaef; border-radius: 10px;
+}
+.erp-stocktaking-skeleton .erp-stock-sk::after {
+  content: ""; position: absolute; inset: 0; transform: translateX(-100%);
+  background: linear-gradient(90deg,transparent,rgba(255,255,255,.65),transparent);
+  animation: erpStockShimmer 1.6s ease-in-out infinite;
+}
+@keyframes erpStockShimmer { to { transform: translateX(100%); } }
+.erp-stock-loading-card { padding: 18px; border: 1px solid #e7eaef; border-radius: 24px; background: #fff; }
+.erp-stock-loading-header { display: flex; align-items: center; gap: 13px; padding: 1px 2px 17px; border-bottom: 1px solid #eef0f3; }
+.erp-stock-loading-header > :first-child { width: 46px; height: 46px; border-radius: 13px; }
+.erp-stock-loading-header > :nth-child(2) { width: 150px; max-width: 50%; height: 23px; }
+.erp-stock-loading-header > :last-child { width: 78px; height: 31px; border-radius: 999px; margin-left: auto; }
+.erp-stock-loading-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(210px,1fr)); gap: 15px; padding-top: 22px; }
+.erp-stock-loading-folder { border: 5px solid #222732; border-radius: 24px; height: 222px; overflow: hidden; background: #242424; animation: erpStockRise 540ms ease-out backwards; }
+.erp-stock-loading-folder:nth-child(1) { animation-delay: 80ms; }
+.erp-stock-loading-folder:nth-child(2) { animation-delay: 135ms; }
+.erp-stock-loading-folder:nth-child(3) { animation-delay: 190ms; }
+.erp-stock-loading-folder:nth-child(n+4) { animation-delay: 245ms; }
+.erp-stock-loading-folder-top { position: relative; height: 83px; background: linear-gradient(135deg,#ffb87b,#ff781d); display: flex; justify-content: center; align-items: flex-end; }
+.erp-stock-loading-folder-paper { width: 58%; height: 56px; transform: translateY(11px); border-radius: 9px 9px 0 0; background: #fff5ec !important; }
+.erp-stock-loading-folder-front { display: flex; flex-direction: column; gap: 10px; padding: 22px 15px 13px; }
+.erp-stock-loading-folder-front > :first-child { width: 65%; height: 16px; background: #777 !important; }
+.erp-stock-loading-folder-front > :nth-child(2) { width: 45%; height: 10px; background: #5c5c5c !important; }
+.erp-stock-loading-folder-front > :last-child { margin-top: 19px; width: 42%; height: 10px; background: #666 !important; }
+@media (max-width: 600px) {
+  .erp-stocktaking-skeleton { padding: 12px 13px 100px; }
+  .erp-stock-loading-card { padding: 13px; }
+  .erp-stock-loading-grid { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; padding-top: 16px; }
+  .erp-stock-loading-folder { height: clamp(175px,33vw,215px); border-width: 4px; }
+  .erp-stock-loading-folder-top { height: 37%; }
+  .erp-stock-loading-folder-front { padding: 18px 10px 8px; }
+}
+.erp-stock-motion-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) {
+  body.stocktaking-page .next-stocktaking-classic-parity.next-stocktaking-folders-page,
+  body.stocktaking-page .next-stocktaking-folders-page .stocktaking-folders-head,
+  body.stocktaking-page .next-stocktaking-folders-page .stocktaking-folder-grid > *,
+  body.stocktaking-page .next-stocktaking-folders-page .stocktaking-folder-workspace,
+  body.stocktaking-page .next-stocktaking-folders-page .stocktaking-folder-toolbar,
+  body.stocktaking-page .next-stocktaking-folders-page .stocktaking-industrial-stats,
+  body.stocktaking-page .next-stocktaking-folders-page .stocktaking-data-table-wrap,
+  body.stocktaking-page .next-stocktaking-folders-page .stocktaking-industrial-footer,
+  .erp-stocktaking-skeleton .erp-stock-sk::after, .erp-stock-loading-folder { animation: none !important; }
+}

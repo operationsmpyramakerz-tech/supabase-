@@ -1,5 +1,5 @@
-import ClassicInventoryLoading from "../../components/ClassicInventoryLoading";
+import StocktakingMotionLoading from "../../components/stocktaking/StocktakingMotionLoading";
 
 export default function StocktakingLoading() {
-  return <ClassicInventoryLoading title="Stocktaking" bodyClass="stocktaking-page" activeIndex={8} />;
+  return <StocktakingMotionLoading />;
 }

@@ -1,0 +1,132 @@
+/* ERP Step 5: Shopping Cart - route-scoped entrance motion.
+   All three flows share .classic-cart-page. Never animate dialogs, overlays,
+   dock, sidebar, header, controls during interaction, or loading placeholders. */
+@keyframes erpCartFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes erpCartRiseIn {
+  from { opacity: 0; transform: translate3d(0, 15px, 0) scale(.99); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes erpCartHeaderIn {
+  from { opacity: 0; transform: translate3d(0, -9px, 0); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes erpCartChoiceIn {
+  from { opacity: 0; transform: translate3d(0, 18px, 0) scale(.975); }
+  to { opacity: 1; transform: none; }
+}
+body.shopping-cart-page .classic-cart-page:not(.classic-cart-loading-page) {
+  --erp-cart-ease: cubic-bezier(.22, 1, .36, 1);
+  animation: erpCartFadeIn 320ms ease-out backwards;
+}
+body.shopping-cart-page .classic-cart-page:not(.classic-cart-loading-page) > .classic-cart-type-pill,
+body.shopping-cart-page .classic-cart-page:not(.classic-cart-loading-page) > .classic-cart-order-type-step {
+  animation: erpCartHeaderIn 450ms var(--erp-cart-ease) 60ms backwards;
+}
+body.shopping-cart-page .classic-cart-page:not(.classic-cart-loading-page) > .classic-cart-grid > .classic-cart-main > .classic-cart-card {
+  animation: erpCartRiseIn 520ms var(--erp-cart-ease) 145ms backwards;
+}
+body.shopping-cart-page .classic-cart-page:not(.classic-cart-loading-page) .classic-cart-empty-actions > .classic-cart-add-new {
+  animation: erpCartChoiceIn 520ms var(--erp-cart-ease) backwards;
+}
+body.shopping-cart-page .classic-cart-page:not(.classic-cart-loading-page) .classic-cart-empty-actions > :nth-child(1) { animation-delay: 265ms; }
+body.shopping-cart-page .classic-cart-page:not(.classic-cart-loading-page) .classic-cart-empty-actions > :nth-child(2) { animation-delay: 335ms; }
+body.shopping-cart-page .classic-cart-page:not(.classic-cart-loading-page) .classic-cart-empty-actions > :nth-child(n+3) { animation-delay: 405ms; }
+body.shopping-cart-page .classic-cart-page:not(.classic-cart-loading-page) .classic-cart-body > .classic-cart-row {
+  animation: erpCartChoiceIn 525ms var(--erp-cart-ease) backwards;
+}
+body.shopping-cart-page .classic-cart-page:not(.classic-cart-loading-page) .classic-cart-body > :nth-child(1) { animation-delay: 265ms; }
+body.shopping-cart-page .classic-cart-page:not(.classic-cart-loading-page) .classic-cart-body > :nth-child(2) { animation-delay: 325ms; }
+body.shopping-cart-page .classic-cart-page:not(.classic-cart-loading-page) .classic-cart-body > :nth-child(3) { animation-delay: 385ms; }
+body.shopping-cart-page .classic-cart-page:not(.classic-cart-loading-page) .classic-cart-body > :nth-child(4) { animation-delay: 445ms; }
+body.shopping-cart-page .classic-cart-page:not(.classic-cart-loading-page) .classic-cart-body > :nth-child(n+5) { animation-delay: 495ms; }
+body.shopping-cart-page .classic-cart-page:not(.classic-cart-loading-page) .classic-cart-footer {
+  animation: erpCartRiseIn 440ms var(--erp-cart-ease) 470ms backwards;
+}
+body.shopping-cart-page .classic-cart-page:not(.classic-cart-loading-page) .classic-cart-summary > .classic-cart-summary-card {
+  animation: erpCartRiseIn 510ms var(--erp-cart-ease) 285ms backwards;
+}
+body.shopping-cart-page .classic-cart-page:not(.classic-cart-loading-page) .classic-cart-summary > .classic-cart-reason-card {
+  animation: erpCartRiseIn 510ms var(--erp-cart-ease) 390ms backwards;
+}
+body.shopping-cart-page .classic-cart-page:not(.classic-cart-loading-page) .classic-cart-request-meta-fields > .classic-cart-summary-field {
+  animation: erpCartRiseIn 440ms var(--erp-cart-ease) backwards;
+}
+body.shopping-cart-page .classic-cart-page:not(.classic-cart-loading-page) .classic-cart-request-meta-fields > :nth-child(1) { animation-delay: 455ms; }
+body.shopping-cart-page .classic-cart-page:not(.classic-cart-loading-page) .classic-cart-request-meta-fields > :nth-child(2) { animation-delay: 510ms; }
+body.shopping-cart-page .classic-cart-page:not(.classic-cart-loading-page) .classic-cart-summary > .classic-cart-submit-slider {
+  animation: erpCartRiseIn 470ms var(--erp-cart-ease) 555ms backwards;
+}
+/* Match current empty-cart screenshot while the server streams the route. */
+.erp-cart-skeleton {
+  --erp-skel: #e9ecf1;
+  width: 100%;
+  min-width: 0;
+  padding: 20px clamp(14px, 3vw, 38px) 110px;
+}
+.erp-cart-skeleton *, .erp-cart-skeleton *::before, .erp-cart-skeleton *::after { box-sizing: border-box; }
+.erp-cart-skeleton .erp-sk {
+  display: block; position: relative; overflow: hidden;
+  background: var(--erp-skel); border-radius: 11px;
+}
+.erp-cart-skeleton .erp-sk::after {
+  content: ""; position: absolute; inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.75), transparent);
+  animation: erpCartShimmer 1.5s ease-in-out infinite;
+}
+@keyframes erpCartShimmer { to { transform: translateX(100%); } }
+.erp-cart-loading-hero {
+  display: flex; align-items: center; gap: 14px;
+  min-height: 100px; padding: 18px 20px; margin-bottom: 16px;
+  background: linear-gradient(105deg,#fff,#effbf4); border: 1px solid #e5ebe7;
+  border-radius: 22px; animation: erpCartRiseIn 400ms ease-out backwards;
+}
+.erp-cart-loading-hero-icon { width: 60px; height: 60px; background: #b7e5ce !important; border-radius: 17px !important; }
+.erp-cart-loading-hero-copy { flex: 1; display: flex; flex-direction: column; gap: 10px; }
+.erp-cart-loading-hero-copy > :first-child { width: 98px; height: 10px; }
+.erp-cart-loading-hero-copy > :last-child { width: min(235px,62%); height: 20px; }
+.erp-cart-loading-columns { display: grid; grid-template-columns: 1.15fr 1fr; gap: 16px; }
+.erp-cart-loading-card { border: 1px solid #e8ebef; border-radius: 22px; padding: 17px; background: #fff; }
+.erp-cart-loading-options { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
+.erp-cart-loading-option { min-height: 185px; padding: 20px; border: 1px dashed #dce1e8; border-radius: 20px; display: flex; flex-direction: column; gap: 11px; }
+.erp-cart-loading-option > :first-child { width: 70%; max-width: 180px; height: 18px; }
+.erp-cart-loading-option > :nth-child(2) { width: 86%; height: 10px; }
+.erp-cart-loading-option > :last-child { margin-top: auto; align-self: flex-end; width: 41px; height: 41px; border-radius: 12px; }
+.erp-cart-loading-option:first-child { background: #f4fff8; }
+.erp-cart-loading-option:first-child > :last-child { background:#b9e6c9; }
+.erp-cart-loading-side { display: flex; flex-direction: column; gap: 14px; }
+.erp-cart-loading-summary-title { width: 136px; height: 21px; margin-bottom: 20px; }
+.erp-cart-loading-summary-numbers { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.erp-cart-loading-summary-numbers > span { height: 86px; border-radius: 16px !important; }
+.erp-cart-loading-field { height: 55px; margin-top: 11px; border-radius: 15px !important; }
+.erp-cart-loading-field-label { width: 96px; height: 15px; }
+.erp-cart-loading-reason { min-height: 215px; }
+.erp-cart-loading-submit { height: 53px; border-radius: 15px !important; background:#c7cbd3 !important; }
+.erp-cart-loading-rect { animation: erpCartRiseIn 480ms ease-out backwards; }
+.erp-cart-loading-rect:nth-child(1) { animation-delay: 120ms; }
+.erp-cart-loading-rect:nth-child(2) { animation-delay: 220ms; }
+@media(max-width:820px) { .erp-cart-loading-columns { grid-template-columns: 1fr; } }
+@media(max-width:560px) {
+  .erp-cart-skeleton { padding: 12px 14px 100px; }
+  .erp-cart-loading-hero { min-height: 86px; padding: 14px; }
+  .erp-cart-loading-hero-icon { width: 52px; height: 52px; }
+  .erp-cart-loading-option { min-height: 152px; padding: 13px; }
+  .erp-cart-loading-options { gap: 10px; }
+  .erp-cart-loading-card { padding: 13px; }
+}
+.erp-motion-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) {
+  body.shopping-cart-page .classic-cart-page:not(.classic-cart-loading-page),
+  body.shopping-cart-page .classic-cart-page:not(.classic-cart-loading-page) .classic-cart-type-pill,
+  body.shopping-cart-page .classic-cart-page:not(.classic-cart-loading-page) .classic-cart-order-type-step,
+  body.shopping-cart-page .classic-cart-page:not(.classic-cart-loading-page) .classic-cart-card,
+  body.shopping-cart-page .classic-cart-page:not(.classic-cart-loading-page) .classic-cart-add-new,
+  body.shopping-cart-page .classic-cart-page:not(.classic-cart-loading-page) .classic-cart-row,
+  body.shopping-cart-page .classic-cart-page:not(.classic-cart-loading-page) .classic-cart-footer,
+  body.shopping-cart-page .classic-cart-page:not(.classic-cart-loading-page) .classic-cart-summary > *,
+  body.shopping-cart-page .classic-cart-page:not(.classic-cart-loading-page) .classic-cart-summary-field,
+  .erp-cart-skeleton .erp-sk::after, .erp-cart-loading-hero, .erp-cart-loading-rect { animation: none !important; }
+}
