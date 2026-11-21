@@ -2,7 +2,7 @@
 export default function ExpensesUsersMotionLayout({ children }) {
   return (
     <>
-      <link rel="stylesheet" href="/next/css/expenses-users-motion-step8.css?v=cinematic-step8-v1" precedence="erp-detail" />
+      <link rel="stylesheet" href="/next/css/expenses-users-motion-step8.css?v=cinematic-step8-visibility-v2" precedence="erp-detail" />
       {children}
     </>
   );

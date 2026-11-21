@@ -11,6 +11,12 @@
 }
 /* A button is a REAL user card. Keep the entire grid visible as tiles enter. */
 .expenses-layout.next-expense-users-classic-parity .user-tabs > button.user-tab {
+  /* Previous inline.css starts .user-tab at opacity:0 and translated.
+     Step 8 used backwards-only fill: after the animation it went invisible.
+     Set the RESTING state explicitly to visible, while retaining the
+     independent reveal and per-card delays. */
+  opacity: 1;
+  transform: none;
   animation: erpExpenseUserCard8 665ms cubic-bezier(.22, 1, .36, 1) backwards;
 }
 .expenses-layout.next-expense-users-classic-parity .user-tabs > .users-empty {
@@ -18,6 +24,9 @@
 }
 /* The 6 shimmer cards on the current route loading screen are independent. */
 .next-classic-expenses-loading .next-expense-users-classic-parity .user-tabs > .next-expenses-loading-user-card {
+  /* Skeleton also inherits .user-tab opacity:0 from old CSS. */
+  opacity: 1;
+  transform: none;
   animation: erpExpenseUserSkeleton8 530ms cubic-bezier(.22, 1, .36, 1) backwards;
 }
 @media (max-width: 700px) {
@@ -66,3 +75,22 @@
 .next-classic-expenses-loading .next-expense-users-classic-parity .user-tabs > .next-expenses-loading-user-card:nth-child(4) { animation-delay: 350ms; }
 .next-classic-expenses-loading .next-expense-users-classic-parity .user-tabs > .next-expenses-loading-user-card:nth-child(5) { animation-delay: 435ms; }
 .next-classic-expenses-loading .next-expense-users-classic-parity .user-tabs > .next-expenses-loading-user-card:nth-child(6) { animation-delay: 520ms; }
+
+/* ERP_CINEMATIC_STEP8_VISIBILITY_FIX_V2: preserve normal hover/active states after cards have entered.
+   The base resting state is visible, so completed animations cannot hide taps.
+   Only Expenses by Users elements are targeted; dialogs remain untouched. */
+.expenses-layout.next-expense-users-classic-parity .user-tabs > button.user-tab:hover {
+  transform: translateY(-4px);
+}
+.expenses-layout.next-expense-users-classic-parity .user-tabs > button.user-tab.active,
+.expenses-layout.next-expense-users-classic-parity .user-tabs > button.user-tab.active:hover {
+  transform: translateY(-3px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .expenses-layout.next-expense-users-classic-parity .user-tabs > button.user-tab,
+  .next-classic-expenses-loading .next-expense-users-classic-parity .user-tabs > .next-expenses-loading-user-card {
+    opacity: 1 !important;
+    transform: none !important;
+    animation: none !important;
+  }
+}
