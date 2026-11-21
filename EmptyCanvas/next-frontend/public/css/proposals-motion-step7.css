@@ -1,0 +1,135 @@
+/* ERP_CINEMATIC_STEP7 | Proposals motion only.
+   Excludes shared shell, navigation, form controls, dialogs and overlays.
+   The Kits page uses its own unique motion file. */
+@keyframes erpPropScene7 {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes erpPropDrop7 {
+  from { opacity: 0; transform: translate3d(0, -9px, 0); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes erpPropRise7 {
+  from { opacity: 0; transform: translate3d(0, 15px, 0) scale(.99); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes erpPropFolder7 {
+  from { opacity: 0; transform: translate3d(0, 19px, 0) scale(.978); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes erpPropPanel7 {
+  from { opacity: 0; transform: translate3d(0, 12px, 0); }
+  to { opacity: 1; transform: none; }
+}
+
+.next-proposals-classic-parity.products-shell.proposals-shell:not(.next-kits-classic-parity) {
+  --erp-prop-ease7: cubic-bezier(.22, 1, .36, 1);
+  animation: erpPropScene7 310ms ease-out backwards;
+}
+/* Folder library actions and surface. */
+.next-proposals-classic-parity:not(.next-kits-classic-parity) > .proposals-floating-actions {
+  animation: erpPropDrop7 440ms var(--erp-prop-ease7, ease-out) 55ms backwards;
+}
+.next-proposals-classic-parity:not(.next-kits-classic-parity) > .proposals-workspace.proposals-folders-card {
+  animation: erpPropRise7 480ms var(--erp-prop-ease7, ease-out) 145ms backwards;
+}
+.next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > .products-proposal-folder:nth-child(-n+10) {
+  animation: erpPropFolder7 540ms var(--erp-prop-ease7, ease-out) backwards;
+}
+.next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > :nth-child(1) { animation-delay: 195ms; }
+.next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > :nth-child(2) { animation-delay: 250ms; }
+.next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > :nth-child(3) { animation-delay: 305ms; }
+.next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > :nth-child(4) { animation-delay: 360ms; }
+.next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > :nth-child(5) { animation-delay: 415ms; }
+.next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > :nth-child(6) { animation-delay: 470ms; }
+.next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > :nth-child(7) { animation-delay: 525ms; }
+.next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > :nth-child(8) { animation-delay: 580ms; }
+.next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > :nth-child(9) { animation-delay: 615ms; }
+.next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > :nth-child(10) { animation-delay: 650ms; }
+.next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposals-empty {
+  animation: erpPropRise7 420ms var(--erp-prop-ease7, ease-out) 195ms backwards;
+}
+
+/* Selected Proposal / Create Proposal: restrained sections, only first 8
+   cards per visible group to preserve performance on larger proposals. */
+.next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-detail > .products-proposal-detail__head,
+.next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-detail > .proposal-create-label-head {
+  animation: erpPropDrop7 435ms var(--erp-prop-ease7, ease-out) 60ms backwards;
+}
+.next-proposals-classic-parity:not(.next-kits-classic-parity) .proposal-classic-detail-title {
+  animation: erpPropRise7 440ms var(--erp-prop-ease7, ease-out) 115ms backwards;
+}
+.next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-detail .products-proposal-tools {
+  animation: erpPropPanel7 450ms var(--erp-prop-ease7, ease-out) 165ms backwards;
+}
+.next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-detail .proposal-components-card {
+  animation: erpPropPanel7 495ms var(--erp-prop-ease7, ease-out) 215ms backwards;
+}
+.next-proposals-classic-parity:not(.next-kits-classic-parity) .proposal-components-groups > :is(.proposal-kit-folder-group, .proposal-component-group):nth-child(-n+5) {
+  animation: erpPropRise7 470ms var(--erp-prop-ease7, ease-out) backwards;
+}
+.next-proposals-classic-parity:not(.next-kits-classic-parity) .proposal-components-groups > :nth-child(1) { animation-delay: 255ms; }
+.next-proposals-classic-parity:not(.next-kits-classic-parity) .proposal-components-groups > :nth-child(2) { animation-delay: 305ms; }
+.next-proposals-classic-parity:not(.next-kits-classic-parity) .proposal-components-groups > :nth-child(3) { animation-delay: 355ms; }
+.next-proposals-classic-parity:not(.next-kits-classic-parity) .proposal-components-groups > :nth-child(4) { animation-delay: 405ms; }
+.next-proposals-classic-parity:not(.next-kits-classic-parity) .proposal-components-groups > :nth-child(5) { animation-delay: 455ms; }
+.next-proposals-classic-parity:not(.next-kits-classic-parity) .proposal-components-grid > .proposal-component-card:nth-child(-n+6) {
+  animation: erpPropFolder7 485ms var(--erp-prop-ease7, ease-out) backwards;
+}
+.next-proposals-classic-parity:not(.next-kits-classic-parity) .proposal-components-grid > :nth-child(1) { animation-delay: 320ms; }
+.next-proposals-classic-parity:not(.next-kits-classic-parity) .proposal-components-grid > :nth-child(2) { animation-delay: 370ms; }
+.next-proposals-classic-parity:not(.next-kits-classic-parity) .proposal-components-grid > :nth-child(3) { animation-delay: 420ms; }
+.next-proposals-classic-parity:not(.next-kits-classic-parity) .proposal-components-grid > :nth-child(4) { animation-delay: 470ms; }
+.next-proposals-classic-parity:not(.next-kits-classic-parity) .proposal-components-grid > :nth-child(5) { animation-delay: 520ms; }
+.next-proposals-classic-parity:not(.next-kits-classic-parity) .proposal-components-grid > :nth-child(6) { animation-delay: 570ms; }
+.next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-detail .proposal-total-block,
+.next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-detail .proposal-create-save-footer {
+  animation: erpPropPanel7 440ms var(--erp-prop-ease7, ease-out) 325ms backwards;
+}
+
+/* Preserve the existing streamed folder skeleton; give the loading elements
+   a restrained appearance without changing shared loading JS. */
+.next-classic-proposals-loading .next-proposals-route-skeleton__toolbar {
+  animation: erpPropDrop7 325ms ease-out 35ms backwards;
+}
+.next-classic-proposals-loading .next-proposals-route-skeleton__surface {
+  animation: erpPropRise7 370ms ease-out 90ms backwards;
+}
+.next-classic-proposals-loading .next-proposals-route-skeleton__card:nth-child(-n+8) {
+  animation: erpPropFolder7 445ms ease-out backwards;
+}
+.next-classic-proposals-loading .next-proposals-route-skeleton__card:nth-child(1) { animation-delay: 130ms; }
+.next-classic-proposals-loading .next-proposals-route-skeleton__card:nth-child(2) { animation-delay: 165ms; }
+.next-classic-proposals-loading .next-proposals-route-skeleton__card:nth-child(3) { animation-delay: 200ms; }
+.next-classic-proposals-loading .next-proposals-route-skeleton__card:nth-child(4) { animation-delay: 235ms; }
+.next-classic-proposals-loading .next-proposals-route-skeleton__card:nth-child(5) { animation-delay: 270ms; }
+.next-classic-proposals-loading .next-proposals-route-skeleton__card:nth-child(6) { animation-delay: 305ms; }
+.next-classic-proposals-loading .next-proposals-route-skeleton__card:nth-child(7) { animation-delay: 340ms; }
+.next-classic-proposals-loading .next-proposals-route-skeleton__card:nth-child(8) { animation-delay: 375ms; }
+
+@media (max-width: 680px) {
+  @keyframes erpPropFolder7 {
+    from { opacity: 0; transform: translate3d(0, 12px, 0) scale(.989); }
+    to { opacity: 1; transform: none; }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .next-proposals-classic-parity:not(.next-kits-classic-parity),
+  .next-proposals-classic-parity:not(.next-kits-classic-parity) .proposals-floating-actions,
+  .next-proposals-classic-parity:not(.next-kits-classic-parity) .proposals-workspace,
+  .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-folders > *,
+  .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposals-empty,
+  .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-detail__head,
+  .next-proposals-classic-parity:not(.next-kits-classic-parity) .proposal-classic-detail-title,
+  .next-proposals-classic-parity:not(.next-kits-classic-parity) .products-proposal-tools,
+  .next-proposals-classic-parity:not(.next-kits-classic-parity) .proposal-components-card,
+  .next-proposals-classic-parity:not(.next-kits-classic-parity) .proposal-components-groups > *,
+  .next-proposals-classic-parity:not(.next-kits-classic-parity) .proposal-component-card,
+  .next-proposals-classic-parity:not(.next-kits-classic-parity) .proposal-total-block,
+  .next-proposals-classic-parity:not(.next-kits-classic-parity) .proposal-create-save-footer,
+  .next-classic-proposals-loading .next-proposals-route-skeleton__toolbar,
+  .next-classic-proposals-loading .next-proposals-route-skeleton__surface,
+  .next-classic-proposals-loading .next-proposals-route-skeleton__card {
+    animation: none !important;
+  }
+}

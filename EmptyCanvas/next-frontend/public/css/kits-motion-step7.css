@@ -1,0 +1,129 @@
+/* ERP_CINEMATIC_STEP7 | Kits motion, matching Home / Steps 1–6.
+   Restrict to committed Kits client and its own streamed route fallback.
+   Never animate global header, navigation, dock, dialogs, popovers or inputs. */
+@keyframes erpKitsScene7 {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes erpKitsDrop7 {
+  from { opacity: 0; transform: translate3d(0, -9px, 0); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes erpKitsRise7 {
+  from { opacity: 0; transform: translate3d(0, 14px, 0) scale(.991); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes erpKitsFolder7 {
+  from { opacity: 0; transform: translate3d(0, 19px, 0) scale(.979); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes erpKitsDetail7 {
+  from { opacity: 0; transform: translate3d(0, 12px, 0); }
+  to { opacity: 1; transform: none; }
+}
+
+/* A root-only fade: children animate independently, without moving the dock. */
+.next-kits-classic-parity.products-shell.proposals-shell {
+  --erp-kits-ease7: cubic-bezier(.22, 1, .36, 1);
+  animation: erpKitsScene7 310ms ease-out backwards;
+}
+/* Library action row, then its panel and individual folders. */
+.next-kits-classic-parity > .kit-library-actions {
+  animation: erpKitsDrop7 435ms var(--erp-kits-ease7, ease-out) 45ms backwards;
+}
+.next-kits-classic-parity > .proposals-workspace.proposals-folders-card {
+  animation: erpKitsRise7 480ms var(--erp-kits-ease7, ease-out) 120ms backwards;
+}
+.next-kits-classic-parity .kit-library-grid > :is(.kit-library-folder, .kit-library-kit):nth-child(-n+10) {
+  animation: erpKitsFolder7 545ms var(--erp-kits-ease7, ease-out) backwards;
+}
+.next-kits-classic-parity .kit-library-grid > :nth-child(1) { animation-delay: 180ms; }
+.next-kits-classic-parity .kit-library-grid > :nth-child(2) { animation-delay: 238ms; }
+.next-kits-classic-parity .kit-library-grid > :nth-child(3) { animation-delay: 296ms; }
+.next-kits-classic-parity .kit-library-grid > :nth-child(4) { animation-delay: 354ms; }
+.next-kits-classic-parity .kit-library-grid > :nth-child(5) { animation-delay: 412ms; }
+.next-kits-classic-parity .kit-library-grid > :nth-child(6) { animation-delay: 470ms; }
+.next-kits-classic-parity .kit-library-grid > :nth-child(7) { animation-delay: 528ms; }
+.next-kits-classic-parity .kit-library-grid > :nth-child(8) { animation-delay: 586ms; }
+.next-kits-classic-parity .kit-library-grid > :nth-child(9) { animation-delay: 625ms; }
+.next-kits-classic-parity .kit-library-grid > :nth-child(10) { animation-delay: 655ms; }
+.next-kits-classic-parity .products-proposals-empty {
+  animation: erpKitsRise7 420ms var(--erp-kits-ease7, ease-out) 220ms backwards;
+}
+
+/* Opening a Kit or creating one: title, tools, components, footer.
+   Exclude all modal and popover content; do not animate input controls. */
+.next-kits-classic-parity .products-proposal-detail > .products-proposal-detail__head,
+.next-kits-classic-parity .products-proposal-detail > .kit-create-label-head {
+  animation: erpKitsDrop7 430ms var(--erp-kits-ease7, ease-out) 60ms backwards;
+}
+.next-kits-classic-parity .products-proposal-detail .proposal-classic-detail-title {
+  animation: erpKitsRise7 445ms var(--erp-kits-ease7, ease-out) 100ms backwards;
+}
+.next-kits-classic-parity .products-proposal-detail .products-proposal-tools {
+  animation: erpKitsDetail7 470ms var(--erp-kits-ease7, ease-out) 160ms backwards;
+}
+.next-kits-classic-parity .products-proposal-detail .products-proposal-table-card {
+  animation: erpKitsDetail7 505ms var(--erp-kits-ease7, ease-out) 220ms backwards;
+}
+/* First few cards only, to avoid mass animations on large kit inventories. */
+.next-kits-classic-parity .kit-components-grid > .kit-component-card:nth-child(-n+8) {
+  animation: erpKitsFolder7 490ms var(--erp-kits-ease7, ease-out) backwards;
+}
+.next-kits-classic-parity .kit-components-grid > :nth-child(1) { animation-delay: 240ms; }
+.next-kits-classic-parity .kit-components-grid > :nth-child(2) { animation-delay: 290ms; }
+.next-kits-classic-parity .kit-components-grid > :nth-child(3) { animation-delay: 340ms; }
+.next-kits-classic-parity .kit-components-grid > :nth-child(4) { animation-delay: 390ms; }
+.next-kits-classic-parity .kit-components-grid > :nth-child(5) { animation-delay: 440ms; }
+.next-kits-classic-parity .kit-components-grid > :nth-child(6) { animation-delay: 490ms; }
+.next-kits-classic-parity .kit-components-grid > :nth-child(7) { animation-delay: 540ms; }
+.next-kits-classic-parity .kit-components-grid > :nth-child(8) { animation-delay: 590ms; }
+.next-kits-classic-parity .products-proposal-detail .proposal-total-block,
+.next-kits-classic-parity .products-proposal-detail .kit-create-save-footer {
+  animation: erpKitsDetail7 460ms var(--erp-kits-ease7, ease-out) 300ms backwards;
+}
+
+/* Streamed loading skeleton has its own DOM: keep the stable chrome fixed. */
+.next-classic-proposals-loading .next-proposals-route-skeleton__toolbar {
+  animation: erpKitsDrop7 320ms ease-out 35ms backwards;
+}
+.next-classic-proposals-loading .next-proposals-route-skeleton__surface {
+  animation: erpKitsRise7 370ms ease-out 90ms backwards;
+}
+.next-classic-proposals-loading .next-proposals-route-skeleton__card:nth-child(-n+8) {
+  animation: erpKitsFolder7 440ms ease-out backwards;
+}
+.next-classic-proposals-loading .next-proposals-route-skeleton__card:nth-child(1) { animation-delay: 130ms; }
+.next-classic-proposals-loading .next-proposals-route-skeleton__card:nth-child(2) { animation-delay: 165ms; }
+.next-classic-proposals-loading .next-proposals-route-skeleton__card:nth-child(3) { animation-delay: 200ms; }
+.next-classic-proposals-loading .next-proposals-route-skeleton__card:nth-child(4) { animation-delay: 235ms; }
+.next-classic-proposals-loading .next-proposals-route-skeleton__card:nth-child(5) { animation-delay: 270ms; }
+.next-classic-proposals-loading .next-proposals-route-skeleton__card:nth-child(6) { animation-delay: 305ms; }
+.next-classic-proposals-loading .next-proposals-route-skeleton__card:nth-child(7) { animation-delay: 340ms; }
+.next-classic-proposals-loading .next-proposals-route-skeleton__card:nth-child(8) { animation-delay: 375ms; }
+
+@media (max-width: 680px) {
+  @keyframes erpKitsFolder7 {
+    from { opacity: 0; transform: translate3d(0, 12px, 0) scale(.989); }
+    to { opacity: 1; transform: none; }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .next-kits-classic-parity,
+  .next-kits-classic-parity .kit-library-actions,
+  .next-kits-classic-parity .proposals-workspace,
+  .next-kits-classic-parity .kit-library-grid > *,
+  .next-kits-classic-parity .products-proposals-empty,
+  .next-kits-classic-parity .products-proposal-detail__head,
+  .next-kits-classic-parity .proposal-classic-detail-title,
+  .next-kits-classic-parity .products-proposal-tools,
+  .next-kits-classic-parity .products-proposal-table-card,
+  .next-kits-classic-parity .kit-component-card,
+  .next-kits-classic-parity .proposal-total-block,
+  .next-kits-classic-parity .kit-create-save-footer,
+  .next-classic-proposals-loading .next-proposals-route-skeleton__toolbar,
+  .next-classic-proposals-loading .next-proposals-route-skeleton__surface,
+  .next-classic-proposals-loading .next-proposals-route-skeleton__card {
+    animation: none !important;
+  }
+}
