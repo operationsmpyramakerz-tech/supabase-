@@ -495,14 +495,16 @@ export function FolderNameModal({ dialog, busy, onClose, onSubmit }) {
   return (
     <Modal
       title={creating ? "Create Folder" : "Rename Folder"}
-      subtitle={creating ? "Enter a name only. You can create kits after opening the folder." : "Change the folder name without changing the kits inside it."}
-      icon={<FeatherIcon name="folder" size={20} />}
+      subtitle={/* ERP_KITS_FOLDER_CREATE_SHEET_AND_CLOSE_V1: create only; rename unchanged. */ creating ? undefined : "Change the folder name without changing the kits inside it."}
+      icon={creating ? <FeatherIcon name="folderPlus" size={30} /> : <FeatherIcon name="folder" size={20} />}
       onClose={onClose}
+      className={creating ? "next-kit-create-folder-sheet" : ""}
+      overlayClassName={creating ? "next-kit-create-folder-overlay" : ""}
     >
-      <form className="next-proposals-form products-form-grid" onSubmit={submit}>
+      <form className={creating ? "next-proposals-form products-form-grid next-kit-create-folder-form" : "next-proposals-form products-form-grid"} onSubmit={submit}>
         <label><span>Folder Name *</span><input autoFocus value={value} onChange={(event) => setValue(event.target.value)} placeholder="Example: TH1 Kits" /></label>
         {error ? <div className="next-proposals-error products-form-error">{error}</div> : null}
-        <div className="next-proposals-form__actions products-modal__actions">
+        <div className={creating ? "next-proposals-form__actions products-modal__actions next-kit-create-folder-actions" : "next-proposals-form__actions products-modal__actions"}>
           <button type="button" className="products-btn products-btn--light" onClick={onClose} disabled={busy}>Cancel</button>
           <button type="submit" className="products-btn products-btn--dark" disabled={busy}>{busy ? "Saving…" : creating ? "Create Folder" : "Save Name"}</button>
         </div>

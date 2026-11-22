@@ -1523,15 +1523,6 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
 
       <section className="products-proposals-view proposals-workspace proposals-folders-card" aria-live="polite">
         <section className="proposals-panel">
-          {!activeFolder ? (
-            <header className="kit-library-heading">
-              <div className="kit-library-heading__title">
-                <span className="kit-library-heading__icon" aria-hidden="true"><FeatherIcon name="folder" /></span>
-                <h2>Kit Folders</h2>
-              </div>
-              <span className="kit-library-heading__count">{folders.length} folder{folders.length === 1 ? "" : "s"}</span>
-            </header>
-          ) : null}
           <div className="products-proposals-list">
             {(filteredFolders.length || filteredKits.length || canCreate || can("folder_create")) ? (
               <div className="products-proposal-folders kit-library-grid kit-library-grid--root">

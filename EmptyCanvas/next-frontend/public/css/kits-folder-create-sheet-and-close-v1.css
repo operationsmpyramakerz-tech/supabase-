@@ -1,0 +1,254 @@
+/* ERP_KITS_FOLDER_CREATE_SHEET_AND_CLOSE_V1
+   Kits-only controls. Create Folder uses a bottom sheet matching Move Kit.
+   Rename Folder and all other dialogs intentionally retain their current UI. */
+
+/* Full-width overlay, attached to the bottom edge of the mobile viewport. */
+body.kits-page .next-kits-classic-parity .products-modal-overlay.next-proposals-classic-modal.next-kit-create-folder-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100dvh !important;
+  max-height: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  display: flex !important;
+  align-items: flex-end !important;
+  justify-content: center !important;
+  overflow: hidden !important;
+  z-index: 2147483100 !important;
+  background: rgba(8, 13, 23, .52) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+body.kits-page .next-kits-classic-parity .next-kit-create-folder-overlay > .products-modal.next-kit-create-folder-sheet {
+  position: relative !important;
+  inset: auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+  isolation: isolate;
+  align-items: stretch !important;
+  box-sizing: border-box !important;
+  width: 100vw !important;
+  max-width: 100vw !important;
+  min-width: 0 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: calc(100dvh - 88px) !important;
+  margin: 0 !important;
+  padding: 18px clamp(16px, 3vw, 34px) max(37px, calc(26px + env(safe-area-inset-bottom, 0px))) !important;
+  overflow: visible !important;
+  border: 0 !important;
+  border-top: 1px solid #e6e9ee !important;
+  border-radius: 26px 26px 0 0 !important;
+  background: #fff !important;
+  box-shadow: 0 -15px 55px rgba(0, 0, 0, .18) !important;
+  animation: erpKitFolderSheetRise .28s cubic-bezier(.22,1,.36,1) both;
+}
+@keyframes erpKitFolderSheetRise {
+  from { opacity: .89; transform: translate3d(0,28px,0); }
+  to { opacity: 1; transform: none; }
+}
+/* Centered black/white icon sits half outside the upper sheet edge. */
+body.kits-page .next-kits-classic-parity .next-kit-create-folder-sheet > .products-modal__header {
+  position: static !important;
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 0 0 auto !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  gap: 0 !important;
+  min-height: 30px !important;
+  width: 100% !important;
+  padding: 0 45px !important;
+  margin: 54px 0 21px !important;
+  box-sizing: border-box !important;
+}
+body.kits-page .next-kits-classic-parity .next-kit-create-folder-sheet > .products-modal__header .products-modal__icon {
+  position: absolute !important;
+  left: 50% !important;
+  top: -39px !important;
+  transform: translateX(-50%) !important;
+  z-index: 4 !important;
+  display: grid !important;
+  place-items: center !important;
+  box-sizing: border-box !important;
+  width: 78px !important;
+  min-width: 78px !important;
+  height: 78px !important;
+  min-height: 78px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 5px solid #fff !important;
+  border-radius: 24px !important;
+  background: #0b101a !important;
+  color: #fff !important;
+  box-shadow: 0 16px 32px rgba(0, 0, 0, .20) !important;
+}
+body.kits-page .next-kits-classic-parity .next-kit-create-folder-sheet > .products-modal__header .products-modal__icon svg {
+  width: 38px !important;
+  height: 38px !important;
+  display: block !important;
+  stroke: #fff !important;
+  fill: none !important;
+}
+body.kits-page .next-kits-classic-parity .next-kit-create-folder-sheet > .products-modal__header > div:last-child {
+  text-align: center !important;
+  width: 100% !important;
+  min-width: 0 !important;
+}
+body.kits-page .next-kits-classic-parity .next-kit-create-folder-sheet > .products-modal__header h2 {
+  margin: 0 !important;
+  color: #101828 !important;
+  font-size: clamp(1.3rem,3vw,1.7rem) !important;
+  line-height: 1.2 !important;
+  letter-spacing: -.035em;
+  font-weight: 950 !important;
+  text-align: center !important;
+}
+body.kits-page .next-kits-classic-parity .next-kit-create-folder-sheet > .products-modal__header p {
+  display: none !important;
+}
+body.kits-page .next-kits-classic-parity .next-kit-create-folder-sheet > .next-proposals-modal__body {
+  display: flex !important;
+  flex-direction: column !important;
+  min-height: 0 !important;
+  min-width: 0 !important;
+  width: 100% !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  overscroll-behavior: contain;
+}
+body.kits-page .next-kits-classic-parity .next-kit-create-folder-sheet .next-kit-create-folder-form {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 14px !important;
+  padding: 0 !important;
+  min-width: 0 !important;
+  width: 100% !important;
+}
+body.kits-page .next-kits-classic-parity .next-kit-create-folder-sheet .next-kit-create-folder-form > label {
+  display: flex !important;
+  flex-direction: column !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  gap: 9px !important;
+  font-weight: 850;
+  color: #344054;
+}
+body.kits-page .next-kits-classic-parity .next-kit-create-folder-sheet .next-kit-create-folder-form > label > input {
+  width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+  height: 52px !important;
+  min-height: 52px !important;
+  margin: 0 !important;
+  border-radius: 15px !important;
+  border: 1px solid #d9dee6 !important;
+  background: #f8fafc !important;
+  color: #111827 !important;
+  font: inherit !important;
+  padding: 0 14px !important;
+  outline: none;
+}
+body.kits-page .next-kits-classic-parity .next-kit-create-folder-sheet .next-kit-create-folder-form > label > input:focus {
+  border-color: #f97316 !important;
+  box-shadow: 0 0 0 3px rgba(249,115,22,.11) !important;
+}
+/* Follow the Move Kit footer: Cancel left, Create Folder right. */
+body.kits-page .next-kits-classic-parity .next-kit-create-folder-sheet .next-kit-create-folder-actions {
+  display: grid !important;
+  grid-template-columns: repeat(2,minmax(0,1fr)) !important;
+  flex-direction: unset !important;
+  gap: 9px !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  margin: 8px 0 0 !important;
+  padding: 15px 0 0 !important;
+  border-top: 1px solid #edf0f2 !important;
+  background: #fff !important;
+}
+body.kits-page .next-kits-classic-parity .next-kit-create-folder-sheet .next-kit-create-folder-actions > button {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex: none !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 51px !important;
+  height: auto !important;
+  margin: 0 !important;
+  padding: 11px 8px !important;
+  font-size: clamp(.74rem,2.5vw,.95rem) !important;
+  white-space: nowrap !important;
+}
+/* Matching accessible close controls for BOTH sheets; fixed geometry and an
+   SVG-like CSS cross remove font-based × misalignment on Android browsers. */
+body.kits-page .next-kits-classic-parity :is(.next-kit-move-sheet, .next-kit-create-folder-sheet) > .products-modal__close {
+  position: absolute !important;
+  z-index: 8 !important;
+  inset: 14px clamp(14px,3vw,34px) auto auto !important;
+  display: grid !important;
+  place-items: center !important;
+  box-sizing: border-box !important;
+  width: 42px !important;
+  min-width: 42px !important;
+  max-width: 42px !important;
+  height: 42px !important;
+  min-height: 42px !important;
+  max-height: 42px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 1px solid #e7eaee !important;
+  border-radius: 14px !important;
+  background: #f4f5f7 !important;
+  color: #101828 !important;
+  box-shadow: none !important;
+  cursor: pointer;
+  transform: none !important;
+  transition: background .17s ease, border-color .17s ease;
+}
+body.kits-page .next-kits-classic-parity :is(.next-kit-move-sheet, .next-kit-create-folder-sheet) > .products-modal__close > span {
+  display: none !important;
+}
+body.kits-page .next-kits-classic-parity :is(.next-kit-move-sheet, .next-kit-create-folder-sheet) > .products-modal__close::before,
+body.kits-page .next-kits-classic-parity :is(.next-kit-move-sheet, .next-kit-create-folder-sheet) > .products-modal__close::after {
+  content: "" !important;
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  width: 19px !important;
+  height: 2.8px !important;
+  border-radius: 99px !important;
+  background: currentColor !important;
+  pointer-events: none !important;
+}
+body.kits-page .next-kits-classic-parity :is(.next-kit-move-sheet, .next-kit-create-folder-sheet) > .products-modal__close::before {
+  transform: translate(-50%,-50%) rotate(45deg) !important;
+}
+body.kits-page .next-kits-classic-parity :is(.next-kit-move-sheet, .next-kit-create-folder-sheet) > .products-modal__close::after {
+  transform: translate(-50%,-50%) rotate(-45deg) !important;
+}
+body.kits-page .next-kits-classic-parity :is(.next-kit-move-sheet, .next-kit-create-folder-sheet) > .products-modal__close:hover,
+body.kits-page .next-kits-classic-parity :is(.next-kit-move-sheet, .next-kit-create-folder-sheet) > .products-modal__close:focus-visible {
+  background: #e9ecf0 !important;
+  border-color: #cfd5dd !important;
+}
+@media (max-width: 720px) {
+  body.kits-page .next-kits-classic-parity :is(.next-kit-move-sheet,.next-kit-create-folder-sheet) > .products-modal__close {
+    inset: 13px 13px auto auto !important;
+    width: 40px !important;
+    min-width: 40px !important;
+    max-width: 40px !important;
+    height: 40px !important;
+    min-height: 40px !important;
+    max-height: 40px !important;
+  }
+  body.kits-page .next-kits-classic-parity .next-kit-create-folder-overlay > .products-modal.next-kit-create-folder-sheet {
+    padding-left: 15px !important;
+    padding-right: 15px !important;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.kits-page .next-kits-classic-parity .next-kit-create-folder-overlay > .products-modal.next-kit-create-folder-sheet { animation: none !important; }
+}
