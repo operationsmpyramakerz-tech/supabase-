@@ -3,6 +3,7 @@
 import HeaderFolderBreadcrumb from "../HeaderFolderBreadcrumb";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import SaveProgressModal, { useSaveProgress } from "../SaveProgressModal";
 import ActionLoadingModal, { useActionLoading } from "../ActionLoadingModal";
@@ -259,6 +260,62 @@ function Toast({ toast, onClose }) {
   );
 }
 
+/* ERP_KITS_CREATE_PERMISSIONS_MODERN_MENU_V1
+   Portaled action menu: escapes animated folder containers and is clamped to the viewport.
+   Used only on Kits folder/kit long-press menus. */
+function KitModernActionMenu({ title, children }) {
+  const [placement, setPlacement] = useState(null);
+
+  useEffect(() => {
+    const items = Array.isArray(children) ? children.filter(Boolean).length : (children ? 1 : 0);
+    const predictedHeight = 48 + items * 48 + 10;
+    let raf = 0;
+    const position = () => {
+      const anchor = document.querySelector(".next-kits-classic-parity .kit-library-grid > .products-proposal-folder.is-menu-open");
+      if (!anchor) return;
+      const rect = anchor.getBoundingClientRect();
+      const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const compact = window.matchMedia("(max-width: 768px)").matches;
+      const safeBottom = compact ? 100 : 18;
+      const width = Math.min(212, Math.max(140, viewportWidth - 24));
+      const left = Math.max(12, Math.min(rect.left, viewportWidth - width - 12));
+      const belowSpace = viewportHeight - safeBottom - rect.bottom;
+      const topCandidate = belowSpace >= predictedHeight + 10
+        ? rect.bottom + 8
+        : rect.top - predictedHeight - 8;
+      const top = Math.max(10, Math.min(topCandidate, viewportHeight - safeBottom - predictedHeight));
+      setPlacement((prev) => prev && prev.left === left && prev.top === top && prev.width === width
+        ? prev : { left, top, width });
+    };
+    position();
+    // A second measurement settles the position when a folder entrance animation finishes.
+    raf = window.requestAnimationFrame(position);
+    window.addEventListener("resize", position);
+    document.addEventListener("scroll", position, true);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      window.removeEventListener("resize", position);
+      document.removeEventListener("scroll", position, true);
+    };
+  }, [title, children]);
+
+  if (!placement || typeof document === "undefined") return null;
+  return createPortal(
+    <div
+      className="kit-modern-action-popover"
+      role="menu"
+      aria-label={title}
+      style={{ position: "fixed", left: placement.left, top: placement.top, width: placement.width }}
+      onClick={(event) => event.stopPropagation()}
+    >
+      <div className="kit-modern-action-popover__heading">{title}</div>
+      {children}
+    </div>,
+    document.body,
+  );
+}
+
 export default function KitsClient({ account, initialCatalog, initialKits, initialFolders, bootstrapWarnings = [] }) {
   const can = (action) => featureAllowed(account, `kits.${action}`);
   // Creation must be able to save its components as well as its header.
@@ -321,7 +378,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
 
   useEffect(() => {
     const close = (event) => {
-      if (!event.target.closest(".products-proposal-folder")) setFolderMenu("");
+      if (!event.target.closest(".products-proposal-folder") && !event.target.closest(".kit-modern-action-popover")) setFolderMenu("");
       if (pickerRef.current && !pickerRef.current.contains(event.target)) setProductPickerOpen(false);
       if (!event.target.closest(".proposal-download-menu-wrap") && !event.target.closest(".proposal-download-modal")) setDownloadMenuOpen(false);
       if (!event.target.closest(".proposal-sort-menu-wrap")) setSortMenuOpen(false);
@@ -735,16 +792,16 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
     return await askPassword({ title: "Admin password required", message: message || "This kit belongs to another user." });
   };
 
-  const startCreateKit = async () => {
-    const adminPassword = await askPassword({
-      title: "Create New Kit",
-      message: "Enter the Admin password to create a new kit.",
-    });
-    if (adminPassword === null) return;
+  // ERP_KITS_CREATE_PERMISSIONS_MODERN_MENU_V1
+  // Creation uses the existing Advanced Permissions gate (kits.create + kits.item_add).
+  // Newly created kits belong to the signed-in user; no Admin password is needed.
+  // Edit, move and delete of other users' kits keep their original verification.
+  const startCreateKit = () => {
+    if (!canCreate) return;
     const createdBy = text(account?.name || account?.fullName || account?.username || account?.email);
     setCreateMode(true);
     setDetailEdit(true);
-    setEditAdminPassword(adminPassword);
+    setEditAdminPassword("");
     setEditName("");
     setDraftErrors({ name: "", items: "" });
     setActiveDetail({
@@ -1051,12 +1108,12 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
     return (
       <article className={`products-proposal-folder kit-library-kit ${menuOpen ? "is-menu-open" : ""}`} key={kit.id}>
         {menuOpen && (can("edit") || can("copy") || can("delete") || can("item_add") || can("item_edit") || can("item_delete")) ? (
-          <div className="proposal-folder-menu" onClick={(event) => event.stopPropagation()}>
+          <KitModernActionMenu title="Kit actions">
             {can("edit") || can("item_add") || can("item_edit") || can("item_delete") ? <button type="button" onClick={() => { setFolderMenu(""); enterEditKit(kit); }}><FeatherIcon name="edit" /><span>Edit</span></button> : null}
             {can("edit") ? <button type="button" onClick={() => { setFolderMenu(""); startMoveKit(kit); }}><FeatherIcon name="move" /><span>Move</span></button> : null}
             {can("copy") ? <button type="button" onClick={() => { setFolderMenu(""); setNameDialog({ mode: "copy", kit, value: `${kit.name} copy` }); }}><FeatherIcon name="copy" /><span>Make a copy</span></button> : null}
             {can("delete") ? <button type="button" className="is-danger" onClick={() => { setFolderMenu(""); deleteKit(kit); }}><FeatherIcon name="trash" /><span>Delete</span></button> : null}
-          </div>
+          </KitModernActionMenu>
         ) : null}
         <button
           type="button"
@@ -1171,10 +1228,10 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
     return (
       <article className={`products-proposal-folder kit-library-folder ${menuOpen ? "is-menu-open" : ""}`} key={folder.id}>
         {menuOpen && can("folder_manage") ? (
-          <div className="proposal-folder-menu" onClick={(event) => event.stopPropagation()}>
+          <KitModernActionMenu title="Folder actions">
             {can("folder_manage") ? <button type="button" onClick={() => { setFolderMenu(""); renameFolder(folder); }}><FeatherIcon name="edit" /><span>Rename</span></button> : null}
             {can("folder_manage") ? <button type="button" className="is-danger" onClick={() => { setFolderMenu(""); deleteFolder(folder); }}><FeatherIcon name="trash" /><span>Delete folder</span></button> : null}
-          </div>
+          </KitModernActionMenu>
         ) : null}
         <button
           type="button"

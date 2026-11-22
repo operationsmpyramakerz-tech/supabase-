@@ -1,0 +1,94 @@
+/* ERP_KITS_CREATE_PERMISSIONS_MODERN_MENU_V1
+   Viewport-anchored Modern List; no card clipping, even in the leftmost column.
+   Portal is rendered under <body>, outside animated card/grid containers. */
+body.kits-page .kit-modern-action-popover {
+  z-index: 2147482800 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  box-sizing: border-box !important;
+  max-width: calc(100vw - 24px) !important;
+  max-height: min(290px, calc(100dvh - 125px)) !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  padding: 7px !important;
+  margin: 0 !important;
+  border: 1px solid #e2e6ee !important;
+  border-radius: 17px !important;
+  background: #ffffff !important;
+  color: #121826 !important;
+  box-shadow: 0 15px 42px rgba(10, 17, 29, .20), 0 3px 8px rgba(10, 17, 29, .06) !important;
+  animation: kitsModernMenuIn .16s cubic-bezier(.2, .8, .2, 1) both;
+  isolation: isolate;
+  overscroll-behavior: contain;
+}
+body.kits-page .kit-modern-action-popover__heading {
+  padding: 8px 10px 9px;
+  margin: 0 0 3px;
+  color: #64748b;
+  background: transparent;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: .065em;
+  text-transform: uppercase;
+  line-height: 1.1;
+}
+body.kits-page .kit-modern-action-popover > button {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 9px !important;
+  flex: 0 0 auto !important;
+  box-sizing: border-box !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 43px !important;
+  margin: 0 !important;
+  padding: 8px 9px !important;
+  border: 0 !important;
+  border-radius: 10px !important;
+  background: transparent !important;
+  color: #111827 !important;
+  font: inherit !important;
+  font-size: 12px !important;
+  font-weight: 850 !important;
+  line-height: 1.25 !important;
+  text-align: left !important;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: none !important;
+  transform: none !important;
+}
+body.kits-page .kit-modern-action-popover > button + button { margin-top: 2px !important; }
+body.kits-page .kit-modern-action-popover > button:hover,
+body.kits-page .kit-modern-action-popover > button:focus-visible {
+  background: #f4f6f9 !important;
+  outline: none !important;
+}
+body.kits-page .kit-modern-action-popover > button svg {
+  display: block !important;
+  width: 17px !important;
+  height: 17px !important;
+  flex: 0 0 17px !important;
+  color: #344054 !important;
+  stroke-width: 2 !important;
+}
+body.kits-page .kit-modern-action-popover > button span { overflow: hidden; text-overflow: ellipsis; }
+body.kits-page .kit-modern-action-popover > button.is-danger { color: #d92d20 !important; }
+body.kits-page .kit-modern-action-popover > button.is-danger svg { color: #d92d20 !important; }
+body.kits-page .kit-modern-action-popover > button.is-danger:hover { background: #fff1f1 !important; }
+@keyframes kitsModernMenuIn {
+  from { opacity: 0; transform: translateY(5px) scale(.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.kits-page .kit-modern-action-popover { animation: none !important; }
+}
+html[data-theme="dark"] body.kits-page .kit-modern-action-popover {
+  background: #161b25 !important;
+  border-color: #343c4b !important;
+  color: #f2f4f8 !important;
+}
+html[data-theme="dark"] body.kits-page .kit-modern-action-popover__heading { color: #a5b1c3 !important; }
+html[data-theme="dark"] body.kits-page .kit-modern-action-popover > button { color: #edf2f7 !important; }
+html[data-theme="dark"] body.kits-page .kit-modern-action-popover > button svg { color: #b8c1ce !important; }
+html[data-theme="dark"] body.kits-page .kit-modern-action-popover > button:hover { background: #292f3b !important; }
