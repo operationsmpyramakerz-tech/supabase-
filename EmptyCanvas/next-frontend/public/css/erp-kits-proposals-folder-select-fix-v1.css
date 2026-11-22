@@ -1,0 +1,84 @@
+/* ERP_KITS_PROPOSALS_FOLDER_SELECT_FIX_V1
+ * Route scoped. Create Folder uses a contentEditable DIV rather than an input.
+ * Force a visible field on both pages, without modifying platform keyboard UI. */
+body:is(.kits-page,.proposals-page) :is(.next-kits-classic-parity,.next-proposals-classic-parity)
+.next-kit-create-folder-sheet .next-kit-create-folder-form > label {
+  display:flex !important; flex-direction:column !important; align-items:stretch !important;
+  gap:9px !important; width:100% !important; min-width:0 !important;
+}
+body:is(.kits-page,.proposals-page) :is(.next-kits-classic-parity,.next-proposals-classic-parity)
+.next-kit-create-folder-sheet .next-kit-create-folder-form > label > .kit-folder-name-plain-editor {
+  box-sizing:border-box !important; display:block !important; visibility:visible !important;
+  opacity:1 !important; position:relative !important; z-index:1 !important;
+  align-self:stretch !important; flex:0 0 54px !important;
+  width:100% !important; min-width:0 !important; height:54px !important;
+  min-height:54px !important; max-height:54px !important;
+  margin:0 !important; padding:15px 14px !important;
+  border:1px solid #d5dce5 !important; border-radius:15px !important;
+  outline:none !important; background:#f8fafc !important;
+  box-shadow:0 1px 3px rgba(16,24,40,.04) !important;
+  color:#111827 !important; caret-color:#101828 !important;
+  font-family:inherit !important; font-size:16px !important;
+  font-weight:600 !important; line-height:22px !important;
+  text-align:left !important; letter-spacing:normal !important;
+  white-space:nowrap !important; overflow-x:auto !important; overflow-y:hidden !important;
+  overflow-wrap:normal !important; word-break:normal !important;
+  -webkit-user-select:text !important; user-select:text !important; pointer-events:auto !important;
+}
+body:is(.kits-page,.proposals-page) :is(.next-kits-classic-parity,.next-proposals-classic-parity)
+.next-kit-create-folder-sheet .next-kit-create-folder-form > label > .kit-folder-name-plain-editor[data-empty="true"]::before,
+body:is(.kits-page,.proposals-page) :is(.next-kits-classic-parity,.next-proposals-classic-parity)
+.next-kit-create-folder-sheet .next-kit-create-folder-form > label > .kit-folder-name-plain-editor:empty::before {
+  content:"Example: TH1 Kits" !important; display:inline !important;
+  color:#798393 !important; font-size:16px !important; font-weight:500 !important;
+  pointer-events:none !important;
+}
+body:is(.kits-page,.proposals-page) :is(.next-kits-classic-parity,.next-proposals-classic-parity)
+.next-kit-create-folder-sheet .next-kit-create-folder-form > label > .kit-folder-name-plain-editor:focus {
+  border-color:#f97316 !important; background:#fff !important;
+  box-shadow:0 0 0 3px rgba(249,115,22,.13) !important;
+}
+/* Compact one-line selection toolbar: count | Select all | Done. */
+body:is(.kits-page,.proposals-page) :is(.next-kits-classic-parity,.next-proposals-classic-parity)
+.kit-bulk-toolbar.kit-bulk-toolbar--compact {
+  display:grid !important; grid-template-columns:minmax(0,1fr) auto !important;
+  align-items:center !important; column-gap:9px !important; row-gap:0 !important;
+  min-height:58px !important; padding:11px 13px !important;
+  margin-bottom:12px !important; border-radius:17px !important;
+}
+body:is(.kits-page,.proposals-page) :is(.next-kits-classic-parity,.next-proposals-classic-parity)
+.kit-bulk-toolbar--compact .kit-bulk-toolbar__label {
+  display:flex !important; align-items:center !important; gap:7px !important;
+  min-width:0 !important; margin:0 !important;
+  white-space:nowrap !important; font-size:13px !important;
+}
+body:is(.kits-page,.proposals-page) :is(.next-kits-classic-parity,.next-proposals-classic-parity)
+.kit-bulk-toolbar--compact .kit-bulk-toolbar__label svg {
+  width:19px !important; height:19px !important; flex-shrink:0 !important;
+}
+body:is(.kits-page,.proposals-page) :is(.next-kits-classic-parity,.next-proposals-classic-parity)
+.kit-bulk-toolbar--compact .kit-bulk-toolbar__controls {
+  display:flex !important; align-items:center !important; justify-content:flex-end !important;
+  flex-wrap:nowrap !important; min-width:0 !important; gap:7px !important;
+}
+body:is(.kits-page,.proposals-page) :is(.next-kits-classic-parity,.next-proposals-classic-parity)
+.kit-bulk-toolbar--compact .kit-bulk-toolbar__controls button {
+  background:#222b3b !important; border:1px solid #384458 !important;
+  color:#fff !important; min-height:37px !important; border-radius:11px !important;
+  padding:7px 11px !important; font-size:12px !important; font-weight:800 !important;
+  line-height:1.2 !important; white-space:nowrap !important;
+}
+body:is(.kits-page,.proposals-page) :is(.next-kits-classic-parity,.next-proposals-classic-parity)
+.kit-bulk-toolbar--compact .kit-bulk-toolbar__controls button:last-child {
+  border-color:#536074 !important; background:#354256 !important;
+}
+@media(max-width:390px) {
+  body:is(.kits-page,.proposals-page) :is(.next-kits-classic-parity,.next-proposals-classic-parity)
+  .kit-bulk-toolbar--compact { padding:9px 10px !important; column-gap:5px !important; }
+  body:is(.kits-page,.proposals-page) :is(.next-kits-classic-parity,.next-proposals-classic-parity)
+  .kit-bulk-toolbar--compact .kit-bulk-toolbar__label { font-size:11px !important; gap:5px !important; }
+  body:is(.kits-page,.proposals-page) :is(.next-kits-classic-parity,.next-proposals-classic-parity)
+  .kit-bulk-toolbar--compact .kit-bulk-toolbar__label svg { width:16px !important; height:16px !important; }
+  body:is(.kits-page,.proposals-page) :is(.next-kits-classic-parity,.next-proposals-classic-parity)
+  .kit-bulk-toolbar--compact .kit-bulk-toolbar__controls button { font-size:11px !important; padding:6px 7px !important; }
+}

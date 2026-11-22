@@ -1950,14 +1950,12 @@ export default function ProposalsClient({
       <section className="products-proposals-view proposals-workspace proposals-folders-card proposal-library-page" aria-live="polite">
         <section className="proposals-panel">
           {proposalSelectMode ? (
-            <div className="kit-bulk-toolbar" role="group" aria-label="Multi-select Proposals">
+            <div className="kit-bulk-toolbar kit-bulk-toolbar--compact" role="group" aria-label="Multi-select Proposals. Long-press a selected Proposal for actions.">
               <div className="kit-bulk-toolbar__label"><ProposalIcon name="grid"/><span>{selectedProposalIds.length} selected</span></div>
               <div className="kit-bulk-toolbar__controls">
                 <button type="button" onClick={() => setSelectedProposalIds(filteredProposals.map((p) => p.id))} disabled={busy}>Select all</button>
-                <button type="button" className="kit-bulk-toolbar__actions" disabled={busy || !selectedProposalIds.length} onClick={() => setFolderMenu(`proposal:${selectedProposalIds[0]}`)}>Actions</button>
                 <button type="button" onClick={exitProposalSelection} disabled={busy}>Done</button>
               </div>
-              <small>Tap proposals to select · Long-press a selected proposal for actions</small>
             </div>
           ) : null}
           <div className="products-proposals-list">

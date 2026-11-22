@@ -1702,14 +1702,12 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
       <section className="products-proposals-view proposals-workspace proposals-folders-card" aria-live="polite">
         <section className="proposals-panel">
           {kitSelectMode ? (
-            <div className="kit-bulk-toolbar" role="group" aria-label="Multi-select Kits">
+            <div className="kit-bulk-toolbar kit-bulk-toolbar--compact" role="group" aria-label="Multi-select Kits. Long-press a selected Kit for actions.">
               <div className="kit-bulk-toolbar__label"><FeatherIcon name="grid" /><span>{selectedKitIds.length} selected</span></div>
               <div className="kit-bulk-toolbar__controls">
                 <button type="button" onClick={() => setSelectedKitIds(filteredKits.map((kit) => kit.id))} disabled={busy}>Select all</button>
-                <button type="button" className="kit-bulk-toolbar__actions" onClick={() => { if (selectedKitIds.length) setFolderMenu(`kit:${selectedKitIds[0]}`); }} disabled={busy || !selectedKitIds.length}>Actions</button>
                 <button type="button" onClick={exitKitSelection} disabled={busy}>Done</button>
               </div>
-              <small>Tap Kits to select · Long-press a selected Kit for actions</small>
             </div>
           ) : null}
           <div className="products-proposals-list">
