@@ -602,8 +602,10 @@ export function MoveKitModal({ dialog, folders, busy, onClose, onSubmit }) {
   return (
     <Modal
       title="Move Kit"
-      subtitle={`Choose where “${kit?.name || "this kit"}” should be moved.`}
-      icon={<FeatherIcon name="move" size={20} />}
+      icon={/* ERP_KITS_MOVE_SHEET_HEADER_FOOTER_V2 */ <svg viewBox="0 0 32 32" width="35" height="35" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M5.5 10.5A2.5 2.5 0 0 1 8 8h5l3 3h8a2.5 2.5 0 0 1 2.5 2.5v10A2.5 2.5 0 0 1 24 26H8a2.5 2.5 0 0 1-2.5-2.5Z" />
+        <path d="M10.5 18h12m-4-4 4 4-4 4" />
+      </svg>}
       onClose={onClose}
       className="next-kit-move-sheet"
       overlayClassName="next-kit-move-overlay"
