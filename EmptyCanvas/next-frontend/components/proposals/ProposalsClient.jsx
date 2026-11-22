@@ -4,6 +4,7 @@ import HeaderFolderBreadcrumb from "../HeaderFolderBreadcrumb";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import { createPortal } from "react-dom";
 import SaveProgressModal, { useSaveProgress } from "../SaveProgressModal";
 import ActionLoadingModal, { useActionLoading } from "../ActionLoadingModal";
 import { confirmDelete } from "../../lib/client-confirm";
@@ -15,6 +16,7 @@ const NameModal = dynamic(() => import("./ProposalDialogs").then((module) => mod
 const PasswordModal = dynamic(() => import("./ProposalDialogs").then((module) => module.PasswordModal), { ssr: false });
 const ProposalFolderNameModal = dynamic(() => import("../kits/KitDialogs").then((module) => module.FolderNameModal), { ssr: false });
 const MoveProposalModal = dynamic(() => import("./ProposalFoldersDialogs").then((module) => module.MoveProposalModal), { ssr: false });
+const BulkProposalEditModal = dynamic(() => import("./ProposalFoldersDialogs").then((module) => module.BulkProposalEditModal), { ssr: false });
 const AddItemsModal = dynamic(() => import("./ProposalDialogs").then((module) => module.AddItemsModal), { ssr: false });
 const ProposalDownloadModal = dynamic(() => import("./ProposalDialogs").then((module) => module.ProposalDownloadModal), { ssr: false });
 const MakeOrderModal = dynamic(() => import("./ProposalDialogs").then((module) => module.MakeOrderModal), { ssr: false });
@@ -36,10 +38,14 @@ const COMBINE_LOGICS = [
 ];
 
 const PROPOSAL_ICON_PATHS = {
+  move: [<path key="p1" d="M12 2v20M2 12h20M9 5l3-3 3 3M9 19l3 3 3-3M5 9l-3 3 3 3M19 9l3 3-3 3" />],
+  arrowLeft: [<line key="l" x1="19" y1="12" x2="5" y2="12" />,<polyline key="p" points="12 19 5 12 12 5" />],
+
   download: [<path key="p1" d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />, <polyline key="p2" points="7 10 12 15 17 10" />, <line key="l" x1="12" y1="15" x2="12" y2="3" />],
   externalLink: [<path key="p1" d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />, <polyline key="p2" points="15 3 21 3 21 9" />, <line key="l" x1="10" y1="14" x2="21" y2="3" />],
   shoppingBag: [<path key="p1" d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z" />, <line key="l" x1="3" y1="6" x2="21" y2="6" />, <path key="p2" d="M16 10a4 4 0 0 1-8 0" />],
   folder: [<path key="p" d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />],
+  folderPlus: [<path key="p1" d="M3 5a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />, <path key="p2" d="M12 10v6M9 13h6" />],
   archive: [<polyline key="p1" points="21 8 21 21 3 21 3 8" />, <rect key="r" x="1" y="3" width="22" height="5" rx="1" />, <line key="l" x1="10" y1="12" x2="14" y2="12" />],
   edit: [<path key="p1" d="M12 20h9" />, <path key="p2" d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />],
   copy: [<rect key="r" x="9" y="9" width="13" height="13" rx="2" ry="2" />, <path key="p" d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />],
@@ -369,6 +375,60 @@ function ProposalMultiSelect({ proposals, selectedIds, onToggle }) {
 }
 
 
+/* ERP_PROPOSALS_KITS_PARITY_V2: viewport-aware actions shared with Kits. */
+function ProposalModernActionMenu({ title, children }) {
+  const [placement, setPlacement] = useState(null);
+
+  useEffect(() => {
+    const items = Array.isArray(children) ? children.filter(Boolean).length : (children ? 1 : 0);
+    const predictedHeight = 48 + items * 48 + 10;
+    let raf = 0;
+    const position = () => {
+      const anchor = document.querySelector(".next-proposals-classic-parity .proposal-library-grid > .products-proposal-folder.is-menu-open");
+      if (!anchor) return;
+      const rect = anchor.getBoundingClientRect();
+      const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const compact = window.matchMedia("(max-width: 768px)").matches;
+      const safeBottom = compact ? 100 : 18;
+      const width = Math.min(212, Math.max(140, viewportWidth - 24));
+      const left = Math.max(12, Math.min(rect.left, viewportWidth - width - 12));
+      const belowSpace = viewportHeight - safeBottom - rect.bottom;
+      const topCandidate = belowSpace >= predictedHeight + 10
+        ? rect.bottom + 8
+        : rect.top - predictedHeight - 8;
+      const top = Math.max(10, Math.min(topCandidate, viewportHeight - safeBottom - predictedHeight));
+      setPlacement((prev) => prev && prev.left === left && prev.top === top && prev.width === width
+        ? prev : { left, top, width });
+    };
+    position();
+    // A second measurement settles the position when a folder entrance animation finishes.
+    raf = window.requestAnimationFrame(position);
+    window.addEventListener("resize", position);
+    document.addEventListener("scroll", position, true);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      window.removeEventListener("resize", position);
+      document.removeEventListener("scroll", position, true);
+    };
+  }, [title, children]);
+
+  if (!placement || typeof document === "undefined") return null;
+  return createPortal(
+    <div
+      className="kit-modern-action-popover"
+      role="menu"
+      aria-label={title}
+      style={{ position: "fixed", left: placement.left, top: placement.top, width: placement.width }}
+      onClick={(event) => event.stopPropagation()}
+    >
+      <div className="kit-modern-action-popover__heading">{title}</div>
+      {children}
+    </div>,
+    document.body,
+  );
+}
+
 export default function ProposalsClient({
   account,
   initialCatalog,
@@ -378,6 +438,7 @@ export default function ProposalsClient({
   initialFolders,
 }) {
   const can = (action) => featureAllowed(account, `proposals.${action}`);
+  const canCreate = can("create") && can("item_add");
   const [products, setProducts] = useState(() => (Array.isArray(initialCatalog?.products) ? initialCatalog.products : []).map(normalizeProduct));
   const [proposals, setProposals] = useState(() => (Array.isArray(initialProposals?.proposals) ? initialProposals.proposals : []).map(normalizeProposal));
   const [kits, setKits] = useState(() => (Array.isArray(initialKits?.kits) ? initialKits.kits : []).map(normalizeKit));
@@ -413,6 +474,10 @@ export default function ProposalsClient({
   const [makeOrderOpen, setMakeOrderOpen] = useState(false);
   const [sourceKitManagerOpen, setSourceKitManagerOpen] = useState(false);
   const [folderMenu, setFolderMenu] = useState("");
+  const [proposalSelectMode, setProposalSelectMode] = useState(false);
+  const [selectedProposalIds, setSelectedProposalIds] = useState([]);
+  const [bulkEditOpen, setBulkEditOpen] = useState(false);
+  const proposalBatchRunning = useRef(false);
   const folderLongPressTimerRef = useRef(null);
   const folderLongPressStartRef = useRef(null);
   const suppressFolderClickRef = useRef(false);
@@ -445,12 +510,17 @@ export default function ProposalsClient({
 
   useEffect(() => {
     const close = (event) => {
-      if (!event.target.closest(".products-proposal-folder")) setFolderMenu("");
+      if (!event.target.closest(".products-proposal-folder") && !event.target.closest(".kit-modern-action-popover")) setFolderMenu("");
       if (!event.target.closest(".proposal-download-menu-wrap") && !event.target.closest(".proposal-download-modal")) setDownloadMenuOpen(false);
       if (!event.target.closest(".proposal-sort-menu-wrap")) setSortMenuOpen(false);
     };
+    const onKey = (event) => {
+      if (event.key !== "Escape") return;
+      setFolderMenu(""); setProposalSelectMode(false); setSelectedProposalIds([]);
+    };
     document.addEventListener("click", close);
-    return () => document.removeEventListener("click", close);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("click", close); document.removeEventListener("keydown", onKey); };
   }, []);
 
   useEffect(() => () => {
@@ -474,6 +544,10 @@ export default function ProposalsClient({
       folderLongPressTimerRef.current = null;
       folderLongPressStartRef.current = null;
       suppressFolderClickRef.current = true;
+      if (proposalSelectMode && itemKey.startsWith("proposal:")) {
+        const id=itemKey.slice(9);
+        setSelectedProposalIds((items) => items.includes(id) ? items : [...items,id]);
+      }
       setFolderMenu(itemKey);
       try { if (navigator.vibrate) navigator.vibrate(28); } catch {}
     }, 550);
@@ -506,19 +580,15 @@ export default function ProposalsClient({
     const parentId = activeFolder?.id || "";
     const rows = proposals.filter((proposal) => proposal.folderId === parentId &&
       (!needle || [proposal.name, proposal.createdBy, proposal.combineNote].some((value) => lower(value).includes(needle))));
-    return rows.sort((a, b) => {
-      if (sort === "name-asc") return a.name.localeCompare(b.name);
-      if (sort === "items-desc") return b.itemsCount - a.itemsCount || a.name.localeCompare(b.name);
-      if (sort === "created-desc") return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
-      return new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0);
-    });
+    return rows.sort((a, b) => text(a.name).localeCompare(text(b.name), undefined, { numeric: true, sensitivity: "base" }) || text(a.id).localeCompare(text(b.id)));
   }, [proposals, search, sort, activeFolder?.id]);
 
   const filteredProposalFolders = useMemo(() => {
     const parentId = activeFolder?.id || "";
     const needle = lower(search);
     return folders.filter((folder) => folder.parentFolderId === parentId &&
-      (!needle || [folder.name, folder.createdBy].some((value) => lower(value).includes(needle))));
+      (!needle || [folder.name, folder.createdBy].some((value) => lower(value).includes(needle))))
+      .sort((a, b) => text(a.name).localeCompare(text(b.name), undefined, { numeric: true, sensitivity: "base" }) || text(a.id).localeCompare(text(b.id)));
   }, [folders, search, activeFolder?.id]);
 
   const folderProposalCounts = useMemo(() => {
@@ -808,7 +878,7 @@ export default function ProposalsClient({
   };
 
   const openProposalFolder = (folder) => {
-    setFolderMenu("");
+    setFolderMenu(""); setProposalSelectMode(false); setSelectedProposalIds([]);
     setSearch("");
     setActiveFolder(normalizeProposalFolder(folder));
   };
@@ -899,6 +969,11 @@ export default function ProposalsClient({
 
   const submitMoveProposal = async (folderId) => {
     const dialog = moveDialog;
+    if (dialog?.bulkIds?.length) {
+      const done = await runProposalBatch("move", { ids: dialog.bulkIds, folderId });
+      if (done) setMoveDialog(null);
+      return;
+    }
     if (!dialog?.proposal?.id) return;
     const targetId = text(folderId);
     if (targetId === text(dialog.proposal.folderId)) return;
@@ -918,17 +993,13 @@ export default function ProposalsClient({
     } finally { setBusy(false); }
   };
 
-  const startCreateProposal = async () => {
+  const startCreateProposal = () => {
+    if (!can("create") || !can("item_add")) return;
     setSearch("");
-    const adminPassword = await askPassword({
-      title: "Create New Proposal",
-      message: "Enter the Admin password to create a new proposal.",
-    });
-    if (adminPassword === null) return;
     const createdBy = text(account?.name || account?.fullName || account?.username || account?.email);
     setCreateMode(true);
     setDetailEdit(true);
-    setEditAdminPassword(adminPassword);
+    setEditAdminPassword("");
     setEditName("");
     setDraftErrors({ name: "", items: "" });
     setActiveDetail({
@@ -1787,13 +1858,90 @@ export default function ProposalsClient({
     );
   }
 
+  /* ERP_PROPOSALS_KITS_PARITY_V2: multiple proposal actions, same workflow as Kits. */
+  const beginProposalSelection = (proposal) => {
+    setFolderMenu(""); setProposalSelectMode(true); setSelectedProposalIds([proposal.id]);
+  };
+  const toggleProposalSelection = (id) => {
+    setFolderMenu("");
+    setSelectedProposalIds((ids) => ids.includes(id) ? ids.filter((i) => i !== id) : [...ids,id]);
+  };
+  const exitProposalSelection = () => {
+    setFolderMenu(""); setProposalSelectMode(false); setSelectedProposalIds([]);
+  };
+  const startProposalBatchMove = () => {
+    const items=proposals.filter((p) => selectedProposalIds.includes(p.id));
+    if (!items.length || !can("edit")) return;
+    setFolderMenu("");
+    setMoveDialog({ proposal: { ...items[0], name: `${items.length} selected proposals` }, bulkIds: items.map((p) => p.id) });
+  };
+  const runProposalBatch = async (action, options = {}) => {
+    if (busy || proposalBatchRunning.current) return false;
+    const ids=options.ids || selectedProposalIds;
+    const targets=proposals.filter((p) => ids.includes(p.id));
+    if (!targets.length) return false;
+    const permitted = action === "move" ? can("edit") : action === "copy" ? can("copy") : action === "delete" ? can("delete") : action === "edit" ? can("item_add") : false;
+    if (!permitted) { notify("You do not have permission for this action.","error"); return false; }
+    if (action === "edit" && (!options.productId || !Number.isInteger(Number(options.quantity)) || Number(options.quantity)<1)) {
+      notify("Select a component and a valid quantity.","error"); return false;
+    }
+    if (action === "move" && text(options.folderId) && !folders.some((f) => f.id === text(options.folderId))) {
+      notify("Choose an existing folder.","error"); return false;
+    }
+    let adminPassword="";
+    if (action !== "copy" && targets.some((p) => !p.canEdit)) {
+      adminPassword=await askPassword({ title:"Admin password required", message:`Enter the Admin password to ${action} ${targets.length} proposals created by other users.` });
+      if (adminPassword === null) return false;
+    }
+    if (action === "delete") {
+      const confirmed=await confirmDelete({ itemName:`${targets.length} selected proposals`, itemType:"proposal", title:`Delete ${targets.length} proposals?`, message:`Permanently delete ${targets.length} selected proposals and their saved components? This cannot be undone.`, confirmLabel:`Delete ${targets.length} Proposals` });
+      if (!confirmed) return false;
+    }
+    proposalBatchRunning.current=true; setBusy(true); setFolderMenu("");
+    const failures=[]; let succeeded=0;
+    try {
+      for (const proposal of targets) {
+        try {
+          if (action === "move") {
+            if (proposal.folderId !== text(options.folderId)) {
+              const response=await requestJson(`/next/api/products/proposals/${encodeURIComponent(proposal.id)}`, { method:"PATCH", body:JSON.stringify({ name:proposal.name, folderId:text(options.folderId), adminPassword }) });
+              syncProposal(response.proposal || { ...proposal,folderId:text(options.folderId) });
+            }
+          } else if (action === "copy") {
+            const response=await requestJson(`/next/api/products/proposals/${encodeURIComponent(proposal.id)}/copy`, { method:"POST", body:JSON.stringify({ name:`${proposal.name} Copy` }) });
+            if (response.proposal) syncProposal(response.proposal);
+          } else if (action === "delete") {
+            await requestJson(`/next/api/products/proposals/${encodeURIComponent(proposal.id)}`, { method:"DELETE", body:JSON.stringify({ adminPassword }) });
+            setProposals((list) => list.filter((p) => p.id!==proposal.id));
+          } else if (action === "edit") {
+            // Existing add-item endpoint ADDS this quantity; does not overwrite the proposal.
+            await requestJson(`/next/api/products/proposals/${encodeURIComponent(proposal.id)}/items`, { method:"POST", body:JSON.stringify({productId:options.productId,quantity:Number(options.quantity),mergeLogic:"add",adminPassword}) });
+          }
+          succeeded++;
+        } catch (error) { failures.push({id:proposal.id,name:proposal.name,reason:error?.message || "Request failed"}); }
+      }
+      try {
+        const result=await requestJson(`/next/api/products/proposals?_fresh=1&_ts=${Date.now()}`);
+        if (Array.isArray(result.proposals)) setProposals(result.proposals.map(normalizeProposal));
+      } catch (refreshError) { notify("Changes saved, but refresh failed. Reload to see the latest proposals.","error"); }
+      if (failures.length) {
+        setSelectedProposalIds(failures.map((f) => f.id));
+        notify(`${succeeded} completed; ${failures.length} failed. ${failures.slice(0,2).map((f) => `${f.name}: ${f.reason}`).join(" | ")}`,"error");
+      } else {
+        exitProposalSelection();
+        notify(`${succeeded} proposal${succeeded === 1 ? "" : "s"} ${action === "copy" ? "copied" : action === "move" ? "moved" : action === "edit" ? "updated" : "deleted"}.`);
+      }
+      return !failures.length;
+    } finally { proposalBatchRunning.current=false; setBusy(false); }
+  };
+
   return (
     <main className="products-shell proposals-shell next-proposals-classic-parity">
       <Toast toast={toast} onClose={() => setToast(null)} />
 
 
       {activeFolder ? <HeaderFolderBreadcrumb segments={[
-        { label: "Proposals", icon: "folder", onClick: () => { setActiveFolder(null); setSearch(""); setFolderMenu(""); } },
+        { label: "Proposals", icon: "folder", onClick: () => { setActiveFolder(null); setSearch(""); setFolderMenu(""); setProposalSelectMode(false); setSelectedProposalIds([]); } },
         ...proposalFolderPath(activeFolder, folders).map((folder) => ({
           label: folder.name, icon: "folder-check", onClick: () => openProposalFolder(folder),
         })),
@@ -1801,40 +1949,39 @@ export default function ProposalsClient({
 
       <section className="products-proposals-view proposals-workspace proposals-folders-card proposal-library-page" aria-live="polite">
         <section className="proposals-panel">
-          {!activeFolder ? (
-            <header className="kit-library-heading proposal-library-heading">
-              <div className="kit-library-heading__title">
-                <span className="kit-library-heading__icon" aria-hidden="true"><ProposalIcon name="folder" /></span>
-                <h2>Proposal Folders</h2>
+          {proposalSelectMode ? (
+            <div className="kit-bulk-toolbar" role="group" aria-label="Multi-select Proposals">
+              <div className="kit-bulk-toolbar__label"><ProposalIcon name="grid"/><span>{selectedProposalIds.length} selected</span></div>
+              <div className="kit-bulk-toolbar__controls">
+                <button type="button" onClick={() => setSelectedProposalIds(filteredProposals.map((p) => p.id))} disabled={busy}>Select all</button>
+                <button type="button" className="kit-bulk-toolbar__actions" disabled={busy || !selectedProposalIds.length} onClick={() => setFolderMenu(`proposal:${selectedProposalIds[0]}`)}>Actions</button>
+                <button type="button" onClick={exitProposalSelection} disabled={busy}>Done</button>
               </div>
-              <div className="proposal-library-heading__side">
-                {can("combine") ? <button type="button" className="proposal-library-combine" onClick={() => setCombineOpen(true)} disabled={proposals.length < 2}>Combine Proposals</button> : null}
-                <span className="kit-library-heading__count">{folders.length} folder{folders.length === 1 ? "" : "s"}</span>
-              </div>
-            </header>
+              <small>Tap proposals to select · Long-press a selected proposal for actions</small>
+            </div>
           ) : null}
           <div className="products-proposals-list">
             {(filteredProposalFolders.length || filteredProposals.length || can("create")) ? (
-              <div className="products-proposal-folders kit-library-grid proposal-library-grid">
+              <div className="products-proposal-folders kit-library-grid kit-library-grid--root proposal-library-grid">
                 {can("create") ? (
                   <div className="kit-quick-create kit-quick-create--folder">
                     <button type="button" className="kit-quick-create__tile" onClick={() => {
                       setFolderMenu(""); setFolderDialog({ mode: "create", value: "" });
                     }} aria-label="Create Folder">
                       <span className="kit-quick-create__illustration" aria-hidden="true">
-                        <ProposalIcon name="folder" size={39}/><span className="kit-quick-create__spark"/>
+                        <ProposalIcon name="folderPlus" size={39}/>
                       </span>
                       <strong>Create Folder</strong><small>Add a new folder</small>
                     </button>
                   </div>
                 ) : null}
-                {can("create") ? (
+                {canCreate ? (
                   <div className="kit-quick-create kit-quick-create--kit">
                     <button type="button" className="kit-quick-create__tile" onClick={() => {
                       setFolderMenu(""); startCreateProposal();
                     }} aria-label="Create Proposal">
                       <span className="kit-quick-create__illustration" aria-hidden="true">
-                        <ProposalIcon name="file" size={39}/><span className="kit-quick-create__spark"/>
+                        <ProposalIcon name="file" size={39}/>
                       </span>
                       <strong>Create Proposal</strong><small>Add a new proposal</small>
                     </button>
@@ -1846,12 +1993,12 @@ export default function ProposalsClient({
                   const proposalCount = folderProposalCounts.get(folder.id) || 0;
                   const childCount = folderChildCounts.get(folder.id) || 0;
                   return (
-                    <article className={`products-proposal-folder proposal-library-folder ${menuOpen ? "is-menu-open" : ""}`} key={folder.id}>
+                    <article className={`products-proposal-folder proposal-library-folder kit-library-folder ${menuOpen ? "is-menu-open" : ""}`} key={folder.id}>
                       {menuOpen && can("edit") ? (
-                        <div className="proposal-folder-menu" onClick={(event) => event.stopPropagation()}>
+                        <ProposalModernActionMenu title="Folder actions">
                           <button type="button" onClick={() => { setFolderMenu(""); renameProposalFolder(folder); }}><ProposalIcon name="edit" /><span>Rename</span></button>
                           <button type="button" className="is-danger" onClick={() => { setFolderMenu(""); deleteProposalFolder(folder); }}><ProposalIcon name="trash" /><span>Delete folder</span></button>
-                        </div>
+                        </ProposalModernActionMenu>
                       ) : null}
                       <button
                         type="button"
@@ -1891,15 +2038,23 @@ export default function ProposalsClient({
                 })}
                 {filteredProposals.map((proposal) => {
                   const menuOpen = folderMenu === `proposal:${proposal.id}`;
+                  const selected = selectedProposalIds.includes(proposal.id);
                   return (
-                  <article className={`products-proposal-folder ${menuOpen ? "is-menu-open" : ""}`} key={proposal.id}>
-                    {menuOpen && (can("edit") || can("copy") || can("delete") || can("item_add") || can("item_edit") || can("item_delete")) ? (
-                      <div className="proposal-folder-menu" onClick={(event) => event.stopPropagation()}>
-                        {(can("edit") || can("item_add") || can("item_edit") || can("item_delete")) ? <button type="button" onClick={() => enterEditProposal(proposal)}><ProposalIcon name="edit" /><span>Edit</span></button> : null}
-                        {can("edit") ? <button type="button" onClick={() => { setFolderMenu(""); moveProposal(proposal); }}><ProposalIcon name="folder" /><span>Move</span></button> : null}
-                        {can("copy") ? <button type="button" onClick={() => { setFolderMenu(""); setNameDialog({ mode: "copy", proposal, value: `${proposal.name} Copy` }); }}><ProposalIcon name="copy" /><span>Make a copy</span></button> : null}
-                        {can("delete") ? <button type="button" className="is-danger" onClick={() => { setFolderMenu(""); deleteProposal(proposal); }}><ProposalIcon name="trash" /><span>Delete</span></button> : null}
-                      </div>
+                  <article className={`products-proposal-folder kit-library-kit ${menuOpen ? "is-menu-open" : ""} ${proposalSelectMode ? "kit-bulk-selectable" : ""} ${selected ? "kit-bulk-selected" : ""}`} key={proposal.id}>
+                    {proposalSelectMode ? <span className="kit-bulk-selection-indicator" aria-hidden="true">{selected ? "✓" : ""}</span> : null}
+                    {menuOpen && (proposalSelectMode || can("edit") || can("copy") || can("delete") || can("item_add") || can("item_edit") || can("item_delete")) ? (
+                      <ProposalModernActionMenu title={proposalSelectMode ? `${selectedProposalIds.length} proposals selected` : "Proposal actions"}>
+                        {!proposalSelectMode && (can("edit") || can("copy") || can("delete") || can("item_add")) ? <button type="button" onClick={() => beginProposalSelection(proposal)}><ProposalIcon name="grid" /><span>Select</span></button> : null}
+                        {!proposalSelectMode && (can("edit") || can("item_add") || can("item_edit") || can("item_delete")) ? <button type="button" onClick={() => {setFolderMenu(""); enterEditProposal(proposal);}}><ProposalIcon name="edit" /><span>Edit</span></button> : null}
+                        {!proposalSelectMode && can("edit") ? <button type="button" onClick={() => { setFolderMenu(""); moveProposal(proposal); }}><ProposalIcon name="move" /><span>Move</span></button> : null}
+                        {!proposalSelectMode && can("copy") ? <button type="button" onClick={() => { setFolderMenu(""); setNameDialog({ mode: "copy", proposal, value: `${proposal.name} Copy` }); }}><ProposalIcon name="copy" /><span>Make a copy</span></button> : null}
+                        {!proposalSelectMode && can("delete") ? <button type="button" className="is-danger" onClick={() => { setFolderMenu(""); deleteProposal(proposal); }}><ProposalIcon name="trash" /><span>Delete</span></button> : null}
+                        {proposalSelectMode && can("item_add") && selectedProposalIds.length ? <button type="button" onClick={() => {setFolderMenu("");setBulkEditOpen(true);}}><ProposalIcon name="edit" /><span>Edit · Add component</span></button> : null}
+                        {proposalSelectMode && can("edit") && selectedProposalIds.length ? <button type="button" onClick={startProposalBatchMove}><ProposalIcon name="move" /><span>Move selected</span></button> : null}
+                        {proposalSelectMode && can("copy") && selectedProposalIds.length ? <button type="button" onClick={() => runProposalBatch("copy")}><ProposalIcon name="copy" /><span>Make copies</span></button> : null}
+                        {proposalSelectMode && can("delete") && selectedProposalIds.length ? <button type="button" className="is-danger" onClick={() => runProposalBatch("delete")}><ProposalIcon name="trash" /><span>Delete selected</span></button> : null}
+                        {proposalSelectMode ? <button type="button" onClick={exitProposalSelection}><ProposalIcon name="arrowLeft" /><span>Exit selection</span></button> : null}
+                      </ProposalModernActionMenu>
                     ) : null}
                     <button
                       type="button"
@@ -1913,6 +2068,7 @@ export default function ProposalsClient({
                         event.preventDefault();
                         cancelFolderLongPress();
                         suppressFolderClickRef.current = true;
+                        if (proposalSelectMode) setSelectedProposalIds((ids) => ids.includes(proposal.id) ? ids : [...ids,proposal.id]);
                         setFolderMenu(`proposal:${proposal.id}`);
                       }}
                       onKeyDown={(event) => openFolderActionsFromKeyboard(event, `proposal:${proposal.id}`)}
@@ -1921,9 +2077,10 @@ export default function ProposalsClient({
                           suppressFolderClickRef.current = false;
                           return;
                         }
+                        if (proposalSelectMode) { toggleProposalSelection(proposal.id); return; }
                         loadProposal(proposal.id);
                       }}
-                      aria-label={`Open ${proposal.name}. Press and hold for actions.`}
+                      aria-label={proposalSelectMode ? `${selected ? "Deselect" : "Select"} ${proposal.name}. Long-press for actions.` : `Open ${proposal.name}. Press and hold for actions.`}
                       aria-haspopup="menu"
                       aria-expanded={menuOpen}
                     >
@@ -1948,115 +2105,8 @@ export default function ProposalsClient({
         </section>
       </section>
 
-      {combineOpen ? (
-        <Modal title="Combine proposals" subtitle="Select two or more proposals, choose the quantity logic, then download or save the result." icon="▦" onClose={() => setCombineOpen(false)} wide className="proposal-combine-modal">
-          <div className="proposal-classic-combine-form">
-            <ProposalMultiSelect proposals={proposals} selectedIds={selectedIds} onToggle={toggleSelected} />
-            <div className="products-field proposal-combine-logic-field">
-              <span>Combine logic</span>
-              <div className="proposal-combine-logic-grid" role="radiogroup" aria-label="Combine logic">
-                {COMBINE_LOGICS.map((option) => {
-                  const active = combineLogic === option.value;
-                  return (
-                    <button
-                      type="button"
-                      key={option.value}
-                      className={`proposal-combine-logic-option ${active ? "is-selected" : ""}`}
-                      role="radio"
-                      aria-checked={active}
-                      onClick={() => setCombineLogic(option.value)}
-                    >
-                      <span className="proposal-combine-logic-option__check" aria-hidden="true">{active ? "✓" : ""}</span>
-                      <span className="proposal-combine-logic-option__copy">
-                        <strong>{option.label}</strong>
-                        <small>{option.description}</small>
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="proposal-combine-logic-summary">Selected logic: <strong>{combineLogicLabel(combineLogic)}</strong></div>
-            </div>
-            <div className="products-field proposal-combine-logic-field">
-              <span>Group export by</span>
-              <div className="proposal-combine-logic-grid" role="radiogroup" aria-label="Group combined export by">
-                <button
-                  type="button"
-                  className={`proposal-combine-logic-option ${groupBy === "component-tag" ? "is-selected" : ""}`}
-                  role="radio"
-                  aria-checked={groupBy === "component-tag"}
-                  onClick={() => setGroupBy("component-tag")}
-                >
-                  <span className="proposal-combine-logic-option__check" aria-hidden="true">{groupBy === "component-tag" ? "✓" : ""}</span>
-                  <span className="proposal-combine-logic-option__copy">
-                    <strong>By components tag</strong>
-                    <small>Group rows by the product/component tag.</small>
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  className={`proposal-combine-logic-option ${groupBy === "kit-tag" ? "is-selected" : ""}`}
-                  role="radio"
-                  aria-checked={groupBy === "kit-tag"}
-                  onClick={() => setGroupBy("kit-tag")}
-                >
-                  <span className="proposal-combine-logic-option__check" aria-hidden="true">{groupBy === "kit-tag" ? "✓" : ""}</span>
-                  <span className="proposal-combine-logic-option__copy">
-                    <strong>By kits tag</strong>
-                    <small>Use Folder → Kit grouping and the Kit column in Excel.</small>
-                  </span>
-                </button>
-              </div>
-            </div>
-            <div className="products-field proposal-combine-logic-field">
-              <span>Repeated components</span>
-              <div className="proposal-combine-logic-grid" role="radiogroup" aria-label="Repeated components in export">
-                <button
-                  type="button"
-                  className={`proposal-combine-logic-option ${repeatedComponentMode === "merge" ? "is-selected" : ""}`}
-                  role="radio"
-                  aria-checked={repeatedComponentMode === "merge"}
-                  onClick={() => setRepeatedComponentMode("merge")}
-                >
-                  <span className="proposal-combine-logic-option__check" aria-hidden="true">{repeatedComponentMode === "merge" ? "✓" : ""}</span>
-                  <span className="proposal-combine-logic-option__copy">
-                    <strong>Combine quantities</strong>
-                    <small>Merge matching components into one row.</small>
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  className={`proposal-combine-logic-option ${repeatedComponentMode === "separate" ? "is-selected" : ""}`}
-                  role="radio"
-                  aria-checked={repeatedComponentMode === "separate"}
-                  onClick={() => setRepeatedComponentMode("separate")}
-                >
-                  <span className="proposal-combine-logic-option__check" aria-hidden="true">{repeatedComponentMode === "separate" ? "✓" : ""}</span>
-                  <span className="proposal-combine-logic-option__copy">
-                    <strong>Keep separate</strong>
-                    <small>Keep repeated components under their original kits/tags.</small>
-                  </span>
-                </button>
-              </div>
-            </div>
-            <div className="proposal-classic-export-columns proposal-classic-export-columns--modal">
-              <span>Columns</span>
-              {EXPORT_COLUMNS.map(([key, label]) => (
-                <label key={key}><input type="checkbox" checked={exportColumns.includes(key)} onChange={() => toggleExportColumn(key)} /><span>{label}</span></label>
-              ))}
-              <label><input type="checkbox" checked={combineTotalQty} onChange={(event) => setCombineTotalQty(event.target.checked)} /><span>Total Qty</span></label>
-            </div>
-            <div className="products-modal__actions">
-              <button type="button" className="products-btn products-btn--light" onClick={() => setCombineOpen(false)}>Cancel</button>
-              <button type="button" className="products-btn products-btn--light" disabled={selectedIds.length < 2} onClick={() => { setCombineOpen(false); setNameDialog({ mode: "combine", value: "" }); }}>Save as new proposal</button>
-              <button type="button" className="products-btn products-btn--dark" disabled={selectedIds.length < 2} onClick={() => downloadCombined("pdf")}>Download PDF</button>
-              <button type="button" className="products-btn products-btn--dark" disabled={selectedIds.length < 2} onClick={() => downloadCombined("excel")}>Download Excel</button>
-            </div>
-          </div>
-        </Modal>
-      ) : null}
-
       {folderDialog ? <ProposalFolderNameModal key={`${folderDialog.mode}-${folderDialog.folder?.id || "new"}`} dialog={folderDialog} busy={busy} onClose={() => setFolderDialog(null)} onSubmit={submitProposalFolder} /> : null}
+      {bulkEditOpen ? <BulkProposalEditModal count={selectedProposalIds.length} products={products} busy={busy} onClose={() => setBulkEditOpen(false)} onSubmit={async (productId,quantity) => { const ok=await runProposalBatch("edit",{productId,quantity}); if(ok) setBulkEditOpen(false); }} /> : null}
       {moveDialog ? <MoveProposalModal key={`move-${moveDialog.proposal?.id || "proposal"}`} dialog={moveDialog} folders={folders.map((folder) => ({ ...folder, proposalCount: folderProposalCounts.get(folder.id) || 0 }))} busy={busy} onClose={() => setMoveDialog(null)} onSubmit={submitMoveProposal} /> : null}
       {nameDialog ? <NameModal key={`${nameDialog.mode}-${nameDialog.proposal?.id || "new"}`} dialog={nameDialog} busy={busy} onClose={() => setNameDialog(null)} onSubmit={submitNameDialog} /> : null}
       {passwordRequest ? <PasswordModal request={passwordRequest} busy={busy} onClose={closePassword} onVerified={verifyPassword} /> : null}
