@@ -1,0 +1,94 @@
+/* ERP_KITS_MULTI_SELECT_ACTIONS_V1 — Kits only */
+/* The small orange ornaments were removed from JSX. Suppress old pseudo accents. */
+body.kits-page .next-kits-classic-parity .kit-quick-create__spark { display: none !important; }
+
+body.kits-page .next-kits-classic-parity .kit-bulk-toolbar {
+  position: sticky; top: 8px; z-index: 130;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px;
+  margin: 0 0 14px; padding: 11px 13px;
+  background: #0c111d; color: #fff; border-radius: 17px;
+  border: 1px solid #263044; box-shadow: 0 13px 25px rgba(15,23,42,.14);
+}
+body.kits-page .next-kits-classic-parity .kit-bulk-toolbar__label {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 13px; font-weight: 900; margin-right: auto;
+}
+body.kits-page .next-kits-classic-parity .kit-bulk-toolbar__label svg { width: 19px; height: 19px; }
+body.kits-page .next-kits-classic-parity .kit-bulk-toolbar__controls {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+}
+body.kits-page .next-kits-classic-parity .kit-bulk-toolbar__controls button {
+  border: 1px solid rgba(255,255,255,.23); border-radius: 10px;
+  min-height: 34px; padding: 6px 10px; background: #232b3a; color: #fff;
+  font: inherit; font-size: 11px; font-weight: 850; cursor: pointer;
+}
+body.kits-page .next-kits-classic-parity .kit-bulk-toolbar__controls button.kit-bulk-toolbar__actions {
+  background: #f97316; border-color: #f97316; color: #fff;
+}
+body.kits-page .next-kits-classic-parity .kit-bulk-toolbar__controls button:disabled { opacity: .45; cursor: not-allowed; }
+body.kits-page .next-kits-classic-parity .kit-bulk-toolbar > small {
+  flex-basis: 100%; color: #c5cbd7; font-size: 10px; font-weight: 650;
+}
+body.kits-page .next-kits-classic-parity .kit-library-grid > article.kit-bulk-selectable {
+  cursor: pointer;
+}
+body.kits-page .next-kits-classic-parity .kit-library-grid > article.kit-bulk-selected {
+  border-color: #f97316 !important;
+  box-shadow: 0 0 0 2px rgba(249,115,22,.26), 0 11px 22px rgba(15,23,42,.19) !important;
+}
+body.kits-page .next-kits-classic-parity .kit-library-grid > article.kit-bulk-selected > .products-proposal-folder__main {
+  outline: 0 !important;
+}
+body.kits-page .next-kits-classic-parity .kit-library-grid > article .kit-bulk-selection-indicator {
+  display: grid; place-items: center;
+  position: absolute; z-index: 30; top: 5px; right: 5px;
+  width: 21px; height: 21px; box-sizing: border-box;
+  background: rgba(255,255,255,.93); color: #111827; border: 2px solid #e2e8f0;
+  border-radius: 50%; font-size: 13px; font-weight: 1000; pointer-events: none;
+}
+body.kits-page .next-kits-classic-parity .kit-library-grid > article.kit-bulk-selected .kit-bulk-selection-indicator {
+  background: #f97316; border-color: #fff; color: #fff;
+}
+/* Batch edit uses the same bottom-sheet chrome as Create Folder on mobile. */
+body.kits-page .next-kits-classic-parity .next-kit-bulk-edit-overlay {
+  position: fixed !important; inset: 0 !important; width: 100vw !important;
+  height: 100dvh !important; display: flex !important; justify-content: center !important;
+  align-items: flex-end !important; padding: 0 !important; z-index: 2147483000 !important;
+}
+body.kits-page .next-kits-classic-parity .next-kit-bulk-edit-sheet {
+  position: relative !important; width: 100vw !important; max-width: 100vw !important;
+  min-width: 0 !important; max-height: 85dvh !important;
+  margin: 0 !important; padding: 55px 18px max(34px, calc(26px + env(safe-area-inset-bottom, 0px))) !important;
+  border-radius: 24px 24px 0 0 !important; overflow: visible !important; background: #fff !important;
+}
+body.kits-page .next-kits-classic-parity .next-kit-bulk-edit-sheet > .products-modal__header {
+  flex-direction: column !important; align-items: center !important; text-align: center !important;
+  justify-content: center !important; width: 100% !important;
+  margin: 0 0 20px !important; min-height: 40px !important; padding: 0 46px !important;
+}
+body.kits-page .next-kits-classic-parity .next-kit-bulk-edit-sheet .products-modal__icon {
+  position: absolute !important; top: -43px !important; left: 50% !important;
+  transform: translateX(-50%) !important; width: 84px !important; height: 84px !important;
+  margin: 0 !important; border-radius: 24px !important; border: 5px solid #fff !important;
+  background: #0c111d !important; color: #fff !important; display: grid !important; place-items: center !important;
+}
+body.kits-page .next-kits-classic-parity .next-kit-bulk-edit-sheet .products-modal__icon svg { stroke: #fff !important; width: 36px !important; height: 36px !important; }
+body.kits-page .next-kits-classic-parity .next-kit-bulk-edit-sheet > .products-modal__close {
+  top: 14px !important; right: 13px !important; width: 40px !important; height: 40px !important;
+}
+body.kits-page .next-kits-classic-parity .next-kit-bulk-edit-form { display: grid; gap: 13px; }
+body.kits-page .next-kits-classic-parity .next-kit-bulk-edit-form label { display: grid; gap: 7px; color: #344054; font-weight: 850; font-size: 13px; }
+body.kits-page .next-kits-classic-parity .next-kit-bulk-edit-form input,
+body.kits-page .next-kits-classic-parity .next-kit-bulk-edit-form select {
+  width: 100%; min-width: 0; box-sizing: border-box; min-height: 47px;
+  border: 1px solid #d7dce4; border-radius: 12px; background: #f8fafc;
+  color: #111827; padding: 9px 12px; font: inherit;
+}
+body.kits-page .next-kits-classic-parity .next-kit-bulk-edit-form p { font-size: 11px; line-height: 1.5; color: #667085; margin: 0; }
+body.kits-page .next-kits-classic-parity .next-kit-bulk-edit-actions { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 9px; }
+body.kits-page .next-kits-classic-parity .next-kit-bulk-edit-actions .products-btn { width: 100% !important; min-height: 46px; }
+@media(max-width: 420px) {
+  body.kits-page .next-kits-classic-parity .kit-bulk-toolbar { padding: 9px; gap: 6px; }
+  body.kits-page .next-kits-classic-parity .kit-bulk-toolbar__label { font-size: 11px; }
+  body.kits-page .next-kits-classic-parity .kit-bulk-toolbar__controls button { padding: 5px 7px; font-size: 10px; }
+}

@@ -481,6 +481,52 @@ export function NameModal({ dialog, busy, onClose, onSubmit }) {
   );
 }
 
+/* ERP_KITS_BULK_EDIT_MODAL_V1
+   Edits multiple Kits safely by adding the same product quantity to each.
+   Existing per-Kit API ownership checks still apply. */
+export function BulkKitEditModal({ count, products, busy, onClose, onSubmit }) {
+  const [productId, setProductId] = useState("");
+  const [quantity, setQuantity] = useState("1");
+  const [error, setError] = useState("");
+  const items = Array.isArray(products) ? products : [];
+  const submit = async (event) => {
+    event.preventDefault();
+    const n = Number(quantity);
+    if (!productId || !Number.isInteger(n) || n <= 0) {
+      setError("Select a component and a positive whole quantity.");
+      return;
+    }
+    setError("");
+    try { await onSubmit(productId, n); }
+    catch (cause) { setError(cause?.message || "Bulk edit failed."); }
+  };
+  return (
+    <Modal title={`Edit ${count} selected kits`} icon={<FeatherIcon name="plusCircle" size={30} />}
+      onClose={onClose} className="next-kit-bulk-edit-sheet" overlayClassName="next-kit-bulk-edit-overlay">
+      <form className="next-kit-bulk-edit-form" onSubmit={submit}>
+        <label><span>Component *</span>
+          <select value={productId} onChange={(event) => setProductId(event.target.value)} required disabled={busy}>
+            <option value="">Select component</option>
+            {items.map((product) => <option key={product.id} value={product.id}>{product.name}{product.displayId ? ` · ${product.displayId}` : ""}</option>)}
+          </select>
+        </label>
+        <label><span>Quantity to add *</span>
+          <input type="number" min="1" step="1" inputMode="numeric" value={quantity}
+            onChange={(event) => setQuantity(event.target.value)} required disabled={busy} />
+        </label>
+        <p>Applies to {count} selected kits. If this component already exists in a kit, its quantity will increase by the amount entered; existing components are kept.</p>
+        {error ? <div className="next-proposals-error products-form-error">{error}</div> : null}
+        <div className="products-modal__actions next-kit-bulk-edit-actions">
+          <button type="button" className="products-btn products-btn--light" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" className="products-btn products-btn--dark" disabled={busy || !productId}>
+            {busy ? "Applying…" : `Apply to ${count} Kits`}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 export function FolderNameModal({ dialog, busy, onClose, onSubmit }) {
   const [value, setValue] = useState(dialog?.value || "");
   const [error, setError] = useState("");
@@ -502,7 +548,13 @@ export function FolderNameModal({ dialog, busy, onClose, onSubmit }) {
       overlayClassName={creating ? "next-kit-create-folder-overlay" : ""}
     >
       <form className={creating ? "next-proposals-form products-form-grid next-kit-create-folder-form" : "next-proposals-form products-form-grid"} onSubmit={submit}>
-        <label><span>Folder Name *</span><input autoFocus value={value} onChange={(event) => setValue(event.target.value)} placeholder="Example: TH1 Kits" /></label>
+        <label><span>Folder Name *</span><input
+          type="text" inputMode="text" enterKeyHint="done"
+          name="erp-kit-folder-title-entry" autoComplete="off" autoCorrect="off"
+          autoCapitalize="sentences" spellCheck={false}
+          data-lpignore="true" data-1p-ignore="true" data-form-type="other"
+          value={value} onChange={(event) => setValue(event.target.value)}
+          placeholder="Example: TH1 Kits" /></label>
         {error ? <div className="next-proposals-error products-form-error">{error}</div> : null}
         <div className={creating ? "next-proposals-form__actions products-modal__actions next-kit-create-folder-actions" : "next-proposals-form__actions products-modal__actions"}>
           <button type="button" className="products-btn products-btn--light" onClick={onClose} disabled={busy}>Cancel</button>

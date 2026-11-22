@@ -17,6 +17,7 @@ const FolderNameModal = dynamic(() => import("./KitDialogs").then((module) => mo
 const MoveKitModal = dynamic(() => import("./KitDialogs").then((module) => module.MoveKitModal), { ssr: false });
 const PasswordModal = dynamic(() => import("./KitDialogs").then((module) => module.PasswordModal), { ssr: false });
 const AddProductModal = dynamic(() => import("./KitDialogs").then((module) => module.AddProductModal), { ssr: false });
+const BulkKitEditModal = dynamic(() => import("./KitDialogs").then((module) => module.BulkKitEditModal), { ssr: false });
 
 const EXPORT_COLUMNS = [
   ["idCode", "ID Code"],
@@ -342,6 +343,11 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
   const [moveDialog, setMoveDialog] = useState(null);
   const [passwordRequest, setPasswordRequest] = useState(null);
   const [folderMenu, setFolderMenu] = useState("");
+  // ERP_KITS_MULTI_SELECT_ACTIONS_V1: selection is limited to the visible Kits level.
+  const [kitSelectMode, setKitSelectMode] = useState(false);
+  const [selectedKitIds, setSelectedKitIds] = useState([]);
+  const [bulkEditOpen, setBulkEditOpen] = useState(false);
+  const bulkRunningRef = useRef(false);
   const folderLongPressTimerRef = useRef(null);
   const folderLongPressStartRef = useRef(null);
   const suppressFolderClickRef = useRef(false);
@@ -389,6 +395,8 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
       setProductPickerOpen(false);
       setDownloadMenuOpen(false);
       setSortMenuOpen(false);
+      setKitSelectMode(false);
+      setSelectedKitIds([]);
     };
     document.addEventListener("click", close);
     document.addEventListener("keydown", onKey);
@@ -419,6 +427,10 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
       folderLongPressTimerRef.current = null;
       folderLongPressStartRef.current = null;
       suppressFolderClickRef.current = true;
+      if (kitSelectMode && itemKey.startsWith("kit:")) {
+        const id = itemKey.slice(4);
+        setSelectedKitIds((current) => current.includes(id) ? current : [...current, id]);
+      }
       setFolderMenu(itemKey);
       try { if (navigator.vibrate) navigator.vibrate(28); } catch {}
     }, 550);
@@ -686,12 +698,16 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
   const openFolder = (folder) => {
     setFolderMenu("");
     setSearch("");
+    setKitSelectMode(false);
+    setSelectedKitIds([]);
     setActiveFolder(normalizeFolder(folder));
   };
 
   const backToFolderRoot = () => {
     setFolderMenu("");
     setSearch("");
+    setKitSelectMode(false);
+    setSelectedKitIds([]);
     setActiveFolder(null);
   };
 
@@ -828,6 +844,11 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
 
   const submitMoveKit = async (folderId) => {
     const dialog = moveDialog;
+    if (dialog?.bulkIds?.length) {
+      const finished = await runKitBulkAction("move", { folderId, ids: dialog.bulkIds });
+      if (finished) setMoveDialog(null);
+      return;
+    }
     const kit = dialog?.kit;
     if (!kit?.id) return;
     const targetFolderId = text(folderId);
@@ -1102,17 +1123,159 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
     }
   };
 
+  // ERP_KITS_MULTI_SELECT_ACTIONS_V1: original single-kit menu remains unchanged.
+  const startKitSelection = (kit) => {
+    setFolderMenu("");
+    setKitSelectMode(true);
+    setSelectedKitIds([kit.id]);
+  };
+  const toggleSelectedKit = (id) => {
+    setFolderMenu("");
+    setSelectedKitIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+  };
+  const exitKitSelection = () => {
+    setFolderMenu("");
+    setKitSelectMode(false);
+    setSelectedKitIds([]);
+  };
+
+  const runKitBulkAction = async (action, options = {}) => {
+    if (bulkRunningRef.current || busy) return false;
+    const ids = options.ids || selectedKitIds;
+    // This menu never acts on hidden items or folders; every action is per Kit.
+    const targets = kits.filter((kit) => ids.includes(kit.id));
+    if (!targets.length) return false;
+    const allowed = action === "move" ? can("edit")
+      : action === "copy" ? can("copy")
+      : action === "delete" ? can("delete")
+      : action === "edit" ? can("item_add") : false;
+    if (!allowed) {
+      notify("You don't have permission for this Kit action.", "error");
+      return false;
+    }
+    if (action === "edit" && (!options.productId || !Number.isInteger(Number(options.quantity)) || Number(options.quantity) < 1)) {
+      notify("Select a component and a valid quantity.", "error");
+      return false;
+    }
+    if (action === "move" && !folders.some((folder) => folder.id === text(options.folderId)) && text(options.folderId)) {
+      notify("The destination folder no longer exists.", "error");
+      return false;
+    }
+    let adminPassword = "";
+    // Existing per-owner Admin verification is retained by the API; request it
+    // once for a batch if some selected Kits are owned by another user.
+    if (action !== "copy" && targets.some((kit) => !kit.canEdit)) {
+      adminPassword = await askPassword({
+        title: "Admin password required",
+        message: `Enter the Admin password to ${action} ${targets.length} selected kits owned by other users.`,
+      });
+      if (adminPassword === null) return false;
+    }
+    if (action === "delete") {
+      const confirmed = await confirmDelete({
+        itemName: `${targets.length} selected kits`, itemType: "kit",
+        title: `Delete ${targets.length} kits?`,
+        message: `Permanently delete the ${targets.length} selected kits and their components? This cannot be undone.`,
+        confirmLabel: `Delete ${targets.length} Kits`,
+      });
+      if (!confirmed) return false;
+    }
+    bulkRunningRef.current = true;
+    setBusy(true);
+    setFolderMenu("");
+    const failures = [];
+    let succeeded = 0;
+    try {
+      for (const kit of targets) {
+        try {
+          if (action === "move") {
+            // Skip Kits already in the selected folder (no destructive changes).
+            if (kit.folderId !== text(options.folderId)) {
+              const response = await requestJson(`/next/api/products/kits/${encodeURIComponent(kit.id)}`, {
+                method: "PATCH",
+                body: JSON.stringify({ folderId: text(options.folderId), adminPassword }),
+              });
+              syncKit(response.kit || { ...kit, folderId: text(options.folderId) });
+            }
+          } else if (action === "copy") {
+            const response = await requestJson(`/next/api/products/kits/${encodeURIComponent(kit.id)}/copy`, {
+              method: "POST", body: JSON.stringify({ name: `${kit.name} copy` }),
+            });
+            if (response.kit) syncKit(response.kit);
+          } else if (action === "delete") {
+            await requestJson(`/next/api/products/kits/${encodeURIComponent(kit.id)}`, {
+              method: "DELETE", body: JSON.stringify({ adminPassword }),
+            });
+            setKits((current) => current.filter((item) => item.id !== kit.id));
+          } else if (action === "edit") {
+            // Same add-component operation applied to each Kit. If the product
+            // exists, the existing API ADDS the quantity; no other data is erased.
+            await requestJson(`/next/api/products/kits/${encodeURIComponent(kit.id)}/items`, {
+              method: "POST",
+              body: JSON.stringify({ productId: options.productId, quantity: Number(options.quantity), adminPassword }),
+            });
+          }
+          succeeded += 1;
+        } catch (error) {
+          failures.push({ id: kit.id, name: kit.name, message: error?.message || "Request failed" });
+        }
+      }
+      await refreshKits();
+      if (failures.length) {
+        // Keep failed Kits selected for retry; don't repeat successful operations.
+        setSelectedKitIds(failures.map((item) => item.id));
+        notify(`${succeeded} completed; ${failures.length} failed. ${failures.slice(0, 2).map((item) => `${item.name}: ${item.message}`).join(" | ")}`, "error");
+      } else {
+        setSelectedKitIds([]);
+        setKitSelectMode(false);
+        notify(`${action === "edit" ? "Component updated in" : action === "copy" ? "Copied" : action === "move" ? "Moved" : "Deleted"} ${succeeded} kit${succeeded === 1 ? "" : "s"}.`);
+      }
+      return true;
+    } finally {
+      setBusy(false);
+      bulkRunningRef.current = false;
+    }
+  };
+
+  const startBulkMove = () => {
+    const selected = kits.filter((kit) => selectedKitIds.includes(kit.id));
+    if (!selected.length) return;
+    // All Kits currently shown are in the same folder. Use its existing Move
+    // picker to select any nested destination for the entire batch.
+    setFolderMenu("");
+    setMoveDialog({
+      kit: { ...selected[0], name: `${selected.length} selected kits` },
+      bulkIds: selected.map((kit) => kit.id),
+    });
+  };
+
+  const startBulkEdit = () => {
+    if (!selectedKitIds.length) return;
+    setFolderMenu("");
+    setBulkEditOpen(true);
+  };
+
   const renderKitCard = (kit) => {
     const menuKey = `kit:${kit.id}`;
     const menuOpen = folderMenu === menuKey;
+    const selected = selectedKitIds.includes(kit.id);
     return (
-      <article className={`products-proposal-folder kit-library-kit ${menuOpen ? "is-menu-open" : ""}`} key={kit.id}>
-        {menuOpen && (can("edit") || can("copy") || can("delete") || can("item_add") || can("item_edit") || can("item_delete")) ? (
-          <KitModernActionMenu title="Kit actions">
-            {can("edit") || can("item_add") || can("item_edit") || can("item_delete") ? <button type="button" onClick={() => { setFolderMenu(""); enterEditKit(kit); }}><FeatherIcon name="edit" /><span>Edit</span></button> : null}
-            {can("edit") ? <button type="button" onClick={() => { setFolderMenu(""); startMoveKit(kit); }}><FeatherIcon name="move" /><span>Move</span></button> : null}
-            {can("copy") ? <button type="button" onClick={() => { setFolderMenu(""); setNameDialog({ mode: "copy", kit, value: `${kit.name} copy` }); }}><FeatherIcon name="copy" /><span>Make a copy</span></button> : null}
-            {can("delete") ? <button type="button" className="is-danger" onClick={() => { setFolderMenu(""); deleteKit(kit); }}><FeatherIcon name="trash" /><span>Delete</span></button> : null}
+      <article className={`products-proposal-folder kit-library-kit ${menuOpen ? "is-menu-open" : ""} ${kitSelectMode ? "kit-bulk-selectable" : ""} ${selected ? "kit-bulk-selected" : ""}`} key={kit.id}>
+        {kitSelectMode ? <span className="kit-bulk-selection-indicator" aria-hidden="true">{selected ? "✓" : ""}</span> : null}
+        {menuOpen && (kitSelectMode || can("edit") || can("copy") || can("delete") || can("item_add") || can("item_edit") || can("item_delete")) ? (
+          <KitModernActionMenu title={kitSelectMode ? `${selectedKitIds.length} kits selected` : "Kit actions"}>
+            {!kitSelectMode && (can("edit") || can("copy") || can("delete") || can("item_add")) ? (
+              <button type="button" onClick={() => startKitSelection(kit)}><FeatherIcon name="grid" /><span>Select action</span></button>
+            ) : null}
+            {!kitSelectMode && (can("edit") || can("item_add") || can("item_edit") || can("item_delete")) ? <button type="button" onClick={() => { setFolderMenu(""); enterEditKit(kit); }}><FeatherIcon name="edit" /><span>Edit</span></button> : null}
+            {!kitSelectMode && can("edit") ? <button type="button" onClick={() => { setFolderMenu(""); startMoveKit(kit); }}><FeatherIcon name="move" /><span>Move</span></button> : null}
+            {!kitSelectMode && can("copy") ? <button type="button" onClick={() => { setFolderMenu(""); setNameDialog({ mode: "copy", kit, value: `${kit.name} copy` }); }}><FeatherIcon name="copy" /><span>Make a copy</span></button> : null}
+            {!kitSelectMode && can("delete") ? <button type="button" className="is-danger" onClick={() => { setFolderMenu(""); deleteKit(kit); }}><FeatherIcon name="trash" /><span>Delete</span></button> : null}
+            {kitSelectMode && can("item_add") && selectedKitIds.length > 0 ? <button type="button" onClick={startBulkEdit}><FeatherIcon name="edit" /><span>Edit · Add component</span></button> : null}
+            {kitSelectMode && can("edit") && selectedKitIds.length > 0 ? <button type="button" onClick={startBulkMove}><FeatherIcon name="move" /><span>Move selected</span></button> : null}
+            {kitSelectMode && can("copy") && selectedKitIds.length > 0 ? <button type="button" onClick={() => runKitBulkAction("copy")}><FeatherIcon name="copy" /><span>Make copies</span></button> : null}
+            {kitSelectMode && can("delete") && selectedKitIds.length > 0 ? <button type="button" className="is-danger" onClick={() => runKitBulkAction("delete")}><FeatherIcon name="trash" /><span>Delete selected</span></button> : null}
+            {kitSelectMode ? <button type="button" onClick={exitKitSelection}><FeatherIcon name="arrowLeft" /><span>Exit selection</span></button> : null}
           </KitModernActionMenu>
         ) : null}
         <button
@@ -1127,6 +1290,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
             event.preventDefault();
             cancelFolderLongPress();
             suppressFolderClickRef.current = true;
+            if (kitSelectMode) setSelectedKitIds((current) => current.includes(kit.id) ? current : [...current, kit.id]);
             setFolderMenu(menuKey);
           }}
           onKeyDown={(event) => openFolderActionsFromKeyboard(event, menuKey)}
@@ -1135,9 +1299,10 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
               suppressFolderClickRef.current = false;
               return;
             }
+            if (kitSelectMode) { toggleSelectedKit(kit.id); return; }
             loadKit(kit.id, { edit: false, adminPassword: "" });
           }}
-          aria-label={`Open ${kit.name}. Press and hold for actions.`}
+          aria-label={kitSelectMode ? `${selected ? "Deselect" : "Select"} ${kit.name}. Long-press for bulk actions.` : `Open ${kit.name}. Press and hold for actions.`}
           aria-haspopup="menu"
           aria-expanded={menuOpen}
         >
@@ -1523,6 +1688,17 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
 
       <section className="products-proposals-view proposals-workspace proposals-folders-card" aria-live="polite">
         <section className="proposals-panel">
+          {kitSelectMode ? (
+            <div className="kit-bulk-toolbar" role="group" aria-label="Multi-select Kits">
+              <div className="kit-bulk-toolbar__label"><FeatherIcon name="grid" /><span>{selectedKitIds.length} selected</span></div>
+              <div className="kit-bulk-toolbar__controls">
+                <button type="button" onClick={() => setSelectedKitIds(filteredKits.map((kit) => kit.id))} disabled={busy}>Select all</button>
+                <button type="button" className="kit-bulk-toolbar__actions" onClick={() => { if (selectedKitIds.length) setFolderMenu(`kit:${selectedKitIds[0]}`); }} disabled={busy || !selectedKitIds.length}>Actions</button>
+                <button type="button" onClick={exitKitSelection} disabled={busy}>Done</button>
+              </div>
+              <small>Tap Kits to select · Long-press a selected Kit for actions</small>
+            </div>
+          ) : null}
           <div className="products-proposals-list">
             {(filteredFolders.length || filteredKits.length || canCreate || can("folder_create")) ? (
               <div className="products-proposal-folders kit-library-grid kit-library-grid--root">
@@ -1536,7 +1712,6 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
                     >
                       <span className="kit-quick-create__illustration" aria-hidden="true">
                         <FeatherIcon name="folderPlus" />
-                        <span className="kit-quick-create__spark" />
                       </span>
                       <strong>Create Folder</strong>
                       <small>Add a new folder</small>
@@ -1553,7 +1728,6 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
                     >
                       <span className="kit-quick-create__illustration" aria-hidden="true">
                         <FeatherIcon name="briefcase" />
-                        <span className="kit-quick-create__spark" />
                       </span>
                       <strong>Create Kit</strong>
                       <small>Add a new kit</small>
@@ -1571,6 +1745,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
       </section>
 
       {folderDialog ? <FolderNameModal key={`${folderDialog.mode}-${folderDialog.folder?.id || "new"}`} dialog={folderDialog} busy={busy} onClose={() => setFolderDialog(null)} onSubmit={submitFolderDialog} /> : null}
+      {bulkEditOpen ? <BulkKitEditModal count={selectedKitIds.length} products={products} busy={busy} onClose={() => setBulkEditOpen(false)} onSubmit={async (productId, quantity) => { const finished = await runKitBulkAction("edit", { productId, quantity }); if (finished) setBulkEditOpen(false); }} /> : null}
       {moveDialog ? <MoveKitModal key={`move-${moveDialog.kit?.id || "kit"}`} dialog={moveDialog} folders={folders.map((folder) => ({ ...folder, kitCount: folderKitCounts.get(folder.id) || 0 }))} busy={busy} onClose={() => setMoveDialog(null)} onSubmit={submitMoveKit} /> : null}
       {nameDialog ? <NameModal key={`${nameDialog.mode}-${nameDialog.kit?.id || "new"}`} dialog={nameDialog} busy={busy} onClose={() => setNameDialog(null)} onSubmit={submitNameDialog} /> : null}
       {passwordRequest ? <PasswordModal request={passwordRequest} busy={busy} onClose={closePassword} onVerified={verifyPassword} /> : null}

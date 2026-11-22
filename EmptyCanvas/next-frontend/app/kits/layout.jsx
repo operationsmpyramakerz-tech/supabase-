@@ -9,6 +9,7 @@ export default function KitsMotionLayout({ children }) {
       <link rel="stylesheet" href="/next/css/kits-move-header-footer-v2.css?v=move-sheet-header-footer-v2" precedence="erp-detail" />
       <link rel="stylesheet" href="/next/css/kits-modern-action-popover.css?v=kits-modern-actions-v1" precedence="erp-detail" />
       <link rel="stylesheet" href="/next/css/kits-folder-create-sheet-and-close-v1.css?v=kits-folder-sheet-x-v1" precedence="erp-detail" />
+      <link rel="stylesheet" href="/next/css/kits-multiselect-actions-v1.css?v=kits-multiselect-v1" precedence="erp-detail" />
       {children}
     </>
   );
