@@ -946,6 +946,36 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
     detailsLoaderRef.current.prefetch(group, { defer: hover });
   }
 
+  // ADV_PERMISSIONS_OPS_V1: server-authenticated Edit with granular permissions.
+  async function openAuthorizedOperationsEdit(group) {
+    if (!group?.orderIds?.length || busy) return;
+    setBusy(true);
+    setActionError("");
+    try {
+      const data = await postJson(`${DIRECT_API_BASE}/orders/operations/mutations-direct`, {
+        action: "edit-init", orderIds: group.orderIds,
+      });
+      const items = Array.isArray(data?.items) ? data.items : [];
+      const itemsById = Object.fromEntries(items.map((item) => [text(item?.id), item]).filter(([id]) => id));
+      setEditMode({
+        groupKey: group.key,
+        itemsById,
+        products: Array.isArray(data?.products) ? data.products : [],
+        statusOptions: Array.isArray(data?.statusOptions) ? data.statusOptions : ["In Progress", "Shipped", "Arrived"],
+        changes: {},
+        additions: [],
+        deletions: {},
+      });
+      setActionState(null);
+    } catch (error) {
+      // Without a password modal errors must be visible on the page.
+      setNotice(error?.message || "Could not open Operations order editing.");
+      window.setTimeout(() => setNotice(""), 5000);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function beginAction(action, group) {
     const permissionAction = ({ reject: "approve", "technical-visit": "ship", "send-to-stock": "send_to_stock", deliver: "receive",
       "maintenance-deliver": "receive", archive: "edit", unarchive: "edit", delete: "delete" })[action] || action;
@@ -954,6 +984,16 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
       && (permissions?.upload_receipt === false || !orderCardAllows(scopePolicy, "upload_receipt", group))) return;
     setActionError("");
     setDeleteError("");
+    // ADV_PERMISSIONS_OPS_V1: no password prompt. API enforces Edit and order scope.
+    if (action === "edit") {
+      await openAuthorizedOperationsEdit(group);
+      return;
+    }
+    if (action === "delete") {
+      setActionState(null);
+      setDeleteConfirm({ group }); // keep destructive-action confirmation
+      return;
+    }
     if (action === "maintenance-log") {
       try {
         let options = maintenanceOptions;
@@ -1028,9 +1068,8 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
     if (!actionState) return;
     const { action, group } = actionState;
     if (action === "delete") {
-      if (!text(payload)) { setActionError("Admin password is required."); return; }
       setActionState(null);
-      setDeleteConfirm({ group, password: text(payload) });
+      setDeleteConfirm({ group });
       setDeleteError("");
       return;
     }
@@ -1045,31 +1084,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
     }
     try {
       if (action === "edit") {
-        const password = text(payload);
-        if (!password) throw new Error("Admin password is required.");
-        const response = await fetch(`${DIRECT_API_BASE}/orders/operations/mutations-direct`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ action: "edit-init", orderIds: group.orderIds, adminPassword: password }),
-        });
-        const data = await readJson(response);
-        if (response.status === 401) throw new Error("Wrong password. Please try again.");
-        if (!response.ok) throw new Error(data?.error || "Failed to start editing this order.");
-        const items = Array.isArray(data?.items) ? data.items : [];
-        const itemsById = Object.fromEntries(items.map((item) => [text(item?.id), item]).filter(([id]) => id));
-        setEditMode({
-          groupKey: group.key,
-          password,
-          itemsById,
-          products: Array.isArray(data?.products) ? data.products : [],
-          statusOptions: Array.isArray(data?.statusOptions) ? data.statusOptions : ["In Progress", "Shipped", "Arrived"],
-          changes: {},
-          additions: [],
-          deletions: {},
-        });
-        setActionState(null);
-        setActionError("");
+        await openAuthorizedOperationsEdit(group);
         return;
       } else if (action === "approve") {
         await postJson(`${DIRECT_API_BASE}/orders/operations/mutations-direct`, { action: "approval", ids: group.orderIds, decision: "Approved" });
@@ -1172,9 +1187,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
         loadingSuccessMessage = `Order marked as delivered. ${synced} component${synced === 1 ? "" : "s"} added to Stocktaking automatically${alreadySynced ? ` · ${alreadySynced} already synced` : ""}.`;
         await completeAction(loadingSuccessMessage, "delivered");
       } else if (action === "archive") {
-        const password = text(payload);
-        if (!password) throw new Error("Admin password is required.");
-        await postJson(`${DIRECT_API_BASE}/orders/operations/mutations-direct`, { action: "archive", orderIds: group.orderIds, adminPassword: password });
+        await postJson(`${DIRECT_API_BASE}/orders/operations/mutations-direct`, { action: "archive", orderIds: group.orderIds });
         loadingSuccessMessage = "Order moved to Archive.";
         await completeAction("Order moved to Archive.", "archive");
       } else if (action === "unarchive") {
@@ -1214,7 +1227,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
 
   async function confirmDeleteOrder() {
     if (!deleteConfirm?.group || busy) return;
-    const { group, password } = deleteConfirm;
+    const { group } = deleteConfirm;
     if (permissions?.delete === false || !orderCardAllows(scopePolicy, "delete", group)) {
       setDeleteError("Delete access is not allowed for this order.");
       return;
@@ -1224,7 +1237,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
     startActionLoading(actionLoadingConfig("delete", group));
     try {
       await postJson(`${DIRECT_API_BASE}/orders/operations/mutations-direct`, {
-        action: "delete", orderIds: group.orderIds, adminPassword: password,
+        action: "delete", orderIds: group.orderIds,
       });
       // Deletion committed: do not retry if the list refresh fails.
       setDeleteConfirm(null);
@@ -1321,7 +1334,6 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
       await postJson(`${DIRECT_API_BASE}/orders/operations/mutations-direct`, {
         action: "edit-save",
         orderIds: selected.orderIds,
-        adminPassword: editMode.password,
         itemUpdates,
         itemAdds,
         itemDeletes,

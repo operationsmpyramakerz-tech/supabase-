@@ -1786,10 +1786,15 @@ export async function performOperationsProtectedAction({
     throw directOperationsMutationError("Orders not found", 404);
   }
 
-  if (cleanAction !== "unarchive") {
-    const passwordOk = await directOperationsAdminPasswordResult(account || {}, adminPassword);
-    if (passwordOk === null) return null;
-    if (!passwordOk) throw directOperationsMutationError("Invalid admin password", 401);
+  // ADV_PERMISSIONS_OPS_V1: preserve Edit/Delete and scoped access WITHOUT
+  // accepting any bypass from the client. API also checks both independently.
+  const requiredPermission = cleanAction === "delete" ? "orders.operations.delete" : "orders.operations.edit";
+  if (!featureAllowed(account || {}, requiredPermission)) {
+    throw directOperationsMutationError("This Operations Orders action is not permitted.", 403);
+  }
+  const resolvedPermissionScope = await resolveOrderScope(account || {}, requiredPermission);
+  if (loaded.rows.some((row) => !visibleOrderRow(row, resolvedPermissionScope))) {
+    throw directOperationsMutationError("The selected order is outside your permitted scope.", 403);
   }
 
   if (["archive", "unarchive", "delete"].includes(cleanAction)) {
@@ -2815,9 +2820,15 @@ export async function saveOperationsEditDetails({
   if (!loaded) return null;
   if (loaded.clean.some((id) => !loaded.byId.has(id))) throw directOperationsMutationError("Orders not found", 404);
 
-  const passwordOk = await directOperationsAdminPasswordResult(account || {}, adminPassword);
-  if (passwordOk === null) return null;
-  if (!passwordOk) throw directOperationsMutationError("Invalid admin password", 401);
+  // ADV_PERMISSIONS_OPS_V1: verify granular edit permission and all rows in
+  // scope. Never trust a password or bypass bit supplied by the browser.
+  if (!featureAllowed(account || {}, "orders.operations.edit")) {
+    throw directOperationsMutationError("Edit Operations Orders access is required.", 403);
+  }
+  const resolvedEditScope = await resolveOrderScope(account || {}, "orders.operations.edit");
+  if (loaded.rows.some((row) => !visibleOrderRow(row, resolvedEditScope))) {
+    throw directOperationsMutationError("The selected order is outside your permitted scope.", 403);
+  }
 
   const updates = (Array.isArray(itemUpdates) ? itemUpdates : []).filter((entry) => entry && typeof entry === "object");
   const additions = (Array.isArray(itemAdds) ? itemAdds : []).filter((entry) => entry && typeof entry === "object");
