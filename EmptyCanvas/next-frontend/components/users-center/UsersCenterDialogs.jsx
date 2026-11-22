@@ -755,6 +755,15 @@ function FeatureAccessModal({ member, onClose, protect, pageRow, allPageRows = [
   const [grantScopes, setGrantScopes] = useState({});
   const [unmanagedGrants, setUnmanagedGrants] = useState([]);
   const [teamScopeOpen, setTeamScopeOpen] = useState(false);
+  // ERP_STOCK_FOLDER_VISIBILITY_V1
+  const [stockFolderOptions, setStockFolderOptions] = useState([]);
+  const [stockFolderSelected, setStockFolderSelected] = useState([]);
+  const [stockFolderSaved, setStockFolderSaved] = useState([]);
+  const [stockFolderOwn, setStockFolderOwn] = useState(null);
+  const [stockFolderSearch, setStockFolderSearch] = useState("");
+  const [stockFolderLoading, setStockFolderLoading] = useState(false);
+  const [stockFolderReady, setStockFolderReady] = useState(false);
+  const [stockFolderError, setStockFolderError] = useState("");
   const [featureQuery, setFeatureQuery] = useState("");
   const [moduleFilter, setModuleFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -883,6 +892,26 @@ function FeatureAccessModal({ member, onClose, protect, pageRow, allPageRows = [
     })();
     return () => { mounted = false; };
   }, [member.id]);
+  useEffect(() => {
+    if (selectedPageModule !== "stocktaking" || !member?.id) return;
+    let live = true;
+    setStockFolderLoading(true); setStockFolderReady(false); setStockFolderError("");
+    (async () => {
+      try {
+        const result = await requestJson(`/next/api/users-center/stocktaking-folders?memberId=${encodeURIComponent(member.id)}`);
+        if (!live) return;
+        const selected = (result.selectedKeys || []).map(text).filter(Boolean);
+        setStockFolderOptions(result.folders || []);
+        setStockFolderOwn(result.ownFolder || null);
+        setStockFolderSelected(selected);
+        setStockFolderSaved((result.expectedKeys || selected).map(text).filter(Boolean));
+        setStockFolderReady(true);
+      } catch (err) {
+        if (live) setStockFolderError(err?.message || "Could not load stock folders.");
+      } finally { if (live) setStockFolderLoading(false); }
+    })();
+    return () => { live = false; };
+  }, [member?.id, selectedPageModule]);
   const shown = FEATURE_DEFINITIONS.filter(item => ACTIVE_PILOT_FEATURE_KEYS.includes(item.key));
   const activeFeatures = shown.filter(item => enabledModules[item.module]);
   const checkedCount = activeFeatures.filter(item => grants[item.key] === true).length;
@@ -923,6 +952,11 @@ function FeatureAccessModal({ member, onClose, protect, pageRow, allPageRows = [
     setScopedOrders(current => ({ ...current, [pageModule.key]: enabled }));
   }
   const hasUnsavedChanges = savedDraft !== null && draftChanges.length > 0;
+  const stockFoldersChanged = selectedPageModule === "stocktaking" && stockFolderReady &&
+    JSON.stringify([...stockFolderSelected].sort()) !== JSON.stringify([...stockFolderSaved].sort());
+  const hasPendingChanges = hasUnsavedChanges || stockFoldersChanged;
+  const stockFolderFiltered = stockFolderOptions.filter(folder =>
+    lower(`${folder.label || ""} ${folder.key || ""}`).includes(lower(stockFolderSearch)));
   // Do not convert inherited legacy defaults for unrelated personal/shared
   // services into explicit ALLOW rows when first activating one page.
   // Missing grants in those modules deliberately keep their legacy behavior.
@@ -936,7 +970,7 @@ function FeatureAccessModal({ member, onClose, protect, pageRow, allPageRows = [
   }, [loading, available, savedDraft, draft]);
   function closeEditor() {
     if (busy) return;
-    if (hasUnsavedChanges && !window.confirm(`Discard ${draftChanges.length} unsaved permission change(s)?`)) return;
+    if (hasPendingChanges && !window.confirm("Discard unsaved permission changes?") ) return;
     onClose();
   }
   function restoreDraft() {
@@ -946,6 +980,7 @@ function FeatureAccessModal({ member, onClose, protect, pageRow, allPageRows = [
     setGrants({ ...savedDraft.grants });
     setGrantScopes({ ...savedDraft.scopes });
     setScopedOrders({ ...savedDraft.rowScopes });
+    setStockFolderSelected([...stockFolderSaved]);
   }
   const searchText = lower(featureQuery);
   const visibleModules = modules.filter(module => (moduleFilter === "all" || module.key === moduleFilter)
@@ -957,13 +992,14 @@ function FeatureAccessModal({ member, onClose, protect, pageRow, allPageRows = [
     && (!searchText || lower(modules.find(module => module.key === item.module)?.label).includes(searchText) || lower(`${item.label} ${item.key}`).includes(searchText)));
 
   function save() {
-    if (busy || loading || !available || !hasUnsavedChanges) return;
+    if (busy || loading || !available || !hasPendingChanges ||
+        (selectedPageModule === "stocktaking" && (!stockFolderReady || stockFolderLoading))) return;
     protect({ title: "Save detailed page permissions", message: active
       ? `Apply ${draftChanges.length} reviewed change(s) for ${member.name}? ${savedDraft && !savedDraft.active ? "This account will begin using detailed permissions for this page; other optional modules keep their Legacy Page Access. Projects Preparing is initialized from its existing Page Access to preserve access." : "Unedited modules retain their previous permission mode."} ${blockedModules.length} advanced module(s) will have View denied.`
       : `Restore ${member.name} to legacy page-based permissions? This will stop enforcing the Advanced feature grants.` }, async () => {
       setBusy(true); setError("");
       try {
-        await usersCenterMutation("feature-access-save", {
+        if (hasUnsavedChanges) await usersCenterMutation("feature-access-save", {
           memberId: member.id, enabled: active,
           grants: [
             ...unmanagedGrants,
@@ -987,6 +1023,13 @@ function FeatureAccessModal({ member, onClose, protect, pageRow, allPageRows = [
               .map(module => ({ key: `${module.key}.view`, allowed: false, scope: "all" })),
           ],
         });
+        if (stockFoldersChanged) {
+          await usersCenterMutation("stocktaking-folders-save", {
+            memberId: member.id,
+            folderKeys: stockFolderSelected,
+            expectedFolderKeys: stockFolderSaved,
+          });
+        }
         onClose();
       } catch (e) { setError(e.message); }
       finally { setBusy(false); }
@@ -995,9 +1038,9 @@ function FeatureAccessModal({ member, onClose, protect, pageRow, allPageRows = [
   if (pageRow) {
     const module = pageModule;
     const features = shown.filter(item => item.module === selectedPageModule);
-    const needsFeatureSave = hasUnsavedChanges;
+    const needsFeatureSave = hasPendingChanges;
     return <><Modal title={pageRow.pageName} subtitle={`Configure detailed permissions for ${member.name}.`} onClose={closeEditor} modalClass="ua-modal--page-preferences" compact icon="preferences" closeDisabled={busy} bodyClass="ua-page-preferences-body" zIndex={10040}
-      footer={<><button type="button" className="ua-btn ua-btn--light" disabled={busy} onClick={closeEditor}>Cancel</button><button type="button" className="ua-btn ua-btn--dark" disabled={busy || loading || !available || !needsFeatureSave} onClick={save}><UAIcon name="save"/><span>{busy ? "Saving..." : "Save Preferences"}</span></button></>}>
+      footer={<><button type="button" className="ua-btn ua-btn--light" disabled={busy} onClick={closeEditor}>Cancel</button><button type="button" className="ua-btn ua-btn--dark" disabled={busy || loading || !available || !needsFeatureSave || (module?.key === "stocktaking" && (!stockFolderReady || stockFolderLoading))} onClick={save}><UAIcon name="save"/><span>{busy ? "Saving..." : "Save Preferences"}</span></button></>}>
       <section className="ua-page-preferences-panel">
         <div className="ua-page-preferences-heading"><div><strong>Detailed permissions</strong><p>{features.length} actions for {module?.label || pageRow.pageName}</p></div></div>
         {loading ? <div className="ua-page-access-loading"><span/> Loading permissions...</div> : null}
@@ -1010,10 +1053,37 @@ function FeatureAccessModal({ member, onClose, protect, pageRow, allPageRows = [
             {((item.key === "home.analysis" || item.key.startsWith("expenses.users.")) || ((ORDER_SCOPE_MARKERS[item.module] || item.module === "tasks" || EVENT_REQUEST_ROW_KEYS.has(item.key)) && scopedOrders[item.module] && item.key !== "orders.tracking.view")) && pageGrants[item.key] === true ? <select className="ua-feature-scope-select" aria-label={`${item.label} data scope`} value={grantScopes[item.key] || "all"} onChange={e => updatePageScope(item.key, e.target.value)}><option value="own">Own</option><option value="team">Team</option><option value="all">All</option></select> : null}
             <label className="ua-switch" title={item.label}><input type="checkbox" checked={pageGrants[item.key] === true} disabled={(item.key.startsWith("preparing.stage.") && pageGrants["preparing.stages.__granular"] !== true) || (item.key.startsWith("preparing.tab.") && (pageGrants["preparing.tabs.__granular"] !== true || (pageGrants["preparing.stages.__granular"] === true && pageGrants[`preparing.stage.${item.key.split(".")[2]}`] !== true))) || (item.key.startsWith("orders.shopping.source.") && pageGrants["orders.shopping.sources.__granular"] !== true)} onChange={e => updatePagePermission(item.key, e.target.checked)}/><span/></label>
             </div></div>)}</div>
+          {module.key === "stocktaking" ? <section className="ua-stock-scope" aria-label="Stocktaking folder access">
+            <div className="ua-stock-scope__heading"><strong>Stock Folders</strong><small>Primary stock + selected additional folders</small></div>
+            {stockFolderLoading ? <p className="ua-stock-scope__message">Loading stock folders...</p> : null}
+            {stockFolderError ? <p className="ua-form-error" role="alert">{stockFolderError}</p> : null}
+            <div className="ua-stock-scope__primary">
+              <div><strong>Primary Stock</strong><small>{stockFolderOwn?.label || member.name || "Own stock"}</small></div>
+              <span className="ua-stock-scope__fixed">Default · Always accessible</span>
+            </div>
+            {stockFolderReady ? <>
+              <div className="ua-stock-scope__search"><label htmlFor="ua-extra-stock-search">Additional Stock Folders</label>
+                <input id="ua-extra-stock-search" value={stockFolderSearch} onChange={event => setStockFolderSearch(event.target.value)} type="search" placeholder="Search stock folders..." />
+              </div>
+              <div className="ua-stock-scope__list">
+                {stockFolderFiltered.filter(folder => folder.key !== stockFolderOwn?.key).map(folder => <label className="ua-stock-scope__option" key={folder.key}>
+                  <span className="ua-stock-scope__folder"><UAIcon name="folder" /></span>
+                  <span className="ua-stock-scope__label"><strong>{folder.label}</strong><small>{folder.itemsCount || 0} items</small></span>
+                  <input type="checkbox" checked={stockFolderSelected.includes(folder.key)}
+                    onChange={event => setStockFolderSelected(current => event.target.checked ? [...new Set([...current, folder.key])] : current.filter(key => key !== folder.key))}
+                    aria-label={`Allow ${folder.label} stock folder`} />
+                </label>)}
+                {!stockFolderFiltered.filter(folder => folder.key !== stockFolderOwn?.key).length ? <p className="ua-stock-scope__message">No additional stock folders match.</p> : null}
+              </div>
+              <small className="ua-stock-scope__count">{stockFolderSelected.length} additional folder(s) selected</small>
+            </> : null}
+          </section> : null}
           {features.some(item => item.key === "home.analysis" || item.key.startsWith("expenses.users.") || ORDER_SCOPE_MARKERS[item.module] || item.module === "tasks" || EVENT_REQUEST_ROW_KEYS.has(item.key)) ? <button type="button" className="ua-page-preferences-scope" onClick={() => setTeamScopeOpen(true)}><UAIcon name="users"/> Manage Team Visibility</button> : null}
         </> : null}
         {!module || !features.length ? <p className="ua-page-preferences-note">This page has no individually enforced feature actions in the current permissions registry. Its existing Page Access remains unchanged; use Enable in the parent window.</p> : null}
-        {needsFeatureSave ? <p className="ua-page-preferences-unsaved" role="status">{draftChanges.length} pending permission change(s). Nothing is applied until Save Preferences and admin verification.</p> : null}
+          {needsFeatureSave ? <p className="ua-page-preferences-unsaved" role="status">
+            {draftChanges.length} feature change(s), {stockFoldersChanged ? "stock folder changes pending" : "no stock folder changes"}. Nothing is applied until Save Preferences and admin verification.
+          </p> : null}
       </section>
       {error ? <p role="alert" className="ua-form-error">{error}</p> : null}
     </Modal>{teamScopeOpen ? <TeamScopeModal member={member} protect={protect} onClose={() => setTeamScopeOpen(false)}/> : null}</>;

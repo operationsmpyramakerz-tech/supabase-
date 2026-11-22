@@ -8,6 +8,8 @@ import { featureGate, replaceMemberFeatureAccess, getMemberFeatureAccessForAdmin
 import { ACTIVE_PILOT_FEATURE_KEYS, isKnownFeature } from "../../../../lib/feature-permissions-registry";
 import { rpc, select, selectById } from "../../../../lib/supabase-rest";
 import { normalizeTeamLinks } from "../../../../lib/team-scope-management.mjs";
+import { replaceMemberStocktakingFolderKeys } from "../../../../lib/stocktaking-folder-access";
+import { listStocktakingFolders } from "../../../../lib/stocktaking-data";
 import { verifyUsersCenterAuthorizationToken } from "../../../../lib/users-center-action-auth";
 import {
   approveSignupRequest,
@@ -60,6 +62,7 @@ export async function POST(request) {
       "page-access-save": "users.page_access_manage",
       "feature-access-save": "users.feature_access_manage",
       "team-scope-save": "users.feature_access_manage",
+      "stocktaking-folders-save": "users.feature_access_manage",
       "sv-access-save": "users.sv_access_manage",
       "signup-approve": "users.signup_approve",
       "signup-reject": "users.signup_reject",
@@ -68,6 +71,25 @@ export async function POST(request) {
     if (actionPermissions[action]) {
       const actionGate = featureGate(gate, actionPermissions[action]);
       if (!actionGate.ok) return json({ ok: false, error: actionGate.error }, actionGate.status || 403);
+    }
+
+    if (action === "stocktaking-folders-save") {
+      const memberId = text(body?.memberId);
+      if (!memberId) return json({ ok: false, error: "Missing member ID." }, 400);
+      const member = await selectById(text(process.env.SUPABASE_TEAM_MEMBERS_TABLE) || "team_members", memberId, { select: "id" });
+      if (!member) return json({ ok: false, error: "Team member was not found." }, 404);
+      const selected = body?.folderKeys;
+      const expected = body?.expectedFolderKeys;
+      if (!Array.isArray(selected) || !Array.isArray(expected) ||
+          selected.length > 500 || expected.length > 500 ||
+          [...selected, ...expected].some(key => typeof key !== "string" || !key.trim() || key.length > 255))
+        return json({ ok: false, error: "Invalid Stocktaking folder selection." }, 400);
+      const all = await listStocktakingFolders({ fresh: true });
+      const valid = new Set(all.map(folder => folder.key));
+      if (selected.some(key => !valid.has(key)))
+        return json({ ok: false, error: "One of the selected stock folders no longer exists." }, 409);
+      const saved = await replaceMemberStocktakingFolderKeys(memberId, selected, expected);
+      return json({ ok: true, selectedKeys: saved, message: "Stocktaking folder access updated." });
     }
 
     if (action === "team-scope-save") {

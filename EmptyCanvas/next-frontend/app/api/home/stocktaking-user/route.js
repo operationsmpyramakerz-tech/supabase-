@@ -5,6 +5,7 @@ import { featureAllowed } from "../../../../lib/feature-permissions-registry";
 import { resolveHomeSelection } from "../../../../lib/home-team-scopes";
 import {
   resolveStocktakingQuantityColumnForLabel,
+  canAccessStocktakingColumn,
   stocktakingForAccount,
 } from "../../../../lib/stocktaking-data";
 
@@ -54,6 +55,8 @@ export async function GET(request) {
     };
 
     if (!resolvedColumn) return noStore({ user, items: [], source: "supabase-next" });
+    if (!(await canAccessStocktakingColumn(gate.account || {}, resolvedColumn)))
+      return noStore({ user: null, items: [], error: "This stock folder is not shared with your account." }, { status: 403 });
 
     const items = await stocktakingForAccount({
       id: String(member.id),

@@ -1,0 +1,30 @@
+/* ERP_STOCK_FOLDER_VISIBILITY_V1 — Stocktaking-only scoped access options. */
+.ua-stock-scope { margin-top: 18px; padding: 15px; border: 1px solid #e4e7ec; background: #fff; border-radius: 17px; display: grid; gap: 13px; }
+.ua-stock-scope__heading { display: grid; gap: 4px; }
+.ua-stock-scope__heading strong { font-size: 15px; color: #171d2b; }
+.ua-stock-scope__heading small { font-size: 11px; color: #737d8b; }
+.ua-stock-scope__primary { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 9px; border: 1px solid #b9e5c9; background: #f1fcf5; border-radius: 13px; padding: 12px; }
+.ua-stock-scope__primary > div { display: grid; gap: 5px; }
+.ua-stock-scope__primary strong { font-size: 13px; color: #145c37; }
+.ua-stock-scope__primary small { font-size: 12px; color: #316d4c; }
+.ua-stock-scope__fixed { display: inline-flex; font-size: 10px; font-weight: 800; color: #17764b; border-radius: 100px; background: #dbf8e6; padding: 7px 9px; }
+.ua-stock-scope__search { display: grid; gap: 8px; }
+.ua-stock-scope__search label { color: #222b38; font-size: 12px; font-weight: 850; }
+.ua-stock-scope__search input { box-sizing: border-box; min-height: 42px; width: 100%; border: 1px solid #dce1e8; border-radius: 11px; padding: 0 12px; background: #f8f9fb; color: #172132; font: inherit; font-size: 12px; outline: none; }
+.ua-stock-scope__search input:focus-visible { border-color: #f47719; box-shadow: 0 0 0 3px #f4771922; }
+.ua-stock-scope__list { max-height: min(340px,45dvh); overflow-y: auto; overscroll-behavior: contain; display: grid; gap: 8px; padding: 3px 2px; scrollbar-width: thin; }
+.ua-stock-scope__option { cursor: pointer; display: flex; align-items: center; gap: 11px; min-width: 0; padding: 10px 11px; border: 1px solid #eceef1; border-radius: 12px; background: #fff; }
+.ua-stock-scope__option:hover { border-color: #fac398; background: #fffaf7; }
+.ua-stock-scope__folder { display: grid; place-items: center; width: 37px; height: 37px; flex: 0 0 37px; background: #fff3e9; color: #ed771f; border-radius: 10px; }
+.ua-stock-scope__folder svg { width: 19px; height: 19px; }
+.ua-stock-scope__label { display: grid; gap: 4px; min-width: 0; flex: 1; }
+.ua-stock-scope__label strong { overflow-wrap: anywhere; font-weight: 800; font-size: 12px; color: #1d2734; }
+.ua-stock-scope__label small { color: #7e8794; font-size: 10px; }
+.ua-stock-scope__option input { flex: 0 0 auto; width: 20px; height: 20px; accent-color: #f47719; cursor: pointer; }
+.ua-stock-scope__count, .ua-stock-scope__message { color: #697487; font-size: 11px; }
+html[data-theme="dark"] .ua-stock-scope { background: #171b23; border-color: #383f4d; }
+html[data-theme="dark"] .ua-stock-scope__heading strong, html[data-theme="dark"] .ua-stock-scope__search label, html[data-theme="dark"] .ua-stock-scope__label strong { color: #edf0f6; }
+html[data-theme="dark"] .ua-stock-scope__option { background: #202631; border-color: #414958; }
+html[data-theme="dark"] .ua-stock-scope__primary { background: #1f392c; border-color: #36674b; }
+html[data-theme="dark"] .ua-stock-scope__search input { background: #232a35; border-color: #454e5d; color: #f0f2f6; }
+@media (max-width: 640px) { .ua-stock-scope { padding: 12px; gap: 11px; } .ua-stock-scope__primary { padding: 10px; } }

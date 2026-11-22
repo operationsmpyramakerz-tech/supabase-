@@ -5,7 +5,7 @@ import { readAllStocktakingPages } from "./stocktaking-pagination.mjs";
 import { planStocktakingFolderRowDeletion, stocktakingFolderDeletePath } from "./stocktaking-folder-delete.mjs";
 import { getProductsCatalog } from "./products-service";
 import { listTeamMembersLite } from "./team-members-service";
-import { getReviewerVisibility } from "./reviewer-visibility-service";
+import { getMemberStocktakingFolderKeys } from "./stocktaking-folder-access";
 import {
   canUseStocktakingFolderSummaryRpc,
   invalidateStocktakingFolderSummaryRpcCache,
@@ -373,29 +373,21 @@ function stocktakingFolderMatches(folder = {}, ids = new Set(), names = new Set(
   return folderNames.some((value) => names.has(value));
 }
 
+// ERP_STOCK_FOLDER_VISIBILITY_V1: Own stock is always visible when the
+// Stocktaking page is allowed. Extra stock folders require explicit grants.
+// Orders Supervision and Team Visibility must not grant Stocktaking access.
 export async function filterStocktakingFoldersForAccount(folders = [], account = {}, { fresh = false } = {}) {
   const source = Array.isArray(folders) ? folders : [];
-  const level = stocktakingAccessLevel(account);
-  if (level === "admin") return source;
-
+  if (stocktakingAccessLevel(account) === "admin") return source;
   const ownIds = new Set([text(account?.teamMemberId || account?.userSupabaseId || account?.id || account?.userId)].filter(Boolean));
   const ownNames = new Set([account?.name, account?.username].map(ownerBase).filter(Boolean));
-  const allowedIds = new Set(ownIds);
-  const allowedNames = new Set(ownNames);
-
-  if (level === "edit") {
-    const visibility = await getReviewerVisibility(account, { fresh }).catch(() => ({ ids: [], names: [], queryNames: [] }));
-    for (const id of Array.isArray(visibility?.ids) ? visibility.ids : []) {
-      const clean = text(id);
-      if (clean) allowedIds.add(clean);
-    }
-    for (const name of [...(Array.isArray(visibility?.names) ? visibility.names : []), ...(Array.isArray(visibility?.queryNames) ? visibility.queryNames : [])]) {
-      const clean = ownerBase(name);
-      if (clean) allowedNames.add(clean);
-    }
-  }
-
-  return source.filter((folder) => stocktakingFolderMatches(folder, allowedIds, allowedNames));
+  const memberId = text(account?.teamMemberId || account?.userSupabaseId || account?.id || account?.userId);
+  // Do not use cached account payloads for access grants. Revocation must
+  // take effect on the next Stocktaking request; a DB failure fails closed.
+  const granted = memberId ? await getMemberStocktakingFolderKeys(memberId) : [];
+  const extraKeys = new Set(granted);
+  return source.filter((folder) =>
+    stocktakingFolderMatches(folder, ownIds, ownNames) || extraKeys.has(text(folder?.key)));
 }
 
 export async function canAccessStocktakingColumn(account = {}, column = "", { fresh = false } = {}) {
