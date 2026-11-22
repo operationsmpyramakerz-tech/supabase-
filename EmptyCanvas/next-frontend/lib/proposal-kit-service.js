@@ -478,11 +478,18 @@ export async function listProposals(account, { fresh = false } = {}) {
   // Enrich only RPC rows with a compact, independently cached mapping.
   const folderIds = snapshot.source === "rpc"
     ? await proposalKitCachedRead("proposals:folder-map", async () => {
-        const rows = await selectAll(proposalTable(), {
-          select: "id,folder_id", limit: 5000,
-          order: "updated_at.desc", profileName: "proposals.folder-map",
-        });
-        return new Map(rows.map((row) => [text(row.id), text(row.folder_id)]));
+        try {
+          const rows = await selectAll(proposalTable(), {
+            select: "id,folder_id", limit: 5000,
+            order: "updated_at.desc", profileName: "proposals.folder-map",
+          });
+          return new Map(rows.map((row) => [text(row.id), text(row.folder_id)]));
+        } catch (error) {
+          // Rolling upgrade: if the migration hasn't run, keep the existing
+          // Proposals list available at root instead of blanking the page.
+          if (/folder_id|42703|column.*does not exist/i.test(String(error?.message || error))) return new Map();
+          throw error;
+        }
       }, { fresh })
     : null;
   return snapshot.headers.map((row) => proposalHeader(
@@ -589,7 +596,10 @@ export async function createProposal(name, account, folderId = "") {
   const now = new Date().toISOString();
   const cleanFolderId = text(folderId);
   if (cleanFolderId) await requireProposalFolder(cleanFolderId);
-  const row = { name: clean, created_at: now, updated_at: now, folder_id: cleanFolderId || null };
+  // Omit the optional column for root proposals. Existing installations keep
+  // creating Proposals even if the folder SQL migration hasn't run yet.
+  const row = { name: clean, created_at: now, updated_at: now };
+  if (cleanFolderId) row.folder_id = cleanFolderId;
   if (identity.id) row.created_by_id = identity.id;
   if (identity.name) row.created_by = identity.name;
   const created = await insert(proposalTable(), row);
