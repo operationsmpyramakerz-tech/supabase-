@@ -1,8 +1,10 @@
 import { redirect } from "next/navigation";
+import { Suspense } from "react"; // ERP_HOME_PROJECTS_PREPARING_ANALYSIS_V1
 import AppShell from "../../components/AppShell";
 import AuthTransitionReady from "../../components/AuthTransitionReady";
 import { DashboardNotice, QuickActionsCard, RecentOrdersCard, ScopeCard } from "../../components/home/DashboardCards";
 import HomeOverviewClient from "../../components/home/HomeOverviewClient";
+import PreparingHomePanel from "../../components/home/PreparingHomePanel";
 import { fetchDirectPageBootstrap } from "../../lib/page-bootstrap-direct";
 import { getDirectAccountGate } from "../../lib/products-auth";
 import { loadHomeOverviewDirect } from "../../lib/home-overview-data";
@@ -149,6 +151,8 @@ export default async function HomePage({ searchParams, analysisView = "overview"
         canViewSlaMetrics={featureAllowed(account, "home.sla_view")}
         canManageSla={canManageSla(account)}
       />
+
+      {analysisView === "overview" ? <Suspense fallback={<div className="home-preparing-mini home-preparing-mini--loading" role="status">Loading Projects Preparing analysis…</div>}><PreparingHomePanel /></Suspense> : null}
 
       {analysisView !== "orders" ? <section aria-label="Recent activity and shortcuts" className="home-grid erp-home-details">
         {overview.showCurrent ? <RecentOrdersCard orders={overview.recentOrders || []} totalGroups={overview.currentTotalGroups || 0} /> : null}
