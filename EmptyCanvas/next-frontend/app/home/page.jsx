@@ -64,7 +64,7 @@ async function legacyHomeBootstrap(requestedUserId, duration) {
   return await fetchDirectPageBootstrap(`/api/page-bootstrap?${query.toString()}`);
 }
 
-export default async function HomePage({ searchParams }) {
+export default async function HomePage({ searchParams, analysisView = "overview" }) {
   const params = await Promise.resolve(searchParams || {});
   const requestedUserId = text(Array.isArray(params?.analysisUser) ? params.analysisUser[0] : params?.analysisUser) || "all";
   const requestedDuration = text(Array.isArray(params?.analysisDuration) ? params.analysisDuration[0] : params?.analysisDuration) || "all";
@@ -116,13 +116,14 @@ export default async function HomePage({ searchParams }) {
   return (
     <AppShell
       account={account}
-      title="Home"
+      title={analysisView === "orders" ? "Orders Analysis" : "Home"}
       activePath="/next/home"
       bodyClass="page-home"
     >
       <DashboardNotice omitted={bootstrapWarnings} />
 
       <HomeOverviewClient
+        view={analysisView}
         analysisUsers={selectedAnalysisUsers}
         analysisUsersReady={false}
         canSelectAnalysisUsers={overview.canSelectAnalysisUsers !== false}
@@ -149,11 +150,11 @@ export default async function HomePage({ searchParams }) {
         canManageSla={canManageSla(account)}
       />
 
-      <section aria-label="Recent activity and shortcuts" className="home-grid erp-home-details">
+      {analysisView !== "orders" ? <section aria-label="Recent activity and shortcuts" className="home-grid erp-home-details">
         {overview.showCurrent ? <RecentOrdersCard orders={overview.recentOrders || []} totalGroups={overview.currentTotalGroups || 0} /> : null}
         <QuickActionsCard actions={actions} />
         <ScopeCard account={account} />
-      </section>
+      </section> : null}
     </AppShell>
   );
 }

@@ -403,7 +403,7 @@ function ComparisonMetric({ title, value, previous, delta, format = "number" }) 
   );
 }
 
-function TrendInsights({ workspaces, trendAnalysis = {} }) {
+function TrendInsights({ workspaces, trendAnalysis = {}, detailsHref = "" }) {
   const [active, setActive] = useState("current");
   const [selectedBin, setSelectedBin] = useState(null);
   const available = workspaces.filter(({ definition }) => Boolean(trendAnalysis?.[definition.key]));
@@ -420,7 +420,10 @@ function TrendInsights({ workspaces, trendAnalysis = {} }) {
     <section className="erp-home-trends" aria-label="Orders trends and period comparison">
       <div className="erp-home-trends__top">
         <div className="erp-home-trends__heading">
-          <span className="erp-home-dashboard__eyebrow"><Icon name="chart" /> TIME-BASED INSIGHTS</span>
+          <div className="erp-home-trends__heading-row">
+            <span className="erp-home-dashboard__eyebrow"><Icon name="chart" /> TIME-BASED INSIGHTS</span>
+            {detailsHref ? <Link className="erp-home-trends__details-link" href={detailsHref} aria-label="View all orders analysis">View all analysis <Icon name="arrow" /></Link> : null}
+          </div>
           <h2>Orders activity</h2>
           <p>Creation dates grouped by the orders' current status. Tap a bar for details.</p>
         </div>
@@ -741,6 +744,7 @@ export default function HomeOverviewClient({
   showExpenses,
   canManageSla = false,
   canViewSlaMetrics = true,
+  view = "overview",
 }) {
   const available = [
     showCurrent ? { definition: DASHBOARD_WORKSPACES[0], matrix: currentMatrix } : null,
@@ -749,40 +753,58 @@ export default function HomeOverviewClient({
     showMaintenance ? { definition: DASHBOARD_WORKSPACES[3], matrix: { status: { all: maintenanceSummary }, type: { all: maintenanceSummary } }, statusOnly: true } : null,
   ].filter(Boolean);
 
+  // ERP_HOME_ORDERS_ANALYSIS_NAV_V1: preserve filters between the two real routes.
+  const isOrdersAnalysis = view === "orders";
+  const analysisParams = new URLSearchParams();
+  if (selectedUser && String(selectedUser) !== "all") analysisParams.set("analysisUser", String(selectedUser));
+  if (selectedDuration && String(selectedDuration) !== "all") analysisParams.set("analysisDuration", String(selectedDuration));
+  const filterSuffix = analysisParams.toString() ? `?${analysisParams.toString()}` : "";
+  const analysisHref = `/home/orders-analysis${filterSuffix}`;
+  const homeHref = `/home${filterSuffix}`;
+
   return (
-    <section aria-label="Operations dashboard" className="erp-home-dashboard">
+    <section aria-label={isOrdersAnalysis ? "Orders analysis" : "Operations dashboard"} className={`erp-home-dashboard${isOrdersAnalysis ? " erp-home-dashboard--orders-analysis" : ""}`}>
       <div className="erp-home-dashboard__header">
         <div className="erp-home-dashboard__heading">
-          <span className="erp-home-dashboard__eyebrow"><Icon name="activity"/> OPERATIONS DASHBOARD</span>
-          <h2>Workspace overview</h2>
-          <p>Order counts, values and progress in one place.</p>
+          {isOrdersAnalysis ? <Link className="erp-home-analysis__back" href={homeHref}><Icon name="arrow" /> Back to Home</Link> : null}
+          <span className="erp-home-dashboard__eyebrow"><Icon name="activity"/> {isOrdersAnalysis ? "ORDERS ANALYSIS" : "OPERATIONS DASHBOARD"}</span>
+          <h2>{isOrdersAnalysis ? "Orders analysis" : "Workspace overview"}</h2>
+          <p>{isOrdersAnalysis ? "Explore follow-up, backlog, processing time, SLA and detailed order breakdowns." : "Order counts, values and progress in one place."}</p>
         </div>
         <GlobalAnalysisControl users={analysisUsers} usersReady={analysisUsersReady} canSelectUsers={canSelectAnalysisUsers} allowAllUsers={allowAllAnalysisUsers} selectedUser={selectedUser} selectedDuration={selectedDuration} />
       </div>
 
       {available.length ? (
         <>
-          <div className="erp-home-tiles" aria-label="Order workspace totals">
-            {available.map(({ definition, matrix }) => <SummaryTile key={definition.key} definition={definition} summary={safeStatus(matrix)} />)}
-          </div>
-          <FocusQueue workspaces={available} trendAnalysis={trendAnalysis} />
-          <BacklogHealth workspaces={available} backlogAnalysis={backlogAnalysis} selectedDuration={selectedDuration} />
-          <ProcessingTimeInsights workspaces={available} lifecycleAnalysis={lifecycleAnalysis} />
-          {canViewSlaMetrics ? <SlaMonitoring workspaces={available} lifecycleAnalysis={lifecycleAnalysis} canManageSla={canManageSla} /> : null}
-          <TrendInsights workspaces={available} trendAnalysis={trendAnalysis} />
-          <div className="erp-home-dashboard__section-heading">
-            <div><span>DETAILED ANALYSIS</span><h2>Order breakdown</h2></div>
-            <p>Each workspace is calculated separately</p>
-          </div>
-          <div className="erp-home-order-grid">
-            {available.map(({ definition, matrix, statusOnly }) => (
-              <OrderOverviewCard key={definition.key} definition={definition} matrix={statusOnly ? { status: matrix.status } : matrix} statusOnly={statusOnly} />
-            ))}
-          </div>
+          {isOrdersAnalysis ? (
+            <>
+              <TrendInsights workspaces={available} trendAnalysis={trendAnalysis} />
+              <FocusQueue workspaces={available} trendAnalysis={trendAnalysis} />
+              <BacklogHealth workspaces={available} backlogAnalysis={backlogAnalysis} selectedDuration={selectedDuration} />
+              <ProcessingTimeInsights workspaces={available} lifecycleAnalysis={lifecycleAnalysis} />
+              {canViewSlaMetrics ? <SlaMonitoring workspaces={available} lifecycleAnalysis={lifecycleAnalysis} canManageSla={canManageSla} /> : null}
+              <div className="erp-home-dashboard__section-heading">
+                <div><span>DETAILED ANALYSIS</span><h2>Order breakdown</h2></div>
+                <p>Each workspace is calculated separately</p>
+              </div>
+              <div className="erp-home-order-grid">
+                {available.map(({ definition, matrix, statusOnly }) => (
+                  <OrderOverviewCard key={definition.key} definition={definition} matrix={statusOnly ? { status: matrix.status } : matrix} statusOnly={statusOnly} />
+                ))}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="erp-home-tiles" aria-label="Order workspace totals">
+                {available.map(({ definition, matrix }) => <SummaryTile key={definition.key} definition={definition} summary={safeStatus(matrix)} />)}
+              </div>
+              <TrendInsights workspaces={available} trendAnalysis={trendAnalysis} detailsHref={analysisHref} />
+            </>
+          )}
         </>
       ) : null}
 
-      {showStock || showExpenses ? (
+      {!isOrdersAnalysis && (showStock || showExpenses) ? (
         <section className="erp-home-secondary" aria-label="Additional analytics">
           <div className="erp-home-dashboard__section-heading"><div><span>MORE INSIGHTS</span><h2>Inventory & expenses</h2></div></div>
           <div className="erp-home-secondary__grid">

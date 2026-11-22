@@ -1,0 +1,77 @@
+/* ERP_HOME_ORDERS_ANALYSIS_NAV_V1
+   Scoped to Home + Home/Orders Analysis. Primary card keeps existing chart styles. */
+body.page-home .erp-home-trends__heading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+body.page-home .erp-home-trends__heading-row .erp-home-dashboard__eyebrow {
+  margin: 0;
+  min-width: 0;
+}
+body.page-home .erp-home-trends__details-link {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 1px solid #111827;
+  border-radius: 12px;
+  background: #111827;
+  color: #fff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.2;
+  white-space: nowrap;
+  text-decoration: none;
+  box-shadow: 0 5px 16px rgba(17,24,39,.12);
+  transition: transform .16s ease, background .16s ease;
+}
+body.page-home .erp-home-trends__details-link:hover {
+  color: #fff;
+  background: #f97316;
+  border-color: #f97316;
+  transform: translateY(-1px);
+}
+body.page-home .erp-home-trends__details-link:focus-visible,
+body.page-home .erp-home-analysis__back:focus-visible {
+  outline: 3px solid rgba(249,115,22,.35);
+  outline-offset: 3px;
+}
+body.page-home .erp-home-trends__details-link svg { width: 16px; height: 16px; }
+body.page-home .erp-home-analysis__back {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  width: max-content;
+  max-width: 100%;
+  min-height: 36px;
+  margin: 0 0 17px;
+  padding: 7px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fff;
+  color: #111827;
+  text-decoration: none;
+  font-size: 12px;
+  line-height: 1.2;
+  font-weight: 850;
+}
+body.page-home .erp-home-analysis__back:hover { border-color: #f97316; color: #f97316; }
+body.page-home .erp-home-analysis__back svg { width: 15px; height: 15px; transform: rotate(180deg); }
+body.page-home .erp-home-dashboard--orders-analysis .erp-home-dashboard__header { margin-bottom: 20px; }
+body.page-home .erp-home-dashboard--orders-analysis .erp-home-trends { margin-top: 0; }
+@media (max-width: 640px) {
+  body.page-home .erp-home-trends__heading-row { gap: 10px; }
+  body.page-home .erp-home-trends__details-link { min-height: 36px; padding: 7px 10px; font-size: 11px; }
+  body.page-home .erp-home-dashboard--orders-analysis .erp-home-dashboard__header { align-items: flex-start; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.page-home .erp-home-trends__details-link { transition: none; }
+}
