@@ -20,8 +20,8 @@ export async function POST(request) {
   try {
     const body = await requestBody(request);
     const proposal = Array.isArray(body?.items) && body.items.length
-      ? await createProposalWithItems(body?.name, body.items, gate.account)
-      : await createProposal(body?.name, gate.account);
+      ? await createProposalWithItems(body?.name, body.items, gate.account, body?.folderId)
+      : await createProposal(body?.name, gate.account, body?.folderId);
     return NextResponse.json({ ok: true, source: "supabase-next", proposal }, { status: 201 });
   } catch (error) { return errorResponse(error, "Failed to create proposal."); }
 }
