@@ -1791,24 +1791,112 @@ export default function ProposalsClient({
     <main className="products-shell proposals-shell next-proposals-classic-parity">
       <Toast toast={toast} onClose={() => setToast(null)} />
 
-      <div className="proposals-floating-actions">
-        {can("combine") ? <button type="button" className="products-btn products-btn--light proposal-classic-combine-btn" onClick={() => setCombineOpen(true)} disabled={proposals.length < 2}>Combine Proposals</button> : null}
-        {can("create") ? <button type="button" className="products-add-btn proposals-create-btn" onClick={startCreateProposal}><span aria-hidden="true">＋</span><span>Create New Proposal</span></button> : null}
-      </div>
 
+      {activeFolder ? <HeaderFolderBreadcrumb segments={[
+        { label: "Proposals", icon: "folder", onClick: () => { setActiveFolder(null); setSearch(""); setFolderMenu(""); } },
+        ...proposalFolderPath(activeFolder, folders).map((folder) => ({
+          label: folder.name, icon: "folder-check", onClick: () => openProposalFolder(folder),
+        })),
+      ]}/> : null}
 
-      <section className="products-proposals-view proposals-workspace proposals-folders-card" aria-live="polite">
+      <section className="products-proposals-view proposals-workspace proposals-folders-card proposal-library-page" aria-live="polite">
         <section className="proposals-panel">
+          {!activeFolder ? (
+            <header className="kit-library-heading proposal-library-heading">
+              <div className="kit-library-heading__title">
+                <span className="kit-library-heading__icon" aria-hidden="true"><ProposalIcon name="folder" /></span>
+                <h2>Proposal Folders</h2>
+              </div>
+              <div className="proposal-library-heading__side">
+                {can("combine") ? <button type="button" className="proposal-library-combine" onClick={() => setCombineOpen(true)} disabled={proposals.length < 2}>Combine Proposals</button> : null}
+                <span className="kit-library-heading__count">{folders.length} folder{folders.length === 1 ? "" : "s"}</span>
+              </div>
+            </header>
+          ) : null}
           <div className="products-proposals-list">
-            {filteredProposals.length ? (
-              <div className="products-proposal-folders">
+            {(filteredProposalFolders.length || filteredProposals.length || can("create")) ? (
+              <div className="products-proposal-folders kit-library-grid proposal-library-grid">
+                {can("create") ? (
+                  <div className="kit-quick-create kit-quick-create--folder">
+                    <button type="button" className="kit-quick-create__tile" onClick={() => {
+                      setFolderMenu(""); setFolderDialog({ mode: "create", value: "" });
+                    }} aria-label="Create Folder">
+                      <span className="kit-quick-create__illustration" aria-hidden="true">
+                        <ProposalIcon name="folder" size={39}/><span className="kit-quick-create__spark"/>
+                      </span>
+                      <strong>Create Folder</strong><small>Add a new folder</small>
+                    </button>
+                  </div>
+                ) : null}
+                {can("create") ? (
+                  <div className="kit-quick-create kit-quick-create--kit">
+                    <button type="button" className="kit-quick-create__tile" onClick={() => {
+                      setFolderMenu(""); startCreateProposal();
+                    }} aria-label="Create Proposal">
+                      <span className="kit-quick-create__illustration" aria-hidden="true">
+                        <ProposalIcon name="file" size={39}/><span className="kit-quick-create__spark"/>
+                      </span>
+                      <strong>Create Proposal</strong><small>Add a new proposal</small>
+                    </button>
+                  </div>
+                ) : null}
+                {filteredProposalFolders.map((folder) => {
+                  const key = `folder:${folder.id}`;
+                  const menuOpen = folderMenu === key;
+                  const proposalCount = folderProposalCounts.get(folder.id) || 0;
+                  const childCount = folderChildCounts.get(folder.id) || 0;
+                  return (
+                    <article className={`products-proposal-folder proposal-library-folder ${menuOpen ? "is-menu-open" : ""}`} key={folder.id}>
+                      {menuOpen && can("edit") ? (
+                        <div className="proposal-folder-menu" onClick={(event) => event.stopPropagation()}>
+                          <button type="button" onClick={() => { setFolderMenu(""); renameProposalFolder(folder); }}><ProposalIcon name="edit" /><span>Rename</span></button>
+                          <button type="button" className="is-danger" onClick={() => { setFolderMenu(""); deleteProposalFolder(folder); }}><ProposalIcon name="trash" /><span>Delete folder</span></button>
+                        </div>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="products-proposal-folder__main products-proposal-folder__main--long-press"
+                        onPointerDown={(event) => startFolderLongPress(event, key)}
+                        onPointerMove={moveFolderLongPress}
+                        onPointerUp={cancelFolderLongPress}
+                        onPointerCancel={cancelFolderLongPress}
+                        onPointerLeave={cancelFolderLongPress}
+                        onContextMenu={(event) => {
+                          event.preventDefault(); cancelFolderLongPress();
+                          suppressFolderClickRef.current = true; setFolderMenu(key);
+                        }}
+                        onKeyDown={(event) => openFolderActionsFromKeyboard(event, key)}
+                        onClick={() => {
+                          if (suppressFolderClickRef.current) { suppressFolderClickRef.current = false; return; }
+                          openProposalFolder(folder);
+                        }}
+                        aria-label={`Open folder ${folder.name}. Press and hold for actions.`}
+                        aria-haspopup="menu" aria-expanded={menuOpen}
+                      >
+                        <span className="proposal-folder-figure" aria-hidden="true">
+                          <span className="proposal-folder-figure__paper proposal-folder-figure__paper--left"/>
+                          <span className="proposal-folder-figure__paper proposal-folder-figure__paper--middle"/>
+                          <span className="proposal-folder-figure__paper proposal-folder-figure__paper--right"/>
+                          <span className="proposal-folder-figure__back"/>
+                          <span className="proposal-folder-figure__front"><small>F</small></span>
+                        </span>
+                        <span className="proposal-folder-copy"><strong>{folder.name}</strong><em>Proposal folder</em></span>
+                        <span className="proposal-folder-count"><ProposalIcon name="folder" size={14}/><span>
+                          {proposalCount} proposal{proposalCount === 1 ? "" : "s"}
+                          {childCount ? ` · ${childCount} folder${childCount === 1 ? "" : "s"}` : ""}
+                        </span></span>
+                      </button>
+                    </article>
+                  );
+                })}
                 {filteredProposals.map((proposal) => {
-                  const menuOpen = folderMenu === proposal.id;
+                  const menuOpen = folderMenu === `proposal:${proposal.id}`;
                   return (
                   <article className={`products-proposal-folder ${menuOpen ? "is-menu-open" : ""}`} key={proposal.id}>
                     {menuOpen && (can("edit") || can("copy") || can("delete") || can("item_add") || can("item_edit") || can("item_delete")) ? (
                       <div className="proposal-folder-menu" onClick={(event) => event.stopPropagation()}>
                         {(can("edit") || can("item_add") || can("item_edit") || can("item_delete")) ? <button type="button" onClick={() => enterEditProposal(proposal)}><ProposalIcon name="edit" /><span>Edit</span></button> : null}
+                        {can("edit") ? <button type="button" onClick={() => { setFolderMenu(""); moveProposal(proposal); }}><ProposalIcon name="folder" /><span>Move</span></button> : null}
                         {can("copy") ? <button type="button" onClick={() => { setFolderMenu(""); setNameDialog({ mode: "copy", proposal, value: `${proposal.name} Copy` }); }}><ProposalIcon name="copy" /><span>Make a copy</span></button> : null}
                         {can("delete") ? <button type="button" className="is-danger" onClick={() => { setFolderMenu(""); deleteProposal(proposal); }}><ProposalIcon name="trash" /><span>Delete</span></button> : null}
                       </div>
@@ -1816,7 +1904,7 @@ export default function ProposalsClient({
                     <button
                       type="button"
                       className="products-proposal-folder__main products-proposal-folder__main--long-press"
-                      onPointerDown={(event) => startFolderLongPress(event, proposal.id)}
+                      onPointerDown={(event) => startFolderLongPress(event, `proposal:${proposal.id}`)}
                       onPointerMove={moveFolderLongPress}
                       onPointerUp={cancelFolderLongPress}
                       onPointerCancel={cancelFolderLongPress}
@@ -1825,9 +1913,9 @@ export default function ProposalsClient({
                         event.preventDefault();
                         cancelFolderLongPress();
                         suppressFolderClickRef.current = true;
-                        setFolderMenu(proposal.id);
+                        setFolderMenu(`proposal:${proposal.id}`);
                       }}
-                      onKeyDown={(event) => openFolderActionsFromKeyboard(event, proposal.id)}
+                      onKeyDown={(event) => openFolderActionsFromKeyboard(event, `proposal:${proposal.id}`)}
                       onClick={() => {
                         if (suppressFolderClickRef.current) {
                           suppressFolderClickRef.current = false;
@@ -1854,7 +1942,7 @@ export default function ProposalsClient({
                 })}
               </div>
             ) : (
-              <div className="products-proposals-empty">Sorry, No data available</div>
+              <div className="products-proposals-empty">No folders or proposals match your search.</div>
             )}
           </div>
         </section>
@@ -1968,6 +2056,8 @@ export default function ProposalsClient({
         </Modal>
       ) : null}
 
+      {folderDialog ? <ProposalFolderNameModal key={`${folderDialog.mode}-${folderDialog.folder?.id || "new"}`} dialog={folderDialog} busy={busy} onClose={() => setFolderDialog(null)} onSubmit={submitProposalFolder} /> : null}
+      {moveDialog ? <MoveProposalModal key={`move-${moveDialog.proposal?.id || "proposal"}`} dialog={moveDialog} folders={folders.map((folder) => ({ ...folder, proposalCount: folderProposalCounts.get(folder.id) || 0 }))} busy={busy} onClose={() => setMoveDialog(null)} onSubmit={submitMoveProposal} /> : null}
       {nameDialog ? <NameModal key={`${nameDialog.mode}-${nameDialog.proposal?.id || "new"}`} dialog={nameDialog} busy={busy} onClose={() => setNameDialog(null)} onSubmit={submitNameDialog} /> : null}
       {passwordRequest ? <PasswordModal request={passwordRequest} busy={busy} onClose={closePassword} onVerified={verifyPassword} /> : null}
     </main>
