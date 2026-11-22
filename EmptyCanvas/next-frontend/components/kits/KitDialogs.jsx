@@ -188,9 +188,9 @@ async function requestJson(url, options = {}) {
   return body;
 }
 
-function Modal({ title, subtitle, icon = "◆", children, onClose, wide = false, className = "" }) {
+function Modal({ title, subtitle, icon = "◆", children, onClose, wide = false, className = "", overlayClassName = "" }) {
   return (
-    <div className="products-modal-overlay next-proposals-classic-modal" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <div className={`products-modal-overlay next-proposals-classic-modal ${overlayClassName}`.trim()} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <section className={`products-modal products-proposal-modal ${wide ? "next-proposals-classic-modal--wide" : ""} ${className}`.trim()} role="dialog" aria-modal="true" aria-label={title}>
         <button type="button" className="products-modal__close" onClick={onClose} aria-label="Close"><span aria-hidden="true">×</span></button>
         <div className="products-modal__header">
@@ -605,24 +605,29 @@ export function MoveKitModal({ dialog, folders, busy, onClose, onSubmit }) {
       subtitle={`Choose where “${kit?.name || "this kit"}” should be moved.`}
       icon={<FeatherIcon name="move" size={20} />}
       onClose={onClose}
+      className="next-kit-move-sheet"
+      overlayClassName="next-kit-move-overlay"
     >
-      <form className="next-kit-move-form next-kit-move-form--nested" onSubmit={submit}>
+      {/* ERP_KITS_MOVE_BOTTOM_SHEET_FOLDERS_V1: Move Kit is a bottom sheet, with familiar folder cards. */}
+      <form className="next-kit-move-form next-kit-move-form--nested next-kit-move-form--cards" onSubmit={submit}>
         <label className="next-kit-move-search">
           <FeatherIcon name="search" size={18} />
           <input type="search" value={search} onChange={(event) => setSearch(event.target.value)}
             placeholder="Search folders or paths..." aria-label="Search destination folders"
             autoComplete="off" />
         </label>
-        <div className="next-kit-move-list next-kit-move-list--nested" role="radiogroup" aria-label="Move kit destination">
+        <div className="next-kit-move-list next-kit-move-list--nested next-kit-move-list--folders" role="radiogroup" aria-label="Move kit destination">
           {visibleDestinations.map((destination) => {
             const selected = selectedFolderId === destination.id;
             const current = currentFolderId === destination.id;
+            const kitLabel = destination.id
+              ? `${formatNumber(destination.count)} kit${destination.count === 1 ? "" : "s"}${destination.childrenCount ? ` · ${destination.childrenCount} folder${destination.childrenCount === 1 ? "" : "s"}` : ""}`
+              : "No folder";
             return (
               <button
                 type="button"
                 key={destination.id || "root"}
-                className={`next-kit-move-nested-option ${selected ? "is-selected" : ""} ${current ? "is-current" : ""}`}
-                style={{ "--kit-move-depth": Math.min(destination.depth, 7) }}
+                className={`next-kit-move-folder-card${selected ? " is-selected" : ""}${current ? " is-current" : ""}`}
                 onClick={() => { setSelectedFolderId(destination.id); setError(""); }}
                 disabled={busy}
                 role="radio"
@@ -630,15 +635,17 @@ export function MoveKitModal({ dialog, folders, busy, onClose, onSubmit }) {
                 aria-label={destination.path}
                 title={destination.path}
               >
-                <span className="next-kit-move-list__icon"><FeatherIcon name="folder" size={18} /></span>
-                <span className="next-kit-move-list__copy">
-                  <strong>{destination.name}</strong>
-                  <small>{current ? "Current location" : destination.id
-                    ? `${formatNumber(destination.count)} kit${destination.count === 1 ? "" : "s"}${destination.childrenCount ? ` · ${destination.childrenCount} subfolder${destination.childrenCount === 1 ? "" : "s"}` : ""}`
-                    : "No folder"}</small>
-                  {destination.parentPath ? <small className="next-kit-move-nested-path">{destination.parentPath}</small> : null}
+                <span className="next-kit-move-folder-card__figure" aria-hidden="true">
+                  <span className="next-kit-move-folder-card__paper next-kit-move-folder-card__paper--left" />
+                  <span className="next-kit-move-folder-card__paper next-kit-move-folder-card__paper--middle" />
+                  <span className="next-kit-move-folder-card__paper next-kit-move-folder-card__paper--right" />
                 </span>
-                <span className="next-kit-move-list__check" aria-hidden="true">{selected ? "✓" : ""}</span>
+                <span className="next-kit-move-folder-card__copy">
+                  <strong>{destination.name}</strong>
+                  <small>{current ? "Current location" : kitLabel}</small>
+                  <em title={destination.parentPath || "Main Kits"}>{destination.parentPath || "Main Kits"}</em>
+                </span>
+                {selected ? <span className="next-kit-move-folder-card__selected" aria-hidden="true">✓</span> : null}
               </button>
             );
           })}
