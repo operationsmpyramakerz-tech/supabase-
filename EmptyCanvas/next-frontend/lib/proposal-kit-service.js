@@ -93,6 +93,10 @@ function kitFoldersTable() {
   return text(process.env.SUPABASE_PRODUCT_KIT_FOLDERS_TABLE || "product_kit_folders") || "product_kit_folders";
 }
 
+function proposalFoldersTable() {
+  return "product_proposal_folders";
+}
+
 // Cache only account-independent Supabase snapshots. Permission-derived fields
 // such as `canEdit` are applied after the current account gate resolves, so a
 // cached row set can never leak one user's authorization state to another.
@@ -104,7 +108,7 @@ let proposalKitCacheGeneration = 0;
 let proposalHeaderProjectionSupported = null;
 let kitHeaderProjectionSupported = null;
 
-const PROPOSAL_HEADER_SELECT = "id,name,created_by,created_by_id,created_at,updated_at,combined_sources,combine_logic";
+const PROPOSAL_HEADER_SELECT = "id,name,created_by,created_by_id,created_at,updated_at,combined_sources,combine_logic,folder_id";
 const KIT_HEADER_SELECT = "id,name,created_by,created_by_id,created_at,updated_at,folder_id";
 
 function proposalKitCacheGet(key) {
@@ -254,6 +258,7 @@ function proposalHeader(row = {}, itemCount = 0, account = {}) {
     createdAt: text(row.created_at),
     updatedAt: text(row.updated_at),
     itemsCount: Number(itemCount) || 0,
+    folderId: text(row.folder_id),
     canEdit: isOwner(row, account),
     combinedSources: Array.isArray(row.combined_sources) ? row.combined_sources : [],
     combineLogic: text(row.combine_logic),
@@ -276,6 +281,31 @@ function kitHeader(row = {}, itemCount = 0, account = {}) {
     canEdit: isOwner(row, account),
     source: "supabase-next",
   };
+}
+
+function proposalFolderHeader(row = {}, account = {}) {
+  return {
+    id: text(row.id),
+    name: text(row.name) || "Untitled folder",
+    createdBy: text(row.created_by),
+    createdById: text(row.created_by_id),
+    createdAt: text(row.created_at),
+    updatedAt: text(row.updated_at),
+    parentFolderId: text(row.parent_folder_id),
+    canEdit: isOwner(row, account),
+  };
+}
+
+async function requireProposalFolder(folderId) {
+  const id = text(folderId);
+  if (!id) return null;
+  const folder = await selectById(proposalFoldersTable(), id);
+  if (!folder) {
+    const error = new Error("Proposal folder not found.");
+    error.status = 404;
+    throw error;
+  }
+  return folder;
 }
 
 function kitFolderHeader(row = {}, account = {}) {
@@ -444,8 +474,26 @@ export async function listProposals(account, { fresh = false } = {}) {
     return { headers, itemCounts, source: "rest" };
   }, { fresh });
   const resolvedAccount = await accountPromise;
+  // The optional legacy summary RPC does not expose folder_id yet.
+  // Enrich only RPC rows with a compact, independently cached mapping.
+  const folderIds = snapshot.source === "rpc"
+    ? await proposalKitCachedRead("proposals:folder-map", async () => {
+        try {
+          const rows = await selectAll(proposalTable(), {
+            select: "id,folder_id", limit: 5000,
+            order: "updated_at.desc", profileName: "proposals.folder-map",
+          });
+          return new Map(rows.map((row) => [text(row.id), text(row.folder_id)]));
+        } catch (error) {
+          // Rolling upgrade: if the migration hasn't run, keep the existing
+          // Proposals list available at root instead of blanking the page.
+          if (/folder_id|42703|column.*does not exist/i.test(String(error?.message || error))) return new Map();
+          throw error;
+        }
+      }, { fresh })
+    : null;
   return snapshot.headers.map((row) => proposalHeader(
-    row,
+    folderIds ? { ...row, folder_id: folderIds.get(text(row.id)) || null } : row,
     snapshot.itemCounts ? (snapshot.itemCounts.get(text(row.id)) || 0) : (Number(row.items_count) || 0),
     resolvedAccount,
   ));
@@ -537,7 +585,7 @@ export async function getProposalSourcesForProducts(proposalId, productIds = [])
   return rows.map(proposalItem);
 }
 
-export async function createProposal(name, account) {
+export async function createProposal(name, account, folderId = "") {
   const clean = text(name);
   if (!clean) {
     const error = new Error("Proposal name is required.");
@@ -546,7 +594,12 @@ export async function createProposal(name, account) {
   }
   const identity = accountIdentity(account);
   const now = new Date().toISOString();
+  const cleanFolderId = text(folderId);
+  if (cleanFolderId) await requireProposalFolder(cleanFolderId);
+  // Omit the optional column for root proposals. Existing installations keep
+  // creating Proposals even if the folder SQL migration hasn't run yet.
   const row = { name: clean, created_at: now, updated_at: now };
+  if (cleanFolderId) row.folder_id = cleanFolderId;
   if (identity.id) row.created_by_id = identity.id;
   if (identity.name) row.created_by = identity.name;
   const created = await insert(proposalTable(), row);
@@ -571,7 +624,7 @@ async function productsForProposalItems(items = []) {
   return new Map((Array.isArray(rows) ? rows : []).map((row) => [text(row.id), row]));
 }
 
-export async function createProposalWithItems(name, items, account) {
+export async function createProposalWithItems(name, items, account, folderId = "") {
   const merged = new Map();
   for (const raw of Array.isArray(items) ? items : []) {
     const productId = text(raw?.productId);
@@ -585,9 +638,9 @@ export async function createProposalWithItems(name, items, account) {
     } else merged.set(productId, { productId, quantity, sourceKits: incomingSources });
   }
 
-  if (!merged.size) return await createProposal(name, account);
+  if (!merged.size) return await createProposal(name, account, folderId);
 
-  const created = await createProposal(name, account);
+  const created = await createProposal(name, account, folderId);
   try {
     const cleanItems = [...merged.values()];
     const products = await productsForProposalItems(cleanItems);
@@ -642,7 +695,13 @@ export async function updateProposal(id, body, account) {
     error.status = 400;
     throw error;
   }
-  const updated = await updateById(proposalTable(), id, { name, updated_at: new Date().toISOString() });
+  const changes = { name, updated_at: new Date().toISOString() };
+  if (body && Object.prototype.hasOwnProperty.call(body, "folderId")) {
+    const folderId = text(body.folderId);
+    if (folderId) await requireProposalFolder(folderId);
+    changes.folder_id = folderId || null;
+  }
+  const updated = await updateById(proposalTable(), id, changes);
   invalidateProposalKitReadCaches("proposals");
   const suppliedCount = Number(body?.itemsCount);
   const itemCount = Number.isFinite(suppliedCount) && suppliedCount >= 0
@@ -667,7 +726,7 @@ export async function copyProposal(id, name, account) {
     error.status = 404;
     throw error;
   }
-  const created = await createProposal(name, account);
+  const created = await createProposal(name, account, text(source.folder_id));
   const sourceItems = await rowsByForeignKey(proposalItemsTable(), "proposal_id", id);
   const now = new Date().toISOString();
   for (const item of sourceItems) {
@@ -894,6 +953,57 @@ export async function deleteProposalItem(proposalId, itemId, body, account) {
   await updateById(proposalTable(), proposalId, { updated_at: new Date().toISOString() });
   invalidateProposalKitReadCaches("proposals");
   return await getProposal(proposalId, account);
+}
+
+export async function listProposalFolders(account, { fresh = false } = {}) {
+  const [rows, resolvedAccount] = await Promise.all([
+    proposalKitCachedRead("proposal-folders:list",
+      () => selectAll(proposalFoldersTable(), { limit: 5000, order: "updated_at.desc,created_at.desc" }),
+      { fresh, ttlMs: 30000 }),
+    Promise.resolve(account || {}),
+  ]);
+  return rows.map((row) => proposalFolderHeader(row, resolvedAccount));
+}
+
+export async function createProposalFolder(name, account, parentFolderId = "") {
+  const clean = text(name);
+  if (!clean || clean.length > 240) {
+    const error = new Error("Folder name must contain 1 to 240 characters.");
+    error.status = 400; throw error;
+  }
+  const parentId = text(parentFolderId);
+  if (parentId) await requireProposalFolder(parentId);
+  const identity = accountIdentity(account);
+  const now = new Date().toISOString();
+  const row = { name: clean, parent_folder_id: parentId || null,
+    created_at: now, updated_at: now };
+  if (identity.id) row.created_by_id = identity.id;
+  if (identity.name) row.created_by = identity.name;
+  const created = await insert(proposalFoldersTable(), row);
+  invalidateProposalKitReadCaches("proposal-folders");
+  return proposalFolderHeader(created || row, account);
+}
+
+export async function updateProposalFolder(id, body, account) {
+  const current = await requireProposalFolder(id);
+  await requireOwnerOrAdmin(current, account, body?.adminPassword);
+  const name = text(body?.name);
+  if (!name || name.length > 240) {
+    const error = new Error("Folder name must contain 1 to 240 characters.");
+    error.status = 400; throw error;
+  }
+  const updated = await updateById(proposalFoldersTable(), id,
+    { name, updated_at: new Date().toISOString() });
+  invalidateProposalKitReadCaches("proposal-folders");
+  return proposalFolderHeader(updated || { ...current, name }, account);
+}
+
+export async function deleteProposalFolder(id, body, account) {
+  const current = await requireProposalFolder(id);
+  await requireOwnerOrAdmin(current, account, body?.adminPassword);
+  // ON DELETE SET NULL promotes subfolders and proposals to root.
+  await deleteById(proposalFoldersTable(), id);
+  invalidateProposalKitReadCaches("proposal-folders", "proposals");
 }
 
 export async function listKitFolders(account, { fresh = false } = {}) {
