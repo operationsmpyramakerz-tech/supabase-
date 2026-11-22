@@ -54,5 +54,8 @@ CREATE INDEX IF NOT EXISTS idx_product_proposals_folder_id
 
 COMMIT;
 
+-- Make new PostgREST relations/columns visible without a server restart.
+NOTIFY pgrst, 'reload schema';
+
 -- Do not execute uncontrolled browser access for these tables.
 -- Server routes enforce the existing proposals.* permissions and owner/admin checks.
