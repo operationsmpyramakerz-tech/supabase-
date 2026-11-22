@@ -23,6 +23,12 @@ CREATE INDEX IF NOT EXISTS idx_proposal_folders_parent
 CREATE INDEX IF NOT EXISTS idx_proposal_folders_updated
   ON public.product_proposal_folders(updated_at DESC);
 
+-- Folder data is accessed only through authenticated Next.js server routes
+-- with a service-role key. Do not expose it directly to anon/authenticated.
+ALTER TABLE public.product_proposal_folders ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.product_proposal_folders FROM anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.product_proposal_folders TO service_role;
+
 -- The table name is intentionally canonical (public.product_proposals);
 -- custom SUPABASE_PRODUCT_PROPOSALS_TABLE deployments need an adapted migration.
 ALTER TABLE public.product_proposals
