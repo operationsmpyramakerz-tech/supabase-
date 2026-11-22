@@ -15,7 +15,6 @@ const NameModal = dynamic(() => import("./KitDialogs").then((module) => module.N
 const FolderNameModal = dynamic(() => import("./KitDialogs").then((module) => module.FolderNameModal), { ssr: false });
 const MoveKitModal = dynamic(() => import("./KitDialogs").then((module) => module.MoveKitModal), { ssr: false });
 const PasswordModal = dynamic(() => import("./KitDialogs").then((module) => module.PasswordModal), { ssr: false });
-const CombineKitsModal = dynamic(() => import("./KitDialogs").then((module) => module.CombineKitsModal), { ssr: false });
 const AddProductModal = dynamic(() => import("./KitDialogs").then((module) => module.AddProductModal), { ssr: false });
 
 const EXPORT_COLUMNS = [
@@ -194,8 +193,23 @@ function normalizeFolder(folder, index = 0) {
     createdById: text(folder?.createdById),
     createdAt: text(folder?.createdAt),
     updatedAt: text(folder?.updatedAt),
+    parentFolderId: text(folder?.parentFolderId ?? folder?.parent_folder_id),
     canEdit: folder?.canEdit === true,
   };
+}
+
+/* ERP_KITS_NESTED_FOLDERS_V3: resolve a folder's path without recursing into cyclic data. */
+function kitFolderPath(folder, allFolders) {
+  const byId = new Map(allFolders.map((item) => [item.id, item]));
+  const visited = new Set();
+  const result = [];
+  let node = folder?.id ? (byId.get(folder.id) || folder) : null;
+  while (node?.id && !visited.has(node.id) && result.length < 100) {
+    visited.add(node.id);
+    result.push(node);
+    node = byId.get(node.parentFolderId) || null;
+  }
+  return result.reverse();
 }
 
 function normalizeItem(item, index = 0) {
@@ -274,7 +288,6 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
   const folderLongPressTimerRef = useRef(null);
   const folderLongPressStartRef = useRef(null);
   const suppressFolderClickRef = useRef(false);
-  const [combineOpen, setCombineOpen] = useState(false);
   const [detailEdit, setDetailEdit] = useState(false);
   const [createMode, setCreateMode] = useState(false);
   const [editName, setEditName] = useState("");
@@ -388,10 +401,19 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
   }, [kits, search, activeFolder]);
 
   const filteredFolders = useMemo(() => {
-    if (activeFolder) return [];
     const needle = lower(search);
-    return folders.filter((folder) => !needle || [folder.name, folder.createdBy].some((value) => lower(value).includes(needle)));
+    const parentId = activeFolder?.id || "";
+    return folders.filter((folder) => folder.parentFolderId === parentId &&
+      (!needle || [folder.name, folder.createdBy].some((value) => lower(value).includes(needle))));
   }, [folders, search, activeFolder]);
+
+  const nestedFolderCounts = useMemo(() => {
+    const counts = new Map();
+    folders.forEach((folder) => {
+      if (folder.parentFolderId) counts.set(folder.parentFolderId, (counts.get(folder.parentFolderId) || 0) + 1);
+    });
+    return counts;
+  }, [folders]);
 
   const filteredProducts = useMemo(() => {
     const needle = lower(productSearch);
@@ -604,70 +626,6 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
     }
   };
 
-  const createCombinedKit = async ({ kitIds, name, password }) => {
-    const ids = Array.isArray(kitIds) ? kitIds.map(text).filter(Boolean) : [];
-    const cleanName = text(name);
-    const adminPassword = text(password);
-    if (ids.length !== 2 || new Set(ids).size !== 2) throw new Error("Select exactly two different kits.");
-    if (!cleanName) throw new Error("Combined kit name is required.");
-    if (!adminPassword) throw new Error("Admin password is required.");
-
-    setBusy(true);
-    let createdId = "";
-    try {
-      await requestJson("/next/api/products/admin/verify", {
-        method: "POST",
-        body: JSON.stringify({ password: adminPassword }),
-      });
-
-      const sourceBodies = await Promise.all(ids.map((id) => requestJson(`/next/api/products/kits/${encodeURIComponent(id)}?_ts=${Date.now()}`)));
-      const productIdByName = new Map(products.map((product) => [lower(product.name), product.id]));
-      const merged = new Map();
-
-      sourceBodies.forEach((body) => {
-        (Array.isArray(body?.items) ? body.items : []).map(normalizeItem).forEach((item) => {
-          const productId = text(item.productId) || productIdByName.get(lower(item.productName)) || "";
-          if (!productId) throw new Error(`Could not match “${item.productName || "a component"}” to the Products catalogue.`);
-          const current = merged.get(productId) || { productId, quantity: 0 };
-          current.quantity += Math.max(1, number(item.quantity) || 1);
-          merged.set(productId, current);
-        });
-      });
-
-      if (!merged.size) throw new Error("The selected kits do not contain any components to combine.");
-
-      const createdBody = await requestJson("/next/api/products/kits", {
-        method: "POST",
-        body: JSON.stringify({ name: cleanName, adminPassword, folderId: activeFolder?.id || "" }),
-      });
-      createdId = text(createdBody?.kit?.id);
-      if (!createdId) throw new Error("The combined kit was created but its ID was not returned.");
-
-      for (const row of merged.values()) {
-        await requestJson(`/next/api/products/kits/${encodeURIComponent(createdId)}/items`, {
-          method: "POST",
-          body: JSON.stringify({ productId: row.productId, quantity: row.quantity, adminPassword }),
-        });
-      }
-
-      await refreshKits();
-      setCombineOpen(false);
-      notify(`Combined kit “${cleanName}” created successfully.`);
-    } catch (error) {
-      if (createdId) {
-        try {
-          await requestJson(`/next/api/products/kits/${encodeURIComponent(createdId)}`, {
-            method: "DELETE",
-            body: JSON.stringify({ adminPassword }),
-          });
-        } catch {}
-      }
-      throw error;
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const openFolder = (folder) => {
     setFolderMenu("");
     setSearch("");
@@ -697,9 +655,9 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
       } else {
         const body = await requestJson("/next/api/products/kit-folders", {
           method: "POST",
-          body: JSON.stringify({ name }),
+          body: JSON.stringify({ name, parentFolderId: activeFolder?.id || "" }),
         });
-        const created = normalizeFolder(body.folder || { name, canEdit: true });
+        const created = normalizeFolder(body.folder || { name, parentFolderId: activeFolder?.id || "", canEdit: true });
         setFolders((current) => [created, ...current.filter((folder) => folder.id !== created.id)]);
         notify(`Folder “${created.name}” created.`);
       }
@@ -731,7 +689,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
       itemName: folder.name,
       itemType: "folder",
       title: "Delete folder?",
-      message: `Delete “${folder.name}”? Kits inside it will not be deleted; they will return to the main Kits page.`,
+      message: `Delete “${folder.name}”? Its kits and direct subfolders will return to the main Kits page; their contents will not be deleted.`,
       confirmLabel: "Delete Folder",
     });
     if (!confirmed) return;
@@ -741,10 +699,11 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
         method: "DELETE",
         body: JSON.stringify({ adminPassword }),
       });
-      setFolders((current) => current.filter((entry) => entry.id !== folder.id));
+      setFolders((current) => current.filter((entry) => entry.id !== folder.id)
+        .map((entry) => entry.parentFolderId === folder.id ? { ...entry, parentFolderId: "" } : entry));
       setKits((current) => current.map((kit) => kit.folderId === folder.id ? { ...kit, folderId: "" } : kit));
       if (activeFolder?.id === folder.id) setActiveFolder(null);
-      notify("Folder deleted. Its kits were moved back to the main Kits page.");
+      notify("Folder deleted. Its kits and direct subfolders were moved to the main Kits page.");
     } catch (error) {
       notify(error?.message || "The folder could not be deleted.", "error");
     } finally {
@@ -1208,6 +1167,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
     const menuKey = `folder:${folder.id}`;
     const menuOpen = folderMenu === menuKey;
     const kitCount = folderKitCounts.get(folder.id) || 0;
+    const childCount = nestedFolderCounts.get(folder.id) || 0;
     return (
       <article className={`products-proposal-folder kit-library-folder ${menuOpen ? "is-menu-open" : ""}`} key={folder.id}>
         {menuOpen && can("folder_manage") ? (
@@ -1250,7 +1210,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
             <span className="proposal-folder-figure__front"><small>F</small></span>
           </span>
           <span className="proposal-folder-copy"><strong>{folder.name}</strong><em>Kit folder</em></span>
-          <span className="proposal-folder-count"><FeatherIcon name="folder" /><span>{formatNumber(kitCount)} kit{kitCount === 1 ? "" : "s"}</span></span>
+          <span className="proposal-folder-count"><FeatherIcon name="folder" /><span>{formatNumber(kitCount)} kit{kitCount === 1 ? "" : "s"}{childCount ? ` · ${childCount} folder${childCount === 1 ? "" : "s"}` : ""}</span></span>
         </button>
       </article>
     );
@@ -1259,11 +1219,12 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
   if (activeDetail || detailBusy) {
     const kit = activeDetail?.kit;
     const breadcrumbFolder = activeFolder || folders.find((folder) => folder.id === kit?.folderId) || null;
+    const breadcrumbPath = kitFolderPath(breadcrumbFolder, folders);
     return (
       <main className="products-shell proposals-shell next-proposals-classic-parity next-kits-classic-parity">
         {activeDetail ? <HeaderFolderBreadcrumb segments={[
           {label:"Kits",icon:"briefcase",onClick:() => { backToKits(); backToFolderRoot(); }},
-          ...(breadcrumbFolder ? [{label:breadcrumbFolder.name,icon:"folder-check",onClick:() => { setActiveFolder(breadcrumbFolder); backToKits(); }}] : []),
+          ...breadcrumbPath.map((folder) => ({label:folder.name,icon:"folder-check",onClick:() => { setActiveFolder(folder); backToKits(); }})),
           {label:createMode ? "Create New Kit" : activeDetail.kit?.name || "Kit",icon:"briefcase"}
         ]}/> : null}
         <Toast toast={toast} onClose={() => setToast(null)} />
@@ -1497,16 +1458,9 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
     <main className="products-shell proposals-shell next-proposals-classic-parity next-kits-classic-parity">
       {activeFolder ? <HeaderFolderBreadcrumb segments={[
         {label:"Kits",icon:"briefcase",onClick:backToFolderRoot},
-        {label:activeFolder.name,icon:"folder-check"}
+        ...kitFolderPath(activeFolder, folders).map((folder) => ({label:folder.name,icon:"folder-check",onClick:() => openFolder(folder)}))
       ]}/> : null}
       <Toast toast={toast} onClose={() => setToast(null)} />
-
-      {activeFolder ? (
-        <div className="proposals-floating-actions kit-library-actions">
-          {canCreate ? <button type="button" className="products-btn products-btn--light proposal-classic-combine-btn next-kit-combine-btn" onClick={() => setCombineOpen(true)} disabled={kits.length < 2}><FeatherIcon name="merge" /><span>Combined Kits</span></button> : null}
-          {canCreate ? <button type="button" className="products-add-btn proposals-create-btn" onClick={startCreateKit}><FeatherIcon name="briefcase" /><span>Create New Kit</span></button> : null}
-        </div>
-      ) : null}
 
       {bootstrapWarnings.length ? <div className="proposal-view-note"><span aria-hidden="true">!</span><span>Some startup resources were delayed. The page remains usable; refresh if a kit or folder is missing.</span></div> : null}
 
@@ -1522,9 +1476,9 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
             </header>
           ) : null}
           <div className="products-proposals-list">
-            {(filteredFolders.length || filteredKits.length || (!activeFolder && (canCreate || can("folder_create")))) ? (
-              <div className={`products-proposal-folders kit-library-grid${!activeFolder ? " kit-library-grid--root" : ""}`}>
-                {!activeFolder && can("folder_create") ? (
+            {(filteredFolders.length || filteredKits.length || canCreate || can("folder_create")) ? (
+              <div className="products-proposal-folders kit-library-grid kit-library-grid--root">
+                {can("folder_create") ? (
                   <div className="kit-quick-create kit-quick-create--folder">
                     <button
                       type="button"
@@ -1541,7 +1495,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
                     </button>
                   </div>
                 ) : null}
-                {!activeFolder && canCreate ? (
+                {canCreate ? (
                   <div className="kit-quick-create kit-quick-create--kit">
                     <button
                       type="button"
@@ -1558,17 +1512,16 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
                     </button>
                   </div>
                 ) : null}
-                {!activeFolder ? filteredFolders.map(renderLibraryFolder) : null}
+                {filteredFolders.map(renderLibraryFolder)}
                 {filteredKits.map(renderKitCard)}
               </div>
             ) : (
-              <div className="products-proposals-empty">{activeFolder ? "No kits in this folder yet. Use Create New Kit to add one." : "No folders or unfiled kits match your search."}</div>
+              <div className="products-proposals-empty">No folders or kits match your search.</div>
             )}
           </div>
         </section>
       </section>
 
-      {combineOpen ? <CombineKitsModal kits={kits} busy={busy} onClose={() => setCombineOpen(false)} onCreate={createCombinedKit} /> : null}
       {folderDialog ? <FolderNameModal key={`${folderDialog.mode}-${folderDialog.folder?.id || "new"}`} dialog={folderDialog} busy={busy} onClose={() => setFolderDialog(null)} onSubmit={submitFolderDialog} /> : null}
       {moveDialog ? <MoveKitModal key={`move-${moveDialog.kit?.id || "kit"}`} dialog={moveDialog} folders={folders.map((folder) => ({ ...folder, kitCount: folderKitCounts.get(folder.id) || 0 }))} busy={busy} onClose={() => setMoveDialog(null)} onSubmit={submitMoveKit} /> : null}
       {nameDialog ? <NameModal key={`${nameDialog.mode}-${nameDialog.kit?.id || "new"}`} dialog={nameDialog} busy={busy} onClose={() => setNameDialog(null)} onSubmit={submitNameDialog} /> : null}

@@ -279,6 +279,7 @@ function kitHeader(row = {}, itemCount = 0, account = {}) {
 }
 
 function kitFolderHeader(row = {}, account = {}) {
+  // ERP_KITS_NESTED_FOLDERS_V3: expose the hierarchy field safely.
   return {
     id: text(row.id),
     name: text(row.name) || "Untitled folder",
@@ -286,6 +287,7 @@ function kitFolderHeader(row = {}, account = {}) {
     createdById: text(row.created_by_id),
     createdAt: text(row.created_at),
     updatedAt: text(row.updated_at),
+    parentFolderId: text(row.parent_folder_id),
     canEdit: isOwner(row, account),
     source: "supabase-next",
   };
@@ -906,16 +908,19 @@ export async function listKitFolders(account, { fresh = false } = {}) {
   return rows.map((row) => kitFolderHeader(row, resolvedAccount));
 }
 
-export async function createKitFolder(name, account) {
+export async function createKitFolder(name, account, parentFolderId = "") {
   const clean = text(name);
   if (!clean) {
     const error = new Error("Folder name is required.");
     error.status = 400;
     throw error;
   }
+  const parentId = text(parentFolderId);
+  if (parentId) await requireKitFolder(parentId);
   const identity = accountIdentity(account);
   const now = new Date().toISOString();
   const row = { name: clean, created_at: now, updated_at: now };
+  if (parentId) row.parent_folder_id = parentId;
   if (identity.id) row.created_by_id = identity.id;
   if (identity.name) row.created_by = identity.name;
   const created = await insert(kitFoldersTable(), row);

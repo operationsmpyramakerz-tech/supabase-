@@ -323,3 +323,27 @@ body.kits-page .next-kits-classic-parity .kit-library-grid--root > .kit-quick-cr
 @media(prefers-reduced-motion: reduce) {
   body.kits-page .next-kits-classic-parity .kit-library-grid--root > .kit-quick-create {animation:none !important;}
 }
+
+/* ERP_KITS_NESTED_FOLDERS_V3
+   The same two independent tiles and compact folder grid apply at every depth.
+   Keep create buttons in grid flow: no dropdown, no covering any folder. */
+body.kits-page .next-kits-classic-parity .kit-library-grid--root > .kit-quick-create--folder .kit-quick-create__tile {
+  border-color: #98a2b3 !important;
+}
+body.kits-page .next-kits-classic-parity .kit-library-grid--root > .kit-quick-create--kit .kit-quick-create__tile {
+  border-color: #f97316 !important;
+}
+body.kits-page .next-kits-classic-parity .kit-library-grid--root .kit-quick-create__tile:focus-visible {
+  outline-offset: 3px;
+}
+@media (max-width: 720px) {
+  body.kits-page .next-kits-classic-parity .kit-library-grid--root > article.products-proposal-folder .proposal-folder-count {
+    max-width: calc(100% - 11px) !important;
+    white-space: nowrap !important;
+  }
+  body.kits-page .next-kits-classic-parity .kit-library-grid--root > article.products-proposal-folder .proposal-folder-count > span {
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+}

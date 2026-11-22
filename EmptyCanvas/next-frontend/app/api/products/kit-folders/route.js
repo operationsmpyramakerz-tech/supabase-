@@ -25,7 +25,7 @@ export async function POST(request) {
   try {
     const body = await requestBody(request);
     return NextResponse.json(
-      { ok: true, source: "supabase-next", folder: await createKitFolder(body?.name, gate.account) },
+      { ok: true, source: "supabase-next", folder: await createKitFolder(body?.name, gate.account, body?.parentFolderId) }, // ERP_KITS_NESTED_FOLDERS_V3
       { status: 201 },
     );
   } catch (error) {
