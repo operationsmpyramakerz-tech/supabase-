@@ -4305,3 +4305,58 @@ html[data-theme="dark"] .system-delete-dialog__verify input:focus{border-color:#
 html[data-theme="dark"] .system-delete-dialog__field{color:#e7ebf0}
 html[data-theme="dark"] .system-delete-dialog__field input{border-color:#3d4450;background:#0f1217;color:#fff}
 html[data-theme="dark"] .system-delete-dialog__hint{color:#98a2b2}
+
+/* ERP_USER_MENU_COMPACT_V1 — shrink only the avatar dropdown; retain navigation and actions.
+   Width was 320px, leaving a large empty area after the menu labels. */
+.user-menu-panel.user-menu-panel--portal {
+  width: 236px !important;
+  max-width: calc(100vw - 28px) !important;
+  min-width: 0 !important;
+}
+.user-menu-panel .user-menu-shell {
+  padding: 9px !important;
+  border-radius: 20px !important;
+}
+.user-menu-panel .user-menu-user {
+  gap: 10px !important;
+  padding: 8px 8px 10px !important;
+  border-radius: 15px !important;
+}
+.user-menu-panel .user-menu-user__avatar {
+  width: 42px !important;
+  height: 42px !important;
+}
+.user-menu-panel .user-menu-user__meta {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.user-menu-panel .user-menu-item {
+  min-height: 39px;
+  gap: 9px !important;
+  padding: 7px 9px !important;
+  border-radius: 12px !important;
+  font-size: 13px !important;
+}
+.user-menu-panel .user-menu-item .umi-ico {
+  width: 21px !important;
+  height: 21px !important;
+}
+.user-menu-panel .user-menu-item .umi-ico svg,
+.user-menu-panel .user-menu-item .umi-ico i {
+  width: 18px !important;
+  height: 18px !important;
+}
+.user-menu-panel .user-menu-sep {
+  margin: 6px 5px !important;
+}
+.user-menu-panel .user-menu-sep.user-menu-sep--tight {
+  margin: 6px 5px 8px !important;
+}
+.user-menu-panel .user-menu-item.user-menu-item--refresh {
+  margin-top: 5px !important;
+}
+@media (max-width: 275px) {
+  .user-menu-panel.user-menu-panel--portal {
+    width: calc(100vw - 28px) !important;
+  }
+}
