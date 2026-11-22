@@ -4,6 +4,7 @@ export default function ProposalsMotionLayout({ children }) {
   return (
     <>
       <link rel="stylesheet" href="/next/css/proposals-motion-step7.css?v=cinematic-step7-stagger-v2" precedence="erp-detail" />
+      <link rel="stylesheet" href="/next/css/proposals-nested-folders-v1.css?v=proposals-folder-library-v1" precedence="erp-detail" />
       {children}
     </>
   );
