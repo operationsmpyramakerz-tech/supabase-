@@ -1265,7 +1265,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
         {menuOpen && (kitSelectMode || can("edit") || can("copy") || can("delete") || can("item_add") || can("item_edit") || can("item_delete")) ? (
           <KitModernActionMenu title={kitSelectMode ? `${selectedKitIds.length} kits selected` : "Kit actions"}>
             {!kitSelectMode && (can("edit") || can("copy") || can("delete") || can("item_add")) ? (
-              <button type="button" onClick={() => startKitSelection(kit)}><FeatherIcon name="grid" /><span>Select action</span></button>
+              <button type="button" onClick={() => startKitSelection(kit)}><FeatherIcon name="grid" /><span>Select</span></button>
             ) : null}
             {!kitSelectMode && (can("edit") || can("item_add") || can("item_edit") || can("item_delete")) ? <button type="button" onClick={() => { setFolderMenu(""); enterEditKit(kit); }}><FeatherIcon name="edit" /><span>Edit</span></button> : null}
             {!kitSelectMode && can("edit") ? <button type="button" onClick={() => { setFolderMenu(""); startMoveKit(kit); }}><FeatherIcon name="move" /><span>Move</span></button> : null}

@@ -528,9 +528,15 @@ export function BulkKitEditModal({ count, products, busy, onClose, onSubmit }) {
 }
 
 export function FolderNameModal({ dialog, busy, onClose, onSubmit }) {
+  // ERP_KITS_CREATE_FOLDER_PLAINTEXT_EDITOR_V2: Create uses a plain-text editor rather than a recognized autofill form field.
+  const folderNameEditorRef = useRef(null);
   const [value, setValue] = useState(dialog?.value || "");
   const [error, setError] = useState("");
   const creating = dialog?.mode !== "rename";
+  useEffect(() => {
+    if (!creating || !folderNameEditorRef.current) return;
+    folderNameEditorRef.current.textContent = dialog?.value || "";
+  }, [creating, dialog?.value]);
   const submit = async (event) => {
     event.preventDefault();
     const name = text(value);
@@ -548,13 +554,40 @@ export function FolderNameModal({ dialog, busy, onClose, onSubmit }) {
       overlayClassName={creating ? "next-kit-create-folder-overlay" : ""}
     >
       <form className={creating ? "next-proposals-form products-form-grid next-kit-create-folder-form" : "next-proposals-form products-form-grid"} onSubmit={submit}>
-        <label><span>Folder Name *</span><input
-          type="text" inputMode="text" enterKeyHint="done"
-          name="erp-kit-folder-title-entry" autoComplete="off" autoCorrect="off"
-          autoCapitalize="sentences" spellCheck={false}
-          data-lpignore="true" data-1p-ignore="true" data-form-type="other"
-          value={value} onChange={(event) => setValue(event.target.value)}
-          placeholder="Example: TH1 Kits" /></label>
+        <label><span>Folder Name *</span>
+          {creating ? (
+            <div
+              ref={folderNameEditorRef}
+              className="kit-folder-name-plain-editor"
+              contentEditable="plaintext-only"
+              role="textbox"
+              aria-label="Folder Name"
+              aria-required="true"
+              aria-placeholder="Example: TH1 Kits"
+              data-empty={!value ? "true" : "false"}
+              inputMode="text"
+              enterKeyHint="done"
+              spellCheck={false}
+              suppressContentEditableWarning
+              onInput={(event) => setValue(event.currentTarget.textContent || "")}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+                  event.preventDefault();
+                  event.currentTarget.closest("form")?.requestSubmit();
+                }
+              }}
+            />
+          ) : (
+            <input
+              type="text" inputMode="text" enterKeyHint="done"
+              name="erp-kit-folder-title-entry" autoComplete="off" autoCorrect="off"
+              autoCapitalize="sentences" spellCheck={false}
+              data-lpignore="true" data-1p-ignore="true" data-form-type="other"
+              value={value} onChange={(event) => setValue(event.target.value)}
+              placeholder="Example: TH1 Kits"
+            />
+          )}
+        </label>
         {error ? <div className="next-proposals-error products-form-error">{error}</div> : null}
         <div className={creating ? "next-proposals-form__actions products-modal__actions next-kit-create-folder-actions" : "next-proposals-form__actions products-modal__actions"}>
           <button type="button" className="products-btn products-btn--light" onClick={onClose} disabled={busy}>Cancel</button>

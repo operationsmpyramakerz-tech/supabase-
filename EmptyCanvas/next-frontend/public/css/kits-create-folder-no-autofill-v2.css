@@ -1,0 +1,40 @@
+/* ERP_KITS_CREATE_FOLDER_PLAINTEXT_EDITOR_V2
+   Create Folder uses a plain text editing surface to avoid Chrome detecting
+   a regular form input. Note: OS/keyboard accessory bars cannot be controlled
+   by websites; if Android shows a credential toolbar regardless, hide it in
+   Android/keyboard Autofill settings. No global keyboard CSS is used. */
+body.kits-page .next-kits-classic-parity .next-kit-create-folder-sheet .next-kit-create-folder-form > label > .kit-folder-name-plain-editor {
+  box-sizing: border-box !important;
+  display: block !important;
+  width: 100% !important;
+  height: 52px !important;
+  min-height: 52px !important;
+  padding: 13px 14px !important;
+  margin: 0 !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  white-space: nowrap !important;
+  border: 1px solid #d9dee6 !important;
+  border-radius: 15px !important;
+  outline: none !important;
+  background: #f8fafc !important;
+  color: #111827 !important;
+  font: inherit !important;
+  font-size: 16px !important;
+  line-height: 24px !important;
+  font-weight: 750 !important;
+  text-align: left !important;
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-tap-highlight-color: transparent;
+  caret-color: #111827;
+}
+body.kits-page .next-kits-classic-parity .next-kit-create-folder-sheet .next-kit-create-folder-form > label > .kit-folder-name-plain-editor[data-empty="true"]::before {
+  content: "Example: TH1 Kits";
+  color: #777f8d;
+  pointer-events: none;
+}
+body.kits-page .next-kits-classic-parity .next-kit-create-folder-sheet .next-kit-create-folder-form > label > .kit-folder-name-plain-editor:focus {
+  border-color: #f97316 !important;
+  box-shadow: 0 0 0 3px rgba(249,115,22,.11) !important;
+}
