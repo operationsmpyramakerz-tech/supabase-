@@ -38,6 +38,15 @@ function lower(value) {
   return text(value).toLowerCase();
 }
 
+// ERP_KITS_ALPHABETICAL_SORT_V1: natural, case-insensitive name order.
+// Kept pure so filtering, selection, kit ownership and server data are unchanged.
+const kitsAlphabeticalCollator = new Intl.Collator(undefined, {
+  usage: "sort", sensitivity: "base", numeric: true, ignorePunctuation: true,
+});
+function compareKitsAlphabetically(a, b) {
+  return kitsAlphabeticalCollator.compare(text(a?.name), text(b?.name));
+}
+
 function number(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -466,14 +475,18 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
     const scoped = activeFolder
       ? kits.filter((kit) => kit.folderId === activeFolder.id)
       : kits.filter((kit) => !kit.folderId);
-    return scoped.filter((kit) => !needle || [kit.name, kit.createdBy].some((value) => lower(value).includes(needle)));
+    return scoped
+      .filter((kit) => !needle || [kit.name, kit.createdBy].some((value) => lower(value).includes(needle)))
+      .sort(compareKitsAlphabetically);
   }, [kits, search, activeFolder]);
 
   const filteredFolders = useMemo(() => {
     const needle = lower(search);
     const parentId = activeFolder?.id || "";
-    return folders.filter((folder) => folder.parentFolderId === parentId &&
-      (!needle || [folder.name, folder.createdBy].some((value) => lower(value).includes(needle))));
+    return folders
+      .filter((folder) => folder.parentFolderId === parentId &&
+        (!needle || [folder.name, folder.createdBy].some((value) => lower(value).includes(needle))))
+      .sort(compareKitsAlphabetically);
   }, [folders, search, activeFolder]);
 
   const nestedFolderCounts = useMemo(() => {
