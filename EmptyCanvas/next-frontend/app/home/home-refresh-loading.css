@@ -1,0 +1,127 @@
+/* ERP_HOME_REFRESH_KITS_MOVE_NESTED_V1
+ * Self-contained Home loading geometry for hard refresh/cold start.
+ * Does not rely on body.page-home (which is added during hydration).
+ * Restricted to the route's loading shell, never the settled dashboard.
+ */
+.next-classic-home-loading .next-home-dashboard-loading {
+  --eh-bg: #fff; --eh-border: #e9edf2; --eh-soft: #f2f5f9;
+  --eh-text: #101828; --eh-muted: #798496; --eh-orange: #ed7021;
+  display: block !important; width: 100% !important; min-width: 0 !important;
+  color: var(--eh-text); box-sizing: border-box;
+  font-variant-numeric: tabular-nums;
+}
+.next-classic-home-loading .next-home-dashboard-loading *,
+.next-classic-home-loading .next-home-dashboard-loading *::before,
+.next-classic-home-loading .next-home-dashboard-loading *::after { box-sizing: border-box; }
+.next-classic-home-loading .next-home-dashboard-loading > .erp-home-dashboard__header {
+  display: flex !important; justify-content: space-between; align-items: center;
+  gap: 14px; margin: 0 0 20px !important;
+}
+.next-classic-home-loading .next-home-dashboard-loading .erp-home-dashboard__eyebrow {
+  display: inline-flex !important; align-items: center; gap: 6px;
+  font-size: 10px; font-weight: 850; color: var(--eh-orange);
+  letter-spacing: .1em; line-height: 1.5;
+}
+.next-classic-home-loading .next-home-dashboard-loading .erp-home-dashboard__heading h2 {
+  font-size: clamp(21px, 2.6vw, 26px); font-weight: 850;
+  letter-spacing: -.04em; color: var(--eh-text);
+  margin: 4px 0; line-height: 1.2;
+}
+.next-classic-home-loading .next-home-dashboard-loading .erp-home-dashboard__heading p {
+  font-size: 12px; font-weight: 600; line-height: 1.5;
+  color: var(--eh-muted); margin: 0;
+}
+.next-classic-home-loading .next-home-dashboard-loading .erp-home-tiles.next-home-loading-tiles {
+  display: grid !important;
+  width: 100% !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 12px !important; align-items: stretch !important;
+  margin: 0 0 16px !important;
+}
+.next-classic-home-loading .next-home-dashboard-loading .erp-home-tile.next-home-loading-tile {
+  display: flex !important; flex-direction: column !important;
+  position: relative; min-width: 0; width: 100%; min-height: 161px;
+  gap: 2px; padding: 15px; border: 1px solid var(--eh-border);
+  border-radius: 19px; background: var(--eh-bg);
+  box-shadow: 0 10px 29px rgba(16,24,40,.045);
+  overflow: hidden; color: var(--eh-text);
+}
+.next-classic-home-loading .next-home-dashboard-loading .erp-home-tile__top {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px;
+}
+.next-classic-home-loading .next-home-dashboard-loading .erp-home-tile__title {
+  display: block; font-size: 12px; font-weight: 750;
+  color: var(--eh-muted); line-height: 1.35;
+}
+.next-classic-home-loading .next-home-dashboard-loading .erp-home-distribution {
+  display: flex; width: 100%; height: 8px;
+  margin-top: auto; background: var(--eh-soft);
+  border-radius: 999px;
+}
+.next-classic-home-loading .next-home-dashboard-loading .erp-home-focus {
+  display: block !important; min-width: 0;
+  border: 1px solid var(--eh-border); border-radius: 20px;
+  background: var(--eh-bg); padding: 19px 20px; margin-bottom: 16px;
+}
+.next-classic-home-loading .next-home-dashboard-loading .erp-home-focus__head {
+  display: flex; gap: 12px; align-items: center; margin-bottom: 14px;
+}
+.next-classic-home-loading .next-home-dashboard-loading .erp-home-focus__head h3 {
+  font-size: 17px; margin: 0 0 3px; color: var(--eh-text);
+}
+.next-classic-home-loading .next-home-dashboard-loading .erp-home-focus__head p {
+  font-size: 11px; margin: 0; color: var(--eh-muted);
+}
+.next-classic-home-loading .next-home-dashboard-loading .erp-home-focus__icon {
+  width: 38px; height: 38px; flex: 0 0 38px;
+  display: grid; place-items: center; border-radius: 12px;
+  background: #fff1e8; color: #c75b16;
+}
+.next-classic-home-loading .next-home-dashboard-loading .erp-home-focus__items {
+  display: grid !important; grid-template-columns: repeat(4, minmax(0,1fr));
+  gap: 9px; min-width: 0;
+}
+.next-classic-home-loading .next-home-dashboard-loading .erp-home-focus__item {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; padding: 12px; border-radius: 12px;
+  border: 1px solid var(--eh-border); min-width: 0;
+}
+.next-classic-home-loading .next-home-dashboard-loading .erp-home-focus__item-label {
+  color: var(--eh-muted); font-size: 11px; font-weight: 700;
+}
+.next-classic-home-loading .next-home-dashboard-loading .next-home-loading-backlog {
+  border: 1px solid var(--eh-border); border-radius: 20px;
+  background: var(--eh-bg); padding: 20px 22px;
+}
+.next-classic-home-loading .next-home-dashboard-loading .next-home-loading-backlog h2 {
+  margin: 10px 0 18px; color: var(--eh-text); font-size: 22px;
+}
+.next-classic-home-loading .next-home-dashboard-loading .next-home-loading-insights {
+  display: grid !important; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px;
+}
+@media(max-width: 950px) {
+  .next-classic-home-loading .next-home-dashboard-loading .erp-home-tiles.next-home-loading-tiles,
+  .next-classic-home-loading .next-home-dashboard-loading .erp-home-focus__items,
+  .next-classic-home-loading .next-home-dashboard-loading .next-home-loading-insights {
+    grid-template-columns: repeat(2,minmax(0,1fr)) !important;
+  }
+}
+@media(max-width: 450px) {
+  .next-classic-home-loading .next-home-dashboard-loading .erp-home-tiles.next-home-loading-tiles {
+    gap: 9px !important;
+  }
+  .next-classic-home-loading .next-home-dashboard-loading .erp-home-tile.next-home-loading-tile {
+    min-height: 146px; padding: 12px; border-radius: 16px;
+  }
+  .next-classic-home-loading .next-home-dashboard-loading .erp-home-focus { padding: 13px; }
+  .next-classic-home-loading .next-home-dashboard-loading .erp-home-focus__items { gap: 7px; }
+  .next-classic-home-loading .next-home-dashboard-loading .erp-home-focus__item { padding: 9px; }
+}
+html[data-theme="dark"] .next-classic-home-loading .next-home-dashboard-loading {
+  --eh-bg: #171c25; --eh-border: #323a46; --eh-soft: #252c39;
+  --eh-text: #edf2f8; --eh-muted: #a4afbf;
+}
+html[data-theme="dark"] .next-classic-home-loading .next-home-dashboard-loading .erp-home-focus__icon {
+  background: #30251f; color: #ffa56e;
+}

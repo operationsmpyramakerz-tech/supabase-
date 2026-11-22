@@ -347,3 +347,88 @@ body.kits-page .next-kits-classic-parity .kit-library-grid--root .kit-quick-crea
     white-space: nowrap !important;
   }
 }
+
+/* ERP_HOME_REFRESH_KITS_MOVE_NESTED_V1: nested kit picker, Kits only. */
+body.kits-page .next-kits-classic-parity .next-kit-move-form--nested {
+  display: grid; gap: 11px; min-width: 0;
+}
+body.kits-page .next-kits-classic-parity .next-kit-move-search {
+  min-height: 43px; display: flex; align-items: center; gap: 9px;
+  padding: 0 13px; border: 1px solid #e3e7ec; border-radius: 12px;
+  background: #f8fafc; color: #667085;
+}
+body.kits-page .next-kits-classic-parity .next-kit-move-search:focus-within {
+  border-color: #f97316; box-shadow: 0 0 0 3px #f973161a;
+}
+body.kits-page .next-kits-classic-parity .next-kit-move-search input {
+  display: block; flex: 1; min-width: 0; min-height: 39px;
+  padding: 0; background: transparent; border: 0; outline: none;
+  box-shadow: none; font: inherit; font-size: 13px; color: #111827;
+}
+body.kits-page .next-kits-classic-parity .next-kit-move-list--nested {
+  max-height: min(46vh, 390px); padding: 3px 5px;
+  overscroll-behavior: contain; gap: 7px;
+}
+body.kits-page .next-kits-classic-parity .next-kit-move-list--nested > .next-kit-move-nested-option {
+  width: 100%; box-sizing: border-box; min-width: 0;
+  padding-left: calc(11px + (var(--kit-move-depth) * 13px));
+  position: relative; overflow: hidden; min-height: 61px;
+  grid-template-columns: 38px minmax(0, 1fr) 28px;
+  gap: 9px;
+}
+body.kits-page .next-kits-classic-parity .next-kit-move-list--nested > .next-kit-move-nested-option:not(:first-child)::before {
+  content: ""; position: absolute; left: calc(11px + (var(--kit-move-depth) * 13px) - 7px);
+  top: 0; bottom: 0; width: 2px; border-radius: 99px; background: #e7eaee;
+}
+body.kits-page .next-kits-classic-parity .next-kit-move-nested-option .next-kit-move-list__icon {
+  width: 34px; height: 34px; border-radius: 10px;
+}
+body.kits-page .next-kits-classic-parity .next-kit-move-nested-option .next-kit-move-list__copy {
+  min-width: 0; overflow: hidden;
+}
+body.kits-page .next-kits-classic-parity .next-kit-move-nested-option .next-kit-move-list__copy strong {
+  font-size: .81rem; line-height: 1.25;
+}
+body.kits-page .next-kits-classic-parity .next-kit-move-nested-option .next-kit-move-nested-path {
+  display: block; min-width: 0; overflow: hidden;
+  white-space: nowrap; text-overflow: ellipsis;
+  font-size: .61rem; font-weight: 650; color: #8793a4;
+}
+body.kits-page .next-kits-classic-parity .next-kit-move-selected-path {
+  display: grid; gap: 2px; padding: 10px 12px;
+  background: #fff7ed; border: 1px solid #fed7aa;
+  border-radius: 12px; min-width: 0;
+}
+body.kits-page .next-kits-classic-parity .next-kit-move-selected-path > span {
+  color: #9a4b13; font-size: 11px; font-weight: 800;
+}
+body.kits-page .next-kits-classic-parity .next-kit-move-selected-path > strong {
+  color: #111827; font-size: 12px; line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+body.kits-page .next-kits-classic-parity .next-kit-move-no-results {
+  text-align: center; padding: 20px 8px; color: #667085;
+  font-weight: 750; font-size: 12px;
+}
+@media (max-width: 540px) {
+  body.kits-page .next-kits-classic-parity .next-kit-move-list--nested > .next-kit-move-nested-option {
+    padding-left: calc(7px + (var(--kit-move-depth) * 9px));
+    min-height: 57px; gap: 6px;
+    grid-template-columns: 32px minmax(0, 1fr) 26px;
+  }
+  body.kits-page .next-kits-classic-parity .next-kit-move-list--nested > .next-kit-move-nested-option:not(:first-child)::before {
+    left: calc(7px + (var(--kit-move-depth) * 9px) - 5px);
+  }
+}
+html[data-theme="dark"] body.kits-page .next-kits-classic-parity .next-kit-move-search {
+  background: #202630; color: #b4bdcb; border-color: #3a4351;
+}
+html[data-theme="dark"] body.kits-page .next-kits-classic-parity .next-kit-move-search input {
+  color: #f3f4f6;
+}
+html[data-theme="dark"] body.kits-page .next-kits-classic-parity .next-kit-move-selected-path {
+  background: #33271f; border-color: #704322;
+}
+html[data-theme="dark"] body.kits-page .next-kits-classic-parity .next-kit-move-selected-path > strong {
+  color: #f3f4f6;
+}

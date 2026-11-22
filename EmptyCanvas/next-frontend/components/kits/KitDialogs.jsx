@@ -511,24 +511,86 @@ export function FolderNameModal({ dialog, busy, onClose, onSubmit }) {
   );
 }
 
+/* ERP_HOME_REFRESH_KITS_MOVE_NESTED_V1: hierarchical destination selector. */
 export function MoveKitModal({ dialog, folders, busy, onClose, onSubmit }) {
   const kit = dialog?.kit;
   const currentFolderId = text(kit?.folderId);
   const [selectedFolderId, setSelectedFolderId] = useState(currentFolderId);
+  const [search, setSearch] = useState("");
   const [error, setError] = useState("");
 
-  const destinations = useMemo(() => [
-    { id: "", name: "Main Kits", description: "No folder" },
-    ...folders.map((folder) => ({
-      id: folder.id,
-      name: folder.name,
-      description: `${formatNumber(folder.kitCount || 0)} kit${number(folder.kitCount) === 1 ? "" : "s"}`,
-    })),
-  ], [folders]);
+  const destinations = useMemo(() => {
+    const ordered = [];
+    const byId = new Map((Array.isArray(folders) ? folders : [])
+      .filter((folder) => text(folder?.id))
+      .map((folder) => [text(folder.id), folder]));
+    const children = new Map();
+    const sorted = [...byId.values()].sort((a, b) =>
+      text(a.name).localeCompare(text(b.name), undefined, { sensitivity: "base" }));
 
+    for (const folder of sorted) {
+      const id = text(folder.id);
+      const rawParent = text(folder.parentFolderId ?? folder.parent_folder_id);
+      const parent = rawParent !== id && byId.has(rawParent) ? rawParent : "";
+      if (!children.has(parent)) children.set(parent, []);
+      children.get(parent).push(folder);
+    }
+
+    ordered.push({
+      id: "", name: "Main Kits", path: "Main Kits", parentPath: "",
+      depth: 0, count: 0, childrenCount: (children.get("") || []).length,
+    });
+
+    const visited = new Set();
+    function descend(parentId, depth, parts) {
+      for (const folder of children.get(parentId) || []) {
+        const id = text(folder.id);
+        if (visited.has(id)) continue; // Guard malformed/circular legacy data.
+        visited.add(id);
+        const pathParts = [...parts, text(folder.name) || "Untitled folder"];
+        ordered.push({
+          id,
+          name: text(folder.name) || "Untitled folder",
+          path: ["Main Kits", ...pathParts].join(" / "),
+          parentPath: ["Main Kits", ...parts].join(" / "),
+          depth,
+          count: Number(folder.kitCount || 0),
+          childrenCount: (children.get(id) || []).length,
+        });
+        descend(id, depth + 1, pathParts);
+      }
+    }
+    descend("", 1, []);
+    // Orphaned/cyclic data must remain selectable rather than disappearing.
+    for (const folder of sorted) {
+      if (!visited.has(text(folder.id))) {
+        const name = text(folder.name) || "Untitled folder";
+        const id = text(folder.id);
+        visited.add(id);
+        ordered.push({ id, name, path: `Main Kits / ${name}`,
+          parentPath: "Main Kits", depth: 1,
+          count: Number(folder.kitCount || 0),
+          childrenCount: (children.get(id) || []).length });
+        descend(id, 2, [name]);
+      }
+    }
+    return ordered;
+  }, [folders]);
+
+  const visibleDestinations = useMemo(() => {
+    const needle = lower(search);
+    if (!needle) return destinations;
+    return destinations.filter((destination) =>
+      lower(destination.path).includes(needle));
+  }, [destinations, search]);
+
+  const selectedDestination = destinations.find((destination) => destination.id === selectedFolderId);
   const submit = async (event) => {
     event.preventDefault();
     if (selectedFolderId === currentFolderId) return setError("Choose a different destination.");
+    if (!destinations.some((destination) => destination.id === selectedFolderId)) {
+      return setError("This destination no longer exists. Reopen Move Kit.");
+    }
     setError("");
     try {
       await onSubmit(selectedFolderId);
@@ -544,30 +606,47 @@ export function MoveKitModal({ dialog, folders, busy, onClose, onSubmit }) {
       icon={<FeatherIcon name="move" size={20} />}
       onClose={onClose}
     >
-      <form className="next-kit-move-form" onSubmit={submit}>
-        <div className="next-kit-move-list" role="radiogroup" aria-label="Move kit destination">
-          {destinations.map((destination) => {
+      <form className="next-kit-move-form next-kit-move-form--nested" onSubmit={submit}>
+        <label className="next-kit-move-search">
+          <FeatherIcon name="search" size={18} />
+          <input type="search" value={search} onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search folders or paths..." aria-label="Search destination folders"
+            autoComplete="off" />
+        </label>
+        <div className="next-kit-move-list next-kit-move-list--nested" role="radiogroup" aria-label="Move kit destination">
+          {visibleDestinations.map((destination) => {
             const selected = selectedFolderId === destination.id;
             const current = currentFolderId === destination.id;
             return (
               <button
                 type="button"
                 key={destination.id || "root"}
-                className={`${selected ? "is-selected" : ""} ${current ? "is-current" : ""}`}
+                className={`next-kit-move-nested-option ${selected ? "is-selected" : ""} ${current ? "is-current" : ""}`}
+                style={{ "--kit-move-depth": Math.min(destination.depth, 7) }}
                 onClick={() => { setSelectedFolderId(destination.id); setError(""); }}
                 disabled={busy}
                 role="radio"
                 aria-checked={selected}
+                aria-label={destination.path}
+                title={destination.path}
               >
                 <span className="next-kit-move-list__icon"><FeatherIcon name="folder" size={18} /></span>
                 <span className="next-kit-move-list__copy">
                   <strong>{destination.name}</strong>
-                  <small>{current ? "Current location" : destination.description}</small>
+                  <small>{current ? "Current location" : destination.id
+                    ? `${formatNumber(destination.count)} kit${destination.count === 1 ? "" : "s"}${destination.childrenCount ? ` · ${destination.childrenCount} subfolder${destination.childrenCount === 1 ? "" : "s"}` : ""}`
+                    : "No folder"}</small>
+                  {destination.parentPath ? <small className="next-kit-move-nested-path">{destination.parentPath}</small> : null}
                 </span>
                 <span className="next-kit-move-list__check" aria-hidden="true">{selected ? "✓" : ""}</span>
               </button>
             );
           })}
+          {!visibleDestinations.length ? <div className="next-kit-move-no-results">No folders match your search.</div> : null}
+        </div>
+        <div className="next-kit-move-selected-path" aria-live="polite">
+          <span>Destination</span>
+          <strong>{selectedDestination?.path || "Main Kits"}</strong>
         </div>
         {error ? <div className="next-proposals-error products-form-error">{error}</div> : null}
         <div className="products-modal__actions next-kit-move-actions">

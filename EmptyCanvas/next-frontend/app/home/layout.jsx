@@ -1,3 +1,4 @@
+import "./home-refresh-loading.css";
 // Route styles are intentionally hoisted from a server layout so both the
 // streamed Home loading state and the resolved page use the same CSS, without
 // waiting for a child client AppShell to mount first.
