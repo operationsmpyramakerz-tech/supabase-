@@ -1787,3 +1787,43 @@ html[data-theme="dark"] .ua-modal--member-editor .ua-member-icon-select > svg { 
 @media (max-width: 700px) {
   .ua-modal--member-editor .ua-modal__header.ua-modal__header--centered { padding-bottom: 14px; }
 }
+
+/* ERP_USERS_MEMBER_EDITOR_DESKTOP_SCROLL_V424
+   Desktop modal had max-height but no definite height. The inner CSS grid
+   therefore grew to the content size, leaving nothing for wheel scrolling.
+   Constrain only the desktop member editor; mobile layout is unchanged.
+   Header, left tabs and Save/Cancel stay in place while form content scrolls. */
+@media (min-width: 701px) {
+  body.user-access-page .ua-modal.ua-modal--member-editor {
+    display: flex;
+    flex-direction: column;
+    height: min(850px, calc(100dvh - 90px));
+    max-height: min(850px, calc(100dvh - 90px));
+    min-height: 0;
+  }
+  body.user-access-page .ua-modal--member-editor .ua-modal__header,
+  body.user-access-page .ua-modal--member-editor .ua-modal__actions {
+    flex-shrink: 0;
+  }
+  body.user-access-page .ua-modal--member-editor .ua-modal__body.ua-member-editor-body {
+    flex: 1 1 0;
+    height: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+  body.user-access-page .ua-modal--member-editor .ua-member-editor-form {
+    height: 100%;
+    min-height: 0;
+    grid-template-rows: minmax(0, 1fr);
+  }
+  body.user-access-page .ua-modal--member-editor .ua-member-editor-content {
+    height: 100%;
+    max-height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior-y: contain;
+    scrollbar-width: thin;
+    scrollbar-color: #c8ced8 transparent;
+  }
+}
