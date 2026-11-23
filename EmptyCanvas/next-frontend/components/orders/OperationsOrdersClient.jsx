@@ -1394,6 +1394,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
           combinedOrders,
           tab: selectedTab,
           columns: options?.columns || [],
+          showGrandTotal: options?.showGrandTotal === true,
           signatureLabels: options?.signatureLabels || null,
           instruction: options?.instruction || null,
           sortMode: options?.sortMode || "product-tag",

@@ -988,6 +988,7 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, orderOption
           showRepeatedComponentOptions={!maintenance}
           defaultRepeatedComponentMode="merge"
           showCombinedOrderOptions={!maintenance}
+          showGrandTotalOption={!maintenance}
           orderOptions={combinedOrderChoices}
           currentOrderKey={text(group?.key)}
           onClose={() => setDownloadOpen(false)}

@@ -4,6 +4,7 @@ const { attachPageNumbers } = require("./pdfPageNumbers");
 const { drawStocktakingHeader } = require("./pdfHeader");
 const { enableArabicPdf, ensurePdfArabicSupport, withNativeArabicPdfText } = require("./pdfArabicSupport");
 const { isMixedArabicReason, prepareMixedArabicReason } = require("./pdfMixedArabicReason");
+const { grandTotalFromExportRows } = require("./order-export-grand-total.cjs");
 
 function moneyGBP(n) {
   const num = Number(n) || 0;
@@ -238,6 +239,7 @@ async function pipeDeliveryReceiptPDF(
     rows,
     grandQty,
     grandTotal,
+    showGrandTotal = false,
     // Optional layout overrides
     metaLayout = "default", // "default" | "teamReasonFirst"
     groupByReason: groupByReasonOpt = true,
@@ -899,6 +901,31 @@ async function pipeDeliveryReceiptPDF(
       });
       doc.y += 12;
     }
+  }
+
+  // Render the selected Grand Total as a single full-width black box under
+  // the LAST component table (not in the fixed signature footer).
+  // ensureSpace places the entire bar on a new page when necessary.
+  if (showGrandTotal === true) {
+    ensureSpace(53);
+    const barY = doc.y + 6;
+    const barHeight = 36;
+    const totalAmount = grandTotalFromExportRows(safeRows);
+
+    doc.save();
+    doc.roundedRect(tableX, barY, tableW, barHeight, 8).fillColor("#080B12").fill();
+    doc.font("Helvetica-Bold").fontSize(11).fillColor("#FFFFFF");
+    doc.text("Grand Total", tableX + 15, barY + 11, {
+      width: (tableW / 2) - 22,
+      lineBreak: false,
+    });
+    doc.text(moneyGBP(totalAmount), tableX + (tableW / 2), barY + 11, {
+      width: (tableW / 2) - 15,
+      align: "right",
+      lineBreak: false,
+    });
+    doc.restore();
+    doc.y = barY + barHeight + 6;
   }
 
   doc.end();

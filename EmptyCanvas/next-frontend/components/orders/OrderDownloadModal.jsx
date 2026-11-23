@@ -242,6 +242,7 @@ export default function OrderDownloadModal({
   showRepeatedComponentOptions = false,
   defaultRepeatedComponentMode = "merge",
   showCombinedOrderOptions = false,
+  showGrandTotalOption = false,
   orderOptions = [],
   currentOrderKey = "",
   onClose,
@@ -296,6 +297,7 @@ export default function OrderDownloadModal({
   }, [currentOrderKey, normalizedOrderOptions]);
 
   const [columns, setColumns] = useState(startingColumns);
+  const [showGrandTotal, setShowGrandTotal] = useState(false);
   const [signatureLabels, setSignatureLabels] = useState(startingSignatures);
   const [repeatedComponentMode, setRepeatedComponentMode] = useState(
     String(defaultRepeatedComponentMode || "").toLowerCase() === "separate" ? "separate" : "merge",
@@ -324,6 +326,7 @@ export default function OrderDownloadModal({
     if (!justOpened) return;
 
     setColumns(startingColumns);
+    setShowGrandTotal(false);
     setSignatureLabels(startingSignatures);
     setRepeatedComponentMode(String(defaultRepeatedComponentMode || "").toLowerCase() === "separate" ? "separate" : "merge");
     setSelectedOrderKeys(effectiveCurrentOrderKey ? [effectiveCurrentOrderKey] : []);
@@ -457,6 +460,7 @@ export default function OrderDownloadModal({
       await onDownload({
         kind,
         columns,
+        showGrandTotal: showGrandTotalOption && showGrandTotal,
         signatureLabels: showSignatureOptions ? signatureLabels : null,
         repeatedComponentMode: showRepeatedComponentOptions ? (combinedMode ? "merge" : repeatedComponentMode) : null,
         combinedOrders: showCombinedOrderOptions
@@ -578,6 +582,18 @@ export default function OrderDownloadModal({
             ))}
           </div>
         </div>
+
+        {showGrandTotalOption ? (
+          <div className="order-download-section order-download-grand-total">
+            <span className="order-download-section__label">Totals</span>
+            <div className="order-download-columns__grid">
+              <label className="order-download-column-option">
+                <input type="checkbox" checked={showGrandTotal} onChange={(event) => setShowGrandTotal(event.target.checked)} />
+                <span>Grand Total</span>
+              </label>
+            </div>
+          </div>
+        ) : null}
 
         {showRepeatedComponentOptions ? (
           <div className="order-download-section order-download-repeated-components">
