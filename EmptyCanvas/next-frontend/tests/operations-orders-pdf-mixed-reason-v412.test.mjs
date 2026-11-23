@@ -56,13 +56,15 @@ test('preserves explicit line breaks and original values without mixed scripts',
 
 test('delivery receipt uses native Arabic shaping in summary reason and group heading', () => {
   assert.match(delivery, /const drawReasonText = \(value, x, y, width, options = \{\}\) =>/);
-  assert.match(delivery, /withNativeArabicPdfText\(doc, \(\) => \{\s*const prepared = prepareMixedArabicReason\(raw\)/);
+  assert.match(delivery, /withNativeArabicPdfText\(doc, \(\) => \{\s*const prepared = isMixedArabicReason\(raw\)/);
+  assert.match(delivery, /text: prepareNativeRtlPdfText\(doc, raw, width\)/);
   assert.match(delivery, /summaryLabel\("reason", "Reason"\), reasonLabel, \{ isReason: true \}/);
   assert.match(delivery, /drawReasonText\(reason \|\| "No Reason"/);
 });
 
 test('table Reason column measures and renders the same native-shaped wrapped string', () => {
-  assert.match(delivery, /c\.key !== "reason" \|\| !isMixedArabicReason\(raw\)/);
+  assert.match(delivery, /c\.key !== "reason" \|\| !containsArabicText\(raw\)/);
+  assert.match(delivery, /text: prepareNativeRtlPdfText\(doc, raw, width\)/);
   assert.match(delivery, /prepareMixedArabicReason\(raw, \{ width, measure:/);
   assert.match(delivery, /value\.native \? withNativeArabicPdfText\(doc, measure\) : measure\(\)/);
   assert.match(delivery, /if \(value\.native\) withNativeArabicPdfText\(doc, draw\)/);
@@ -116,6 +118,7 @@ test('the actual Delivery Receipt renderer passes mixed Reason to PDFKit in visu
       },
     };
     if (name === './pdfMixedArabicReason') return require('../lib/pdfMixedArabicReason.js');
+    if (name === './order-export-grand-total.cjs') return require('../lib/order-export-grand-total.cjs');
     if (name === 'path') return require('node:path');
     throw new Error(`Unexpected mock dependency ${name}`);
   };
@@ -133,4 +136,29 @@ test('the actual Delivery Receipt renderer passes mixed Reason to PDFKit in visu
   assert.ok(matches.length >= 2, 'summary card and Reason group header should both use the corrected visual string');
   assert.ok(matches.every(({ native }) => native), 'mixed Arabic text must bypass legacy visual shaping');
   assert.ok(output.some(({ value, native }) => value === 'Djibouti School' && !native));
+
+  // Regression: the screenshot case has NO Latin characters. The previous
+  // mixed-only guard fell back to the legacy per-character visual shaper,
+  // producing a scrambled pure-Arabic Reason. The same native RTL path must
+  // now handle both the summary card and a repeated group/table Reason.
+  const pureReason = 'للاستخدام الإداري';
+  await loaded.exports.pipeDeliveryReceiptPDF({
+    orderId: 'ORD-166', createdAt: '2026-11-23', teamMember: 'Abdullah',
+    preparedBy: pureReason,
+    rows: [{ idCode: 'A500018', component: 'Circle Stamp 4.5cm',
+      reason: pureReason, qty: 1, unit: 650, total: 650 }],
+    showCosts: true, showFooterSignature: false, showGrandTotal: true,
+    exportColumns: ['idCode', 'component', 'reason', 'qty', 'unit', 'total'],
+  }, {});
+  const pureCalls = instances.at(-1)?.calls || [];
+  const pureVisual = 'الإداري للاستخدام';
+  const pureMatches = pureCalls.filter(({ value }) => value === pureVisual);
+  assert.ok(pureMatches.length >= 2,
+    'pure Arabic must be ordered RTL in the summary + Reason table and/or heading');
+  assert.ok(pureMatches.every(({ native }) => native),
+    'pure Arabic must bypass the legacy character reverser');
+  assert.ok(pureCalls.some(({ value, native }) => value === 'Abdullah' && !native),
+    'Latin values must remain unchanged even when a Reason uses native Arabic shaping');
+  assert.ok(pureCalls.some(({ value }) => value === 'Grand Total'),
+    'the selected Grand Total black bar must remain in the output');
 });
