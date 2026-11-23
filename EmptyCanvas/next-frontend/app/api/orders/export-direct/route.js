@@ -82,6 +82,7 @@ export async function POST(request) {
       kind: body?.kind,
       tab: body?.tab,
       columns: body?.columns,
+      showGrandTotal: body?.showGrandTotal === true && scope === "operations",
       instruction: body?.instruction,
       sortMode: body?.sortMode,
       signatureLabels: body?.signatureLabels,

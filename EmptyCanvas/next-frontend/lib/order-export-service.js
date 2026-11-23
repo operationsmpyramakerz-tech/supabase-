@@ -4,6 +4,7 @@ import { PassThrough } from "node:stream";
 import ExcelJS from "exceljs";
 import deliveryReceiptPdfModule from "./deliveryReceiptPdf";
 import maintenanceReceiptPdfModule from "./maintenanceReceiptPdf";
+import grandTotalModule from "./order-export-grand-total.cjs";
 import { getProductsCatalog } from "./products-service";
 import { exportProductResourceUrl } from "./export-product-resource.mjs";
 import { loadOperationsOrderDetails } from "./operations-orders-data";
@@ -13,6 +14,7 @@ import { combinedOrderKitAttribution } from "./order-kit-attribution.mjs";
 
 const { pipeDeliveryReceiptPDF } = deliveryReceiptPdfModule;
 const { pipeMaintenanceReceiptPDF } = maintenanceReceiptPdfModule;
+const { grandTotalFromExportRows } = grandTotalModule;
 
 const ORDER_EXPORT_COLUMN_DEFS = [
   { key: "idCode", label: "ID Code", width: 14 },
@@ -612,7 +614,7 @@ async function renderPipedPdf(renderer, payload) {
   return await bufferPromise;
 }
 
-async function renderDeliveryPdf({ payload, tab, columns, instruction, sortMode, signatureLabels }) {
+async function renderDeliveryPdf({ payload, tab, columns, instruction, sortMode, signatureLabels, showGrandTotal = false }) {
   const selectedExportColumns = normalizeOrderExportColumns(columns, { tab });
   const combinedColumnDefs = Array.isArray(payload?.combinedOrders) && payload.combinedOrders.length > 1
     ? selectedCombinedColumnDefs(columns, payload, { tab })
@@ -633,6 +635,7 @@ async function renderDeliveryPdf({ payload, tab, columns, instruction, sortMode,
     groupMode: exportSortMode,
     grandQty: exportPayload.grandQty,
     grandTotal: exportPayload.grandTotal,
+    showGrandTotal: showGrandTotal === true,
     metaLayout: "teamReasonFirst",
     showReasonTagBar: false,
     groupByReason: false,
@@ -829,7 +832,7 @@ async function renderMaintenancePdf({ payload, template = false, sparePartColumn
   };
 }
 
-async function renderProposalStyleExcel(payload, { selectedColumns = [], exportInstruction, exportSortMode = "product-tag" } = {}) {
+async function renderProposalStyleExcel(payload, { selectedColumns = [], exportInstruction, exportSortMode = "product-tag", showGrandTotal = false } = {}) {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "Operations Hub";
   workbook.created = new Date();
@@ -1026,6 +1029,35 @@ async function renderProposalStyleExcel(payload, { selectedColumns = [], exportI
     (payload.rows || []).forEach((item) => addComponentRow(item));
   }
 
+  // Optional black total bar is outside the component table, after every
+  // group/kit/row; it sums precisely the rows included in this export.
+  if (showGrandTotal === true) {
+    const grand = grandTotalFromExportRows(payload.rows);
+    const footerRow = sheet.addRow(new Array(lastTableCol).fill(null));
+    footerRow.height = 32;
+    if (lastTableCol > 1) {
+      if (lastTableCol > 2) sheet.mergeCells(footerRow.number, 1, footerRow.number, lastTableCol - 1);
+      const label = footerRow.getCell(1);
+      label.value = "Grand Total";
+      label.alignment = { vertical: "middle", horizontal: "left", indent: 1 };
+      const amount = footerRow.getCell(lastTableCol);
+      amount.value = grand;
+      amount.numFmt = '"£"#,##0.00';
+      amount.alignment = { vertical: "middle", horizontal: "right", indent: 1 };
+    } else {
+      const singleCell = footerRow.getCell(1);
+      singleCell.value = `Grand Total    £${grand.toFixed(2)}`;
+      singleCell.alignment = { vertical: "middle", horizontal: "center" };
+    }
+    for (let column = 1; column <= lastTableCol; column += 1) {
+      const cell = footerRow.getCell(column);
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF080B12" } };
+      cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
+      cell.border = { top: { style: "thin", color: { argb: "FF080B12" } },
+        bottom: { style: "thin", color: { argb: "FF080B12" } } };
+    }
+  }
+
   for (let column = 1; column <= lastTableCol; column += 1) {
     let maxLen = String(excelColumns[column - 1]?.label || excelColumns[column - 1]?.key || "").length;
     for (let row = 3; row <= sheet.rowCount; row += 1) {
@@ -1184,7 +1216,7 @@ async function renderMaintenanceExcel(payload, { selectedColumns = [], exportIns
   return Buffer.from(await workbook.xlsx.writeBuffer());
 }
 
-async function renderExcel({ payload, tab, columns, instruction, sortMode, publicOrigin = "" }) {
+async function renderExcel({ payload, tab, columns, instruction, sortMode, showGrandTotal = false, publicOrigin = "" }) {
   const isCombined = Array.isArray(payload?.combinedOrders) && payload.combinedOrders.length > 1;
   const selectedColumns = isCombined
     ? selectedCombinedColumnDefs(columns, payload, { tab })
@@ -1197,7 +1229,7 @@ async function renderExcel({ payload, tab, columns, instruction, sortMode, publi
   const isMaintenance = orderTypeKey(exportPayload?.first?.orderType) === orderTypeKey("Request Maintenance");
   const buffer = isMaintenance
     ? await renderMaintenanceExcel(exportPayload, { selectedColumns, exportInstruction, publicOrigin })
-    : await renderProposalStyleExcel(exportPayload, { selectedColumns, exportInstruction, exportSortMode });
+    : await renderProposalStyleExcel(exportPayload, { selectedColumns, exportInstruction, exportSortMode, showGrandTotal });
   return {
     buffer,
     fileName: `${isCombined ? "combined_orders" : (isMaintenance ? "maintenance_order" : "order")}_${safeExportName(exportPayload.orderIdRange)}.xlsx`,
@@ -1211,6 +1243,7 @@ export async function renderOrderExport({
   kind = "pdf",
   tab = "",
   columns = null,
+  showGrandTotal = false,
   instruction = null,
   sortMode = null,
   signatureLabels = null,
@@ -1254,8 +1287,8 @@ export async function renderOrderExport({
     : await buildOrderExportPayload(ids, account, { repeatedComponentMode, publicOrigin });
   const cleanKind = text(kind).toLowerCase();
   if (cleanKind === "maintenance-pdf") return await renderMaintenancePdf({ payload, template, sparePartColumns, checklist, publicOrigin });
-  if (cleanKind === "excel") return await renderExcel({ payload, tab, columns, instruction, sortMode, publicOrigin });
-  return await renderDeliveryPdf({ payload, tab, columns, instruction, sortMode, signatureLabels });
+  if (cleanKind === "excel") return await renderExcel({ payload, tab, columns, instruction, sortMode, showGrandTotal, publicOrigin });
+  return await renderDeliveryPdf({ payload, tab, columns, instruction, sortMode, signatureLabels, showGrandTotal });
 }
 
 export const __orderExportServiceTest = {
