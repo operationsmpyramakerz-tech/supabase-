@@ -19,7 +19,11 @@ test("all three Orders Review routes have a unique canonical type", () => {
     assert.equal(reviewPageForPath(page.route.slice(5)), page);
     const slug = page.route.split("/").at(-1);
     assert.match(source(`../app/orders-review/${slug}/page.jsx`), /reviewPageForType/);
-    assert.match(source(`../app/orders-review/${slug}/loading.jsx`), /ClassicOrdersLoading/);
+    assert.match(source(`../app/orders-review/${slug}/loading.jsx`),
+      /from ["']\.\.\/\.\.\/\.\.\/components\/orders\/ClassicOrdersLoading["']/,
+      "Nested loading routes must import the shared skeleton from the correct depth");
+    assert.doesNotMatch(source(`../app/orders-review/${slug}/loading.jsx`),
+      /from ["']\.\.\/\.\.\/components\/orders\/ClassicOrdersLoading["']/);
   }
   assert.equal(reviewPageForType("unrecognized"), null);
 });
