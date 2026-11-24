@@ -51,8 +51,7 @@ test("server verifies permission, existing owner, entire order and persisted mem
   assert.ok(transfer.includes("team_member_id: next.id, team_member_name: next.name"));
   assert.ok(transfer.includes('method: "PATCH", headers: { Prefer: "return=representation" }'));
   assert.ok(transfer.includes('actionKey: "orders.operations.transfer_creator"'));
-  assert.ok(transfer.includes("team_member_id: current.id ?"));
-  assert.ok(transfer.includes("team_member_name: current.name ?"));
+  assert.ok(transfer.includes('order_number: `eq.${number}`, select: "id"'));
   assert.ok(!transfer.includes("updateById("), "the new owner must not be written one component at a time");
 });
 
