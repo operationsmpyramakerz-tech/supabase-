@@ -1770,6 +1770,7 @@ function ReceiveModal({ state, busy, error, onCancel, onSubmit }) {
   const [issueDescription, setIssueDescription] = useState("");
   const [quantities, setQuantities] = useState({});
   const [searchQuery, setSearchQuery] = useState("");
+  const [legacyLinkConfirmed, setLegacyLinkConfirmed] = useState(false);
   useEffect(() => {
     if (!group) return;
     // Receive-now values must always start empty. The order quantity is shown
@@ -1779,6 +1780,7 @@ function ReceiveModal({ state, busy, error, onCancel, onSubmit }) {
     setReceiptNumber("");
     setIssueDescription("");
     setSearchQuery("");
+    setLegacyLinkConfirmed(false);
   }, [group]);
   if (!group) return null;
   const searchNeedle = lower(searchQuery);
@@ -1794,6 +1796,18 @@ function ReceiveModal({ state, busy, error, onCancel, onSubmit }) {
     ].map(lower).some((value) => value.includes(searchNeedle));
   });
   const receivableItems = group.items.filter((item) => Math.abs(remainingQuantity(item)) > 1e-9);
+  const isLegacyLinkedCandidate = (item) => (
+    group?.actionScope === "remaining-batch"
+    && /(arrived|delivered|received)/i.test(text(item?.status))
+    && Math.abs(receivedQuantity(item)) <= 1e-9
+    && Math.abs(remainingQuantity(item)) > 1e-9
+  );
+  const selectedLegacyCandidates = receivableItems.filter((item) => {
+    const id = text(item?.id);
+    const amount = Math.max(0, finite(quantities[id]));
+    return isLegacyLinkedCandidate(item) && amount > 1e-9;
+  });
+  const needsLegacyReview = selectedLegacyCandidates.length > 0;
   const hasReceiveQuantity = receivableItems.some((item) => {
     const id = text(item?.id);
     const maxNow = Math.abs(remainingQuantity(item));
@@ -1823,7 +1837,7 @@ function ReceiveModal({ state, busy, error, onCancel, onSubmit }) {
     });
   };
   return <div className="co-submodal-overlay is-open next-operations-receive-modal" aria-hidden="false">
-    <form className="co-submodal-dialog next-operations-receive-dialog" role="dialog" aria-modal="true" aria-labelledby="operations-receive-title" onSubmit={(event) => { event.preventDefault(); onSubmit({ receiptNumber, issueDescription, quantities }); }}>
+    <form className="co-submodal-dialog next-operations-receive-dialog" role="dialog" aria-modal="true" aria-labelledby="operations-receive-title" onSubmit={(event) => { event.preventDefault(); onSubmit({ receiptNumber, issueDescription, quantities, legacyLinkConfirmed: needsLegacyReview && legacyLinkConfirmed }); }}>
       <div className="co-submodal-header next-operations-receive-header">
         <div className="req-edit-icon"><ClassicOrderIcon name="truck" /></div>
         <div><div className="co-submodal-title" id="operations-receive-title">Receive components</div><div className="co-submodal-sub">Confirm the receipt details and the quantity received now.</div></div>
@@ -1881,9 +1895,20 @@ function ReceiveModal({ state, busy, error, onCancel, onSubmit }) {
             </div>;
           }) : <div className="next-operations-receive-empty">No components match your search.</div>}</div>
         </section>
+        {needsLegacyReview ? (
+          <label className="next-operations-receive-check" style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: 12, marginTop: 12, border: "1px solid #fed7aa", background: "#fff7ed", borderRadius: 12, lineHeight: 1.5 }}>
+            <input type="checkbox" checked={legacyLinkConfirmed} disabled={busy} onChange={(event) => setLegacyLinkConfirmed(event.target.checked)}
+              aria-label="Confirm review of historical Stocktaking links and physically outstanding receipt" />
+            <span style={{ display: "grid", gap: 4, minWidth: 0, color: "#7c2d12", fontSize: 12 }}>
+              <strong>Verify historical Stocktaking link</strong>
+              <span>Legacy component ID{selectedLegacyCandidates.length === 1 ? "" : "s"} {selectedLegacyCandidates.map((item) => text(item?.id)).join(", ")}:
+                Confirm the remaining quantity was not delivered before. A historical stock record may have a zero balance because it was consumed. Only the new receipt will be placed into a separate batch, with no changes to the original stock link.</span>
+            </span>
+          </label>
+        ) : null}
         <div className="co-submodal-error" role="alert" aria-live="polite">{error}</div>
       </div>
-      <div className="co-submodal-actions next-operations-receive-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy || !hasReceiveQuantity}>{busy ? "Receiving…" : "Confirm receipt"}</button></div>
+      <div className="co-submodal-actions next-operations-receive-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy || !hasReceiveQuantity || (needsLegacyReview && !legacyLinkConfirmed)}>{busy ? "Receiving…" : "Confirm receipt"}</button></div>
     </form>
   </div>;
 }
