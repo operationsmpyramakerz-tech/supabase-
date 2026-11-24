@@ -33,7 +33,7 @@ export default async function OrdersReviewPage({ searchParams } = {}) {
   // until the order type is known; never strand maintenance/withdrawal orders.
   const explicitType = params.type ?? params.filterType ?? params.orderTypeKey;
   if (reviewPageForType(Array.isArray(explicitType) ? explicitType[0] : explicitType)
-    || !/^ORD-\\d+$/i.test(rawOrder)) {
+    || !/^ORD-\d+$/i.test(rawOrder)) {
     redirect(reviewLegacyDestination(params));
   }
   // A notification can be opened while Orders Review is already mounted.
