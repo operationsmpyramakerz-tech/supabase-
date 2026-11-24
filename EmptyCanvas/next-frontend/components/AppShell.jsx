@@ -225,6 +225,7 @@ export default function AppShell({
       <EventsSidebarFlyout allowedPages={allowedPages} account={account} activePath={activePath} />
       <ShoppingCartSidebarFlyout allowedPages={allowedPages} activePath={activePath} />
       <ShoppingCartSidebarFlyout module="operations" account={account} allowedPages={allowedPages} activePath={activePath} />
+      <ShoppingCartSidebarFlyout module="review" account={account} allowedPages={allowedPages} activePath={activePath} />
 
       <div className="app-container classic-app-shell">
         <aside className="sidebar" style={{ "--desktop-dock-pages-width": desktopDockPagesWidth }}>

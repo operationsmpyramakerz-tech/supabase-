@@ -6,6 +6,7 @@ import AppShell from "./AppShell";
 import { finishAuthRouteTransition } from "../lib/auth-route-transition";
 import { PersistentShellProvider } from "./PersistentShellContext";
 import { operationsPageForPath } from "../lib/operations-order-pages.mjs";
+import { reviewPageForPath } from "../lib/review-order-pages.mjs";
 
 function localPathname(value) {
   let pathname = String(value || "/").trim() || "/";
@@ -24,7 +25,7 @@ function routePerformanceStyles(localPath) {
   // Keep large late-stage parity rules off the global shell. These bundles are
   // exact extractions from the tail of classic-parity.css, so the route keeps
   // the same cascade while unrelated pages avoid parsing those selectors.
-  if (["/orders", "/orders-review", "/operations-orders"].includes(localPath) || operationsPageForPath(localPath)) {
+  if (["/orders", "/orders-review", "/operations-orders"].includes(localPath) || operationsPageForPath(localPath) || reviewPageForPath(localPath)) {
     return [
       "/next/css/orders-performance.css?v=current-orders-pure-white-v6",
       "/next/css/order-mobile-performance.css?v=floating-order-type-desktop-v4",
@@ -140,6 +141,8 @@ function routeDefaults(localPath) {
 
   const operationsWorkspace = operationsPageForPath(localPath);
   if (operationsWorkspace) return { title: operationsWorkspace.label, activePath: operationsWorkspace.route, bodyClass: "order-modal-fit-screen operations-orders-page" };
+  const reviewWorkspace = reviewPageForPath(localPath);
+  if (reviewWorkspace) return { title: reviewWorkspace.label, activePath: reviewWorkspace.route, bodyClass: "order-modal-fit-screen orders-review-page" };
 
   if (localPath.startsWith("/orders/new/request-products")) {
     return { title: "Request Products", activePath: "/next/orders/new/request-products" };
