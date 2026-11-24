@@ -14,6 +14,7 @@ import { enrichMaintenanceDetailProducts } from "./maintenance-detail-enrichment
 import { getProductsCatalog } from "./products-service";
 import { loadFastOrderDetailsBundle } from "./order-details-fast-path";
 import { listTeamMembersLite } from "./team-members-service";
+import { prepareOperationsCreatorTransfer, commitOperationsCreatorTransfer } from "./operations-order-owner-transfer";
 import { invalidateStocktakingReadCaches, stocktakingOtherOwnerColumns } from "./stocktaking-data";
 import { consumeOrderSummaryWindows, loadOrderRowsByNumbers, scanOrderNumberCandidates } from "./order-pagination";
 import { applyOrderSearchPlan, canUseOrderSearchText, createOrderSearchPlan, noteOrderSearchTextError } from "./order-search-hotpath";
@@ -1898,6 +1899,8 @@ export async function performOperationsProtectedAction({
   addOperationsStatusOption(statusOptions, "Arrived");
   loaded.clean.forEach((id) => addOperationsStatusOption(statusOptions, loaded.byId.get(id)?.status ?? loaded.byId.get(id)?.Status));
 
+  const teamMembers = await listTeamMembersLite();
+  const creatorRow = loaded.rows[0] || {};
   return {
     ok: true,
     source: "supabase-direct",
@@ -1905,6 +1908,12 @@ export async function performOperationsProtectedAction({
     items,
     products,
     statusOptions,
+    orderCreator: {
+      id: text(creatorRow.team_member_id),
+      name: text(creatorRow.team_member_name),
+    },
+    teamMembers: (Array.isArray(teamMembers) ? teamMembers : []).map(({ id, name, department, position }) =>
+      ({ id, name, department, position })),
   };
 }
 function directOperationsCommittedError(message, status = 500, cause = null) {
@@ -2811,6 +2820,9 @@ export async function saveOperationsEditDetails({
   itemAdds = [],
   itemDeletes = [],
   quantities = null,
+  newCreatorId = "",
+  expectedCreatorId = "",
+  expectedCreatorName = "",
   unsupportedReceiptEdit = false,
 } = {}) {
   const access = ensureOperationsMutationAccess(account || {});
@@ -2847,8 +2859,30 @@ export async function saveOperationsEditDetails({
     if (!deletionsById.has(id)) deletionsById.set(id, []);
     deletionsById.get(id).push(entry);
   }
-  if (!updatesById.size && !deletionsById.size && !additions.length && !(quantities && typeof quantities === "object")) {
+  const hasComponentChanges = Boolean(
+    updatesById.size || deletionsById.size || additions.length
+    || (quantities && typeof quantities === "object" && Object.keys(quantities).length)
+  );
+  const transferRequested = Boolean(text(newCreatorId));
+  if (!hasComponentChanges && !transferRequested) {
     throw directOperationsMutationError("No Operations order changes were provided.", 400);
+  }
+  // Verify the creator and the WHOLE saved order before any writes. A transfer
+  // is one conditional database update, not a per-component loop.
+  const preparedTransfer = transferRequested ? await prepareOperationsCreatorTransfer({
+    orderIds: loaded.clean, rows: loaded.rows, targetId: newCreatorId,
+    expectedId: expectedCreatorId, expectedName: expectedCreatorName,
+  }) : null;
+  if (preparedTransfer && !hasComponentChanges) {
+    const reassigned = await commitOperationsCreatorTransfer({
+      account, orderIds: loaded.clean, rows: loaded.rows, prepared: preparedTransfer,
+    });
+    await invalidateLegacyOperationsCaches(account).catch(() => {});
+    return {
+      success: true, transferredCreator: reassigned.creator,
+      items: [], stocktakingSyncedCount: 0, stocktakingSkippedCount: 0,
+      source: "supabase-direct",
+    };
   }
   // An edited component must still belong to this order. Reject stale edits
   // before *any* database write, rather than silently claiming success for an
@@ -3051,8 +3085,11 @@ export async function saveOperationsEditDetails({
     }
 
     const stock = await opsSyncStocktakingAfterEdit(loaded.rows, updatedRows, stockContext || { needed: false });
-    await invalidateLegacyOperationsCaches(account).catch(() => {});
     const responseIds = updatedRows.map((row) => text(row?.id ?? row?.ID)).filter(Boolean);
+    const reassigned = preparedTransfer ? await commitOperationsCreatorTransfer({
+      account, orderIds: responseIds, rows: updatedRows, prepared: preparedTransfer,
+    }) : null;
+    await invalidateLegacyOperationsCaches(account).catch(() => {});
     const fresh = responseIds.length ? await loadOperationRowsByIds(responseIds).catch(() => null) : null;
     const responseRows = fresh?.rows?.length ? fresh.rows : updatedRows;
     return {
@@ -3060,6 +3097,7 @@ export async function saveOperationsEditDetails({
       items: responseRows.map((row) => serializeOperationsOrderDetail(row)),
       stocktakingSyncedCount: Number(stock?.synced || 0),
       stocktakingSkippedCount: Number(stock?.skipped || 0),
+      ...(reassigned ? { transferredCreator: reassigned.creator } : {}),
       source: "supabase-direct",
     };
   } catch (error) {
