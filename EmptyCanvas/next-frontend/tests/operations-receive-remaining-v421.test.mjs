@@ -43,6 +43,7 @@ function harness(rows = [row(10), row(11, 'Shipped', 3, 7)]) {
       return {receivedCount: Object.values(options.body.p_quantities).length};
     },
     invalidateLegacyOperationsCaches: async () => { state.invalidations++; },
+    recordHistoryForAccount: async () => {},
   };
   vm.runInNewContext(`${script}\nthis.run = receiveOperationsRemainingBatch;`, sandbox);
   return { run: sandbox.run, state };
@@ -63,7 +64,8 @@ test('batch receipt sends only the NEW quantity, never the previously delivered 
   const result = await run({account: {username: 'Ops Test'}, orderIds: ['10','11'], quantities: {'10':2, '11':0}, receiptNumber:'R-42'});
   assert.equal(result.success, true);
   assert.equal(state.calls.length, 1);
-  assert.equal(state.calls[0].path, '/rpc/operations_receive_remaining_v421');
+  assert.equal(state.calls[0].path, '/rpc/operations_receive_remaining_v423');
+  assert.equal(state.calls[0].options.body.p_legacy_link_confirmed, false);
   assert.equal(state.calls[0].options.method, 'POST');
   assert.deepEqual(JSON.parse(JSON.stringify(state.calls[0].options.body.p_quantities)), {'10':2});
   assert.equal(state.calls[0].options.body.p_received_by,'Ops Test');
