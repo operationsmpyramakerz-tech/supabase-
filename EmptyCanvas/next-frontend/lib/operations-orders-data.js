@@ -3034,6 +3034,9 @@ export async function saveOperationsEditDetails({
     ...plans.flatMap((plan) => plan.delete ? [] : (plan.split ? plan.materialized.map((entry) => entry.finalRow) : [plan.finalRow])),
     ...additionPlans.map((plan) => plan.finalRow),
   ];
+  if (preparedTransfer && !plannedFinalRows.length) {
+    throw directOperationsMutationError("An empty order cannot be transferred. Keep at least one component.", 409);
+  }
   const stockContext = await opsPrepareStockContext(plannedFinalRows, loaded.rows, products, { existingOnly: true });
   if (stockContext === null) return null;
 
