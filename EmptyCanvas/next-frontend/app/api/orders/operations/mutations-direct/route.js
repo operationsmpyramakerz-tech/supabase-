@@ -165,6 +165,9 @@ export async function POST(request) {
         itemAdds: body?.itemAdds,
         itemDeletes: body?.itemDeletes,
         quantities: body?.quantities,
+        newCreatorId: body?.newCreatorId,
+        expectedCreatorId: body?.expectedCreatorId,
+        expectedCreatorName: body?.expectedCreatorName,
         unsupportedReceiptEdit: false,
       });
     } else {

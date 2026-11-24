@@ -15,6 +15,7 @@ import { groupOrderItems, OrderSortButton } from "./OrderGrouping";
 import ProgressiveOrderGroups from "./ProgressiveOrderGroups";
 import OrderComponentSearch, { matchesOrderComponentSearch } from "./OrderComponentSearch";
 import { MaintenanceComponentCards } from "./MaintenanceComponentCards";
+import OrderCreatorTransferField from "./OrderCreatorTransferField";
 
 const OrderDownloadModal = dynamic(() => import("./OrderDownloadModal"), { ssr: false });
 
@@ -521,7 +522,7 @@ function Progress({ stage }) {
   );
 }
 
-function OrderModal({ group, tab, busy, onClose, onAction, onExport, orderOptions = [], editMode, onPatchEditItem, onUpsertEditAddition, onDeleteEditItem, onSaveEdit, onCancelEdit, permissions = {} }) {
+function OrderModal({ group, tab, busy, onClose, onAction, onExport, orderOptions = [], editMode, onPatchEditItem, onUpsertEditAddition, onDeleteEditItem, onSelectEditCreator, onSaveEdit, onCancelEdit, permissions = {} }) {
   const router = useRouter();
   const permitted = (key) => permissions[key] !== false;
   const canEditMenu = permissions.edit === true;
@@ -596,6 +597,8 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, orderOption
   const editItemsById = editMode?.itemsById || {};
   const editChanges = editMode?.changes || {};
   const editDeletions = editMode?.deletions || {};
+  const creatorChanged = Boolean(text(editMode?.creatorMemberId)
+    && text(editMode?.creatorMemberId) !== text(editMode?.creatorOriginalId));
   const isEditItemDeleted = (item) => {
     const id = text(item?.id);
     const displayKey = text(item?._displayKey) || id;
@@ -927,8 +930,16 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, orderOption
             <div className="co-modal-actions ro-actions ro-actions--right order-modal-search-actions next-operations-edit-actions order-detail-toolkit">
               <OrderComponentSearch key={`${group.key}:${tab}:edit`} value={componentSearch} onChange={setComponentSearch} disabled={busy} collapseOnToggle />
               <button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancelEdit} disabled={busy}>Cancel</button>
-              <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onSaveEdit(editChanges)} disabled={busy || (!Object.keys(editChanges).length && !(Array.isArray(editMode?.additions) && editMode.additions.length) && !Object.keys(editDeletions).length)}>{busy ? "Saving…" : "Save changes"}</button>
+              <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onSaveEdit(editChanges)} disabled={busy || (!creatorChanged && !Object.keys(editChanges).length && !(Array.isArray(editMode?.additions) && editMode.additions.length) && !Object.keys(editDeletions).length)}>{busy ? "Saving…" : "Save changes"}</button>
             </div>
+            <OrderCreatorTransferField
+              members={editMode?.teamMembers || []}
+              originalId={editMode?.creatorOriginalId || ""}
+              originalName={editMode?.creatorOriginalName || group?.createdByName || ""}
+              selectedId={editMode?.creatorMemberId || ""}
+              onChange={onSelectEditCreator}
+              disabled={busy}
+            />
             <div className="next-operations-edit-mode-note"><ClassicOrderIcon name="info" /><span>Tap any component to edit its product, status and quantities.</span></div>
           </> : null}
 
@@ -1902,6 +1913,7 @@ export default function OperationsOrdersHeavyModals({
   onPatchEditItem,
   onUpsertEditAddition,
   onDeleteEditItem,
+  onSelectEditCreator,
   onSaveEdit,
   onCancelEdit,
   permissions = {},
@@ -1930,6 +1942,7 @@ export default function OperationsOrdersHeavyModals({
         onPatchEditItem={onPatchEditItem}
         onUpsertEditAddition={onUpsertEditAddition}
         onDeleteEditItem={onDeleteEditItem}
+        onSelectEditCreator={onSelectEditCreator}
         onSaveEdit={onSaveEdit}
         onCancelEdit={onCancelEdit}
         permissions={permissions}
