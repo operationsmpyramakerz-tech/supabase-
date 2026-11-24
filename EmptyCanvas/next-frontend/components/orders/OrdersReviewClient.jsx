@@ -325,14 +325,15 @@ function ProgressTrack({ value }) {
   })}</div>;
 }
 
-export default function OrdersReviewClient({ initialOrders = [], initialPageInfo = null, bootstrapWarnings = [], account }) {
+export default function OrdersReviewClient({ initialOrders = [], initialPageInfo = null, bootstrapWarnings = [], account, workspaceType = "" }) {
   const canReview = (action) => featureAllowed(account, `orders.review.${action}`);
   const permissions = Object.fromEntries(["view_details", "approve", "bulk_approve", "quantity", "archive", "unarchive", "update_approval"].map(action => [action, canReview(action)]));
   const [orders, setOrders] = useState(Array.isArray(initialOrders) ? initialOrders : []);
   const [pageInfo, setPageInfo] = useState(initialPageInfo || { hasMore: false, nextCursor: null, limit: 36 });
   const [listLoading, setListLoading] = useState(false);
   const [tab, setTab] = useState("all");
-  const [type, setType] = useState("all");
+  // Canonical pages stay scoped to one type; legacy deep links remain untyped.
+  const [type, setType] = useState(workspaceType || "all");
   const [query, setQuery] = useState("");
   const completeTypes = useCompleteOrderTypeCounts({ endpoint: `${DIRECT_API_BASE}/sv-orders/paged-summary`, tab, query });
   const [sortMode, setSortMode] = useState("latest");
@@ -362,7 +363,7 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
   const creatorProfileCache = useRef(new Map());
   const listRequestRef = useRef(0);
   const listAbortRef = useRef(null);
-  const initialFilterKeyRef = useRef("all|all|");
+  const initialFilterKeyRef = useRef(`all|${workspaceType || "all"}|`);
 
   // Warm the modal code after the list is interactive. Never request an
   // order's private details merely because its card was rendered or touched.
@@ -378,18 +379,19 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
     const requestedTab = params.get("tab");
     if (REVIEW_TABS.some((item) => item.key === requestedTab)) setTab(requestedTab);
     const requestedType = params.get("type");
-    if (requestedType) setType(requestedType);
+    if (!workspaceType && requestedType) setType(requestedType);
     const requestedQuery = params.get("q");
     if (requestedQuery) setQuery(requestedQuery);
   }, []);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (tab === "all") params.delete("tab"); else params.set("tab", tab);
-    if (type === "all") params.delete("type"); else params.set("type", type);
+    if (workspaceType || type === "all") params.delete("type"); else params.set("type", type);
+    if (workspaceType) { params.delete("filterType"); params.delete("orderTypeKey"); }
     if (!query.trim()) params.delete("q"); else params.set("q", query.trim());
     const search = params.toString();
     window.history.replaceState({}, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
-  }, [tab, type, query]);
+  }, [tab, type, query, workspaceType]);
   useEffect(() => {
     const key = `${tab}|${type}|${query.trim()}`;
     if (key === initialFilterKeyRef.current) return undefined;
@@ -522,7 +524,7 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
     } catch (error) {
       if (requestId !== detailRequestIdRef.current) return;
       cancelOrderOpenTimer("Review");
-      if (error?.status === 401) { window.location.href = "/login?next=/next/orders-review"; return; }
+      if (error?.status === 401) { window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`; return; }
       setDetailError(error?.message || "Order details could not be loaded.");
     } finally {
       if (requestId === detailRequestIdRef.current) setDetailLoadingKey("");
@@ -763,11 +765,18 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
     <div className="next-orders-review-toolbar-wrap">
       <div className="orders-toolbar" aria-label="Orders review tools">
         <div className="orders-toolbar__scroll"><div className="portfolio-tabs portfolio-tabs--iconic" role="tablist" aria-label="Orders Review status">{REVIEW_TABS.map((item) => <button type="button" className={`tab-portfolio order-status-tab ${tab === item.key ? "active" : ""}`} onClick={() => setTab(item.key)} role="tab" aria-selected={tab === item.key} key={item.key}><span className="order-status-tab__icon"><ClassicOrderIcon name={item.icon}/></span><span className="order-status-tab__copy"><span className="order-status-tab__label">{item.label}</span></span></button>)}</div></div>
-        <div className="orders-toolbar__divider" aria-hidden="true"/><OrdersPreferencesControl sortMode={sortMode} onSortChange={setSortMode} hasMore={pageInfo?.hasMore} filterValue={type} onFilterChange={setType} onFilterOpen={completeTypes.refresh} loading={completeTypes.loading} error={completeTypes.error} filterOptions={typeOptions.map(option => { const meta = orderTypeMeta(option.raw || option.label); return { ...option, icon: meta.icon, bg: meta.bg, fg: meta.fg, bd: meta.bd }; })} />
+        <div className="orders-toolbar__divider" aria-hidden="true"/><OrdersPreferencesControl
+          sortOnly={!!workspaceType}
+          sortMode={sortMode} onSortChange={setSortMode} hasMore={pageInfo?.hasMore}
+          filterValue={workspaceType ? "all" : type}
+          onFilterChange={workspaceType ? undefined : setType}
+          onFilterOpen={workspaceType ? undefined : completeTypes.refresh}
+          loading={completeTypes.loading} error={completeTypes.error}
+          filterOptions={workspaceType ? [] : typeOptions.map(option => { const meta = orderTypeMeta(option.raw || option.label); return { ...option, icon: meta.icon, bg: meta.bg, fg: meta.fg, bd: meta.bd }; })} />
       </div>
     </div>
 
-    <section className="orders-review-list-surface" id="sv-orders"><div className="co-cards" id="sv-list">{visibleGroups.length ? sortedVisibleGroups.map((group) => <OrderReviewCard group={group} activeTab={tab} onOpen={openReviewDetails} onPrefetch={prefetchReviewDetails} onCreator={openCreatorProfile} canOpen={permissions.view_details} key={group.key}/>) : listLoading ? <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading orders…</div></div> : <OrdersEmptyState filtered={tab !== "all" || type !== "all" || !!query.trim()} context={"orders"} onReset={() => { setTab("all"); setType("all"); setQuery(""); }} />}</div>{pageInfo?.hasMore ? <div style={{ display: "flex", justifyContent: "center", padding: "16px 0 4px" }}><button type="button" className="ro-action-btn ro-action-btn--light" disabled={listLoading} onClick={() => fetchReviewPage({ reset: false }).catch((error) => showNotice(error?.message || "Failed to load more orders."))}>{listLoading ? "Loading…" : "Load more orders"}</button></div> : null}</section>
+    <section className="orders-review-list-surface" id="sv-orders"><div className="co-cards" id="sv-list">{visibleGroups.length ? sortedVisibleGroups.map((group) => <OrderReviewCard group={group} activeTab={tab} onOpen={openReviewDetails} onPrefetch={prefetchReviewDetails} onCreator={openCreatorProfile} canOpen={permissions.view_details} key={group.key}/>) : listLoading ? <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading orders…</div></div> : <OrdersEmptyState filtered={tab !== "all" || type !== "all" || !!query.trim()} context={"orders"} onReset={() => { setTab("all"); if (!workspaceType) setType("all"); setQuery(""); }} />}</div>{pageInfo?.hasMore ? <div style={{ display: "flex", justifyContent: "center", padding: "16px 0 4px" }}><button type="button" className="ro-action-btn ro-action-btn--light" disabled={listLoading} onClick={() => fetchReviewPage({ reset: false }).catch((error) => showNotice(error?.message || "Failed to load more orders."))}>{listLoading ? "Loading…" : "Load more orders"}</button></div> : null}</section>
 
     {selectedKey && !selected && !detailError ? <OrderDetailsLoadingOverlay group={selectedSummary} onCancel={closeReviewDetails} variant="review" /> : null}
     {(selected || detailError || passwordState || rejectionState || editorState || reasonView || creatorState) ? (
