@@ -82,11 +82,13 @@ export async function commitOperationsCreatorTransfer({
   if (current.id === next.id && current.name === next.name) {
     return { changed: false, creator: next };
   }
+  // Update by the verified ORDER NUMBER (not per-component and not using a
+  // partial owner filter). PostgreSQL executes this as ONE statement, so a
+  // concurrent row-level owner edit cannot leave half the order transferred.
+  // The earlier complete-order + previous-owner verification guards stale UI
+  // edits; a simultaneous reassignment follows database last-writer-wins.
   const query = new URLSearchParams({
-    order_number: `eq.${number}`,
-    team_member_id: current.id ? `eq.${current.id}` : "is.null",
-    team_member_name: current.name ? `eq.${current.name}` : "is.null",
-    select: "id",
+    order_number: `eq.${number}`, select: "id",
   });
   const result = await supabaseRequest(
     `/${encodeURIComponent(orderTable())}?${query.toString()}`, {
@@ -95,8 +97,15 @@ export async function commitOperationsCreatorTransfer({
       profileName: "operations.creator-transfer",
     },
   );
-  if (!Array.isArray(result) || result.length !== actual.length) {
-    throw fail("Creator transfer not confirmed. Another user may have changed the order. Refresh before retrying.", 409);
+  if (!Array.isArray(result) || !result.length) {
+    throw fail("Creator transfer did not update any rows. Refresh the order.", 409);
+  }
+  // The order-number predicate updates every existing component atomically.
+  // An additional row concurrently created after preflight is included too.
+  if (result.length !== actual.length) {
+    console.warn("[operations-orders] Creator transfer included concurrent order rows", {
+      expected: actual.length, updated: result.length,
+    });
   }
   try {
     await recordHistoryForAccount({
