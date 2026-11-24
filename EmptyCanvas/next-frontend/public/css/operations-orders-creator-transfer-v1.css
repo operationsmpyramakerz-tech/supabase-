@@ -1,0 +1,49 @@
+/* Operations Orders Edit Mode — searchable creator selector.
+   Scoped to the edit modal; never affects global user menu or order actions. */
+.ops-creator-transfer {
+  position: relative;
+  box-sizing: border-box;
+  margin: 0 0 13px;
+  padding: 13px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  box-shadow: 0 3px 13px rgba(10,18,32,.04);
+}
+.ops-creator-transfer__heading {display:flex;align-items:center;gap:10px;margin:0 0 10px;}
+.ops-creator-transfer__icon {display:grid;place-items:center;flex:0 0 34px;width:34px;height:34px;border-radius:11px;background:#fff1e8;color:#e95f13;}
+.ops-creator-transfer__icon svg {width:19px;height:19px;}
+.ops-creator-transfer__copy {display:flex;flex:1;min-width:0;flex-direction:column;gap:2px;}
+.ops-creator-transfer__copy strong {font-weight:850;font-size:13px;color:#151b28;}
+.ops-creator-transfer__copy small {font-size:10px;color:#748092;}
+.ops-creator-transfer__changed {padding:5px 8px;border-radius:999px;background:#ecfdf5;color:#067647;font-size:10px;font-weight:850;}
+.ops-creator-transfer__trigger {
+  display:flex;align-items:center;gap:11px;width:100%;padding:10px 12px;
+  border:1px solid #dce1e8;background:#f8fafc;border-radius:12px;
+  color:#101828;text-align:left;cursor:pointer;transition:border-color .2s,box-shadow .2s;
+}
+.ops-creator-transfer__trigger:hover,
+.ops-creator-transfer__trigger[aria-expanded="true"] {border-color:#f97316;box-shadow:0 0 0 3px #f9731612;}
+.ops-creator-transfer__trigger:disabled {opacity:.55;cursor:not-allowed;}
+.ops-creator-transfer__avatar,.ops-creator-transfer__mini-avatar {flex-shrink:0;display:grid;place-items:center;border-radius:50%;font-weight:900;background:#111827;color:#fff;}
+.ops-creator-transfer__avatar {width:36px;height:36px;font-size:14px;}
+.ops-creator-transfer__mini-avatar {width:31px;height:31px;font-size:11px;}
+.ops-creator-transfer__selected,.ops-creator-transfer__option-text {min-width:0;flex:1;display:flex;flex-direction:column;gap:3px;}
+.ops-creator-transfer__selected strong {font-size:13px;font-weight:850;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ops-creator-transfer__selected small,.ops-creator-transfer__option-text small {font-size:10px;color:#7b8494;}
+.ops-creator-transfer__chevron {display:flex;color:#667085;}
+.ops-creator-transfer__chevron svg {width:17px;height:17px;}
+.ops-creator-transfer__menu {margin-top:8px;background:#fff;border:1px solid #e4e7ec;box-shadow:0 12px 30px #1018281c;border-radius:13px;overflow:hidden;animation:opsCreatorOpen .2s ease-out;}
+@keyframes opsCreatorOpen {from {opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+.ops-creator-transfer__search {margin:9px;display:flex;align-items:center;gap:8px;padding:9px;border-radius:10px;background:#f6f7f9;border:1px solid #eceef2;}
+.ops-creator-transfer__search svg {width:16px;height:16px;color:#667085;}
+.ops-creator-transfer__search input {display:block;flex:1;min-width:0;border:0;outline:0;background:transparent;font:inherit;font-size:12px;color:#101828;}
+.ops-creator-transfer__options {max-height:194px;overflow-y:auto;overscroll-behavior:contain;padding:3px 7px 7px;}
+.ops-creator-transfer__option {display:flex;align-items:center;gap:9px;width:100%;padding:8px;border:0;background:transparent;text-align:left;cursor:pointer;border-radius:9px;}
+.ops-creator-transfer__option:hover,.ops-creator-transfer__option.is-selected{background:#fff3ea;}
+.ops-creator-transfer__option-text strong {font-size:12px;font-weight:800;color:#111827;}
+.ops-creator-transfer__tick {font-size:16px;color:#f97316;font-weight:900;}
+.ops-creator-transfer__empty {padding:14px;text-align:center;color:#667085;font-size:12px;}
+.ops-creator-transfer__warning {margin-top:9px;padding:9px 11px;border:1px solid #fed7aa;border-radius:10px;background:#fff7ed;color:#93420e;font-size:11px;line-height:1.5;}
+@media (max-width: 600px) {.ops-creator-transfer{margin:0 0 12px;padding:10px}.ops-creator-transfer__options{max-height:160px}}
+@media (prefers-reduced-motion:reduce) {.ops-creator-transfer__menu{animation:none}}

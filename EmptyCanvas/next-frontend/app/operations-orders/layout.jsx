@@ -8,6 +8,7 @@ export default function OperationsOrdersMotionLayout({ children }) {
         href="/next/css/operations-orders-motion-v1.css?v=cinematic-step2-v1"
         precedence="erp-detail"
       />
+      <link rel="stylesheet" href="/next/css/operations-orders-creator-transfer-v1.css?v=owner-transfer-v1" precedence="erp-detail" />
       {children}
     </>
   );
