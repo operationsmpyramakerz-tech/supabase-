@@ -965,6 +965,10 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
         changes: {},
         additions: [],
         deletions: {},
+        creatorOriginalId: text(data?.orderCreator?.id),
+        creatorOriginalName: text(data?.orderCreator?.name),
+        creatorMemberId: text(data?.orderCreator?.id),
+        teamMembers: Array.isArray(data?.teamMembers) ? data.teamMembers : [],
       });
       setActionState(null);
     } catch (error) {
@@ -1311,6 +1315,10 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
     });
   }
 
+  function selectOperationsEditCreator(memberId) {
+    setEditMode((current) => current ? { ...current, creatorMemberId: text(memberId) } : current);
+  }
+
   async function saveOperationsEdit(changes) {
     if (!editMode || !selected) return;
     const itemUpdates = Object.values(changes || {}).filter((entry) => entry && text(entry?.id));
@@ -1326,7 +1334,9 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
       })
       .filter(Boolean);
     const itemDeletes = Object.values(editMode?.deletions || {}).filter((entry) => entry && text(entry?.id));
-    if (!itemUpdates.length && !itemAdds.length && !itemDeletes.length) return;
+    const selectedCreatorId = text(editMode.creatorMemberId);
+    const creatorChanged = Boolean(selectedCreatorId && selectedCreatorId !== text(editMode.creatorOriginalId));
+    if (!itemUpdates.length && !itemAdds.length && !itemDeletes.length && !creatorChanged) return;
     setBusy(true);
     setActionError("");
     startActionLoading({ title: "Saving order changes", message: "Updating the selected Operations Orders components…" });
@@ -1337,8 +1347,13 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
         itemUpdates,
         itemAdds,
         itemDeletes,
+        ...(creatorChanged ? {
+          newCreatorId: selectedCreatorId,
+          expectedCreatorId: text(editMode.creatorOriginalId),
+          expectedCreatorName: text(editMode.creatorOriginalName),
+        } : {}),
       });
-      await finishActionLoading("done", "Operations order changes were saved.");
+      await finishActionLoading("done", creatorChanged ? "Order reassigned successfully." : "Operations order changes were saved.");
       // Save is committed at this point. Treat list refresh as best-effort so
       // a temporary network error cannot make the operator repeat the edit.
       setEditMode(null);
@@ -1348,7 +1363,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
       } catch (refreshError) {
         console.warn("[operations-orders] Edit saved; list refresh deferred:", refreshError?.message || refreshError);
       }
-      setNotice("Operations order changes saved.");
+      setNotice(creatorChanged ? "Order Creator updated. The order now belongs to the selected user." : "Operations order changes saved.");
       window.setTimeout(() => setNotice(""), 3500);
     } catch (error) {
       const message = error?.message || "Failed to save Operations order changes.";
@@ -1486,6 +1501,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
           onPatchEditItem={patchOperationsEditItem}
           onUpsertEditAddition={upsertOperationsEditAddition}
           onDeleteEditItem={deleteOperationsEditItem}
+          onSelectEditCreator={selectOperationsEditCreator}
           onSaveEdit={saveOperationsEdit}
           onCancelEdit={cancelOperationsEdit}
           actionState={actionState}
