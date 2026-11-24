@@ -569,17 +569,22 @@ async function pipeDeliveryReceiptPDF(
   const infoW = (contentW - infoGap) / 2;
   const infoH = 38;
   const infoPadX = 10;
-  // Reason can mix Arabic with English product/course names. PDFKit's normal
-  // Arabic fallback reverses visual runs in a way that can scramble such text.
-  // Use native letter shaping and reorder the *words* (not the Latin phrase).
+  // All Arabic Reason text (including Arabic-only values) must use native
+  // fontkit shaping. The legacy PDF-wide visual reshaper reverses Arabic
+  // characters and can damage simple words such as "للاستخدام الإداري".
+  // Keep the existing mixed-script BiDi helper for English/Arabic reasons;
+  // for Arabic-only text reuse the proven RTL line/word ordering from the
+  // Instructions block. Both variants are right aligned inside the card.
   const drawReasonText = (value, x, y, width, options = {}) => {
     const raw = String(value || "—");
-    if (!isMixedArabicReason(raw)) {
+    if (!containsArabicText(raw)) {
       doc.text(raw, x, y, { width, ...options });
       return;
     }
     withNativeArabicPdfText(doc, () => {
-      const prepared = prepareMixedArabicReason(raw);
+      const prepared = isMixedArabicReason(raw)
+        ? prepareMixedArabicReason(raw)
+        : { text: prepareNativeRtlPdfText(doc, raw, width), align: "right" };
       doc.text(prepared.text, x, y, { width, ...options, align: prepared.align });
     });
   };
@@ -794,11 +799,13 @@ async function pipeDeliveryReceiptPDF(
     const preparedRows = columns.map((c) => {
       const raw = String(rowData[c.key] || "");
       const width = Math.max(1, c.width - cellPadX * 2);
-      if (c.key !== "reason" || !isMixedArabicReason(raw)) {
+      if (c.key !== "reason" || !containsArabicText(raw)) {
         return { text: raw, align: c.align, native: false };
       }
       return withNativeArabicPdfText(doc, () => ({
-        ...prepareMixedArabicReason(raw, { width, measure: (line) => doc.widthOfString(line) }),
+        ...(isMixedArabicReason(raw)
+          ? prepareMixedArabicReason(raw, { width, measure: (line) => doc.widthOfString(line) })
+          : { text: prepareNativeRtlPdfText(doc, raw, width), align: "right" }),
         native: true,
       }));
     });
