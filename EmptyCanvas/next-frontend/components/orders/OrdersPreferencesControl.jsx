@@ -23,16 +23,17 @@ function LegacyOrdersPreferencesControl({
   filterValue = "all", filterOptions = [], onFilterChange, onFilterOpen,
   loading = false, error = false, sortMode = "latest", onSortChange,
   hasMore = false, statusOptions = [], statusValues = [], onStatusChange,
+  sortOnly = false,
 }) {
   const [open, setOpen] = useState(false);
-  const [section, setSection] = useState("filter");
+  const [section, setSection] = useState(sortOnly ? "sort" : "filter");
   const rootRef = useRef(null);
   const triggerRef = useRef(null);
   const panelId = useId();
   const tabPrefix = useId();
   const activeSort = SORT_OPTIONS.find(option => option.value === sortMode) || SORT_OPTIONS[0];
   const activeStatus = statusValues.length > 0;
-  const activeFilter = filterValue !== "all" || activeStatus;
+  const activeFilter = !sortOnly && (filterValue !== "all" || activeStatus);
   const preferencesChanged = activeFilter || sortMode !== "latest";
 
   useEffect(() => {
@@ -54,12 +55,12 @@ function LegacyOrdersPreferencesControl({
 
   const show = () => {
     if (open) { setOpen(false); return; }
-    if (section === "filter") onFilterOpen?.();
+    if (!sortOnly && section === "filter") onFilterOpen?.();
     setOpen(true);
   };
   const switchSection = value => {
     setSection(value);
-    if (value === "filter") onFilterOpen?.();
+    if (!sortOnly && value === "filter") onFilterOpen?.();
   };
   const selectFilter = value => {
     onFilterChange?.(value);
@@ -90,8 +91,8 @@ function LegacyOrdersPreferencesControl({
         ref={triggerRef}
         className="orders-preferences__trigger"
         type="button"
-        aria-label={`Filter and sort preferences${activeFilter ? ", filters active" : ""}; sorting: ${activeSort.label}`}
-        title="Filter & sort"
+        aria-label={sortOnly ? `Sort review orders: ${activeSort.label}` : `Filter and sort preferences${activeFilter ? ", filters active" : ""}; sorting: ${activeSort.label}`}
+        title={sortOnly ? "Sort orders" : "Filter & sort"}
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
@@ -110,16 +111,16 @@ function LegacyOrdersPreferencesControl({
               <ClassicOrderIcon name="x" />
             </button>
           </div>
-          <div className="orders-preferences__tabs" role="tablist" aria-label="Preference category" onKeyDown={event => { if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return; event.preventDefault(); const target = section === "filter" ? "sort" : "filter"; switchSection(target); document.getElementById(`${tabPrefix}-${target}`)?.focus(); }}>
+          {!sortOnly ? <div className="orders-preferences__tabs" role="tablist" aria-label="Preference category" onKeyDown={event => { if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return; event.preventDefault(); const target = section === "filter" ? "sort" : "filter"; switchSection(target); document.getElementById(`${tabPrefix}-${target}`)?.focus(); }}>
             <button type="button" id={`${tabPrefix}-filter`} role="tab" aria-selected={section === "filter"} aria-controls={`${tabPrefix}-body`} className={section === "filter" ? "is-selected" : ""} onClick={() => switchSection("filter")}>
               <ClassicOrderIcon name="filter" /><span>Filter</span>{activeFilter ? <i aria-label="Active" /> : null}
             </button>
             <button type="button" id={`${tabPrefix}-sort`} role="tab" aria-selected={section === "sort"} aria-controls={`${tabPrefix}-body`} className={section === "sort" ? "is-selected" : ""} onClick={() => switchSection("sort")}>
               <ClassicOrderIcon name="sort-desc" /><span>Sort</span>
             </button>
-          </div>
-          <div className="orders-preferences__content" id={`${tabPrefix}-body`} role="tabpanel" aria-labelledby={`${tabPrefix}-${section}`}>
-            {section === "filter" ? (
+          </div> : null}
+          <div className="orders-preferences__content" id={`${tabPrefix}-body`} role={sortOnly ? "group" : "tabpanel"} aria-label={sortOnly ? "Sort orders" : undefined} aria-labelledby={sortOnly ? undefined : `${tabPrefix}-${section}`}>
+            {!sortOnly && section === "filter" ? (
               <>
                 {statusOptions.length > 0 && <>
                   <div className="orders-preferences__section-title orders-preferences__status-heading">
