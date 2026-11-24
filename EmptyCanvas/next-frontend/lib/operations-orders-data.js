@@ -14,6 +14,7 @@ import { enrichMaintenanceDetailProducts } from "./maintenance-detail-enrichment
 import { getProductsCatalog } from "./products-service";
 import { loadFastOrderDetailsBundle } from "./order-details-fast-path";
 import { listTeamMembersLite } from "./team-members-service";
+import { recordHistoryForAccount } from "./history-audit";
 import { prepareOperationsCreatorTransfer, commitOperationsCreatorTransfer } from "./operations-order-owner-transfer";
 import { invalidateStocktakingReadCaches, stocktakingOtherOwnerColumns } from "./stocktaking-data";
 import { consumeOrderSummaryWindows, loadOrderRowsByNumbers, scanOrderNumberCandidates } from "./order-pagination";
@@ -1385,6 +1386,7 @@ export async function receiveOperationsRemainingBatch({
   quantities = {},
   receiptNumber = null,
   issueDescription = "",
+  legacyLinkConfirmed = false,
 } = {}) {
   const access = ensureOperationsMutationAccess(account || {});
   if (access === null) return null;
@@ -1417,28 +1419,79 @@ export async function receiveOperationsRemainingBatch({
   if (!Object.keys(receiveNow).length) throw directOperationsMutationError("Enter at least one received quantity.", 400);
   const orderNumbers = new Set(loaded.rows.map((row) => text(row?.order_number)));
   if (orderNumbers.size !== 1) throw directOperationsMutationError("Receive remaining components from one order at a time.", 400);
+  const payload = {
+    p_quantities: receiveNow,
+    p_received_by: text(account?.username || account?.name) || "Operations",
+    p_receipt_number: text(receiptNumber) || null,
+    p_issue_description: text(issueDescription) || null,
+  };
+  const missingRpc = (error) =>
+    /PGRST202|could not find the function|function .*does not exist|schema cache/i.test(text(error?.message));
   let result;
   try {
-    result = await supabaseRequest("/rpc/operations_receive_remaining_v421", {
+    // V423 is a new RPC: existing V421/V422 behavior remains untouched.
+    // The legacy-link reconciliation cannot be reached unless a verified
+    // user explicitly confirmed that this quantity is genuinely outstanding.
+    result = await supabaseRequest("/rpc/operations_receive_remaining_v423", {
       method: "POST",
-      body: {
-        p_quantities: receiveNow,
-        p_received_by: text(account?.username || account?.name) || "Operations",
-        p_receipt_number: text(receiptNumber) || null,
-        p_issue_description: text(issueDescription) || null,
-      },
+      body: { ...payload, p_legacy_link_confirmed: legacyLinkConfirmed === true },
       timeoutMs: 45_000,
-      profileName: "orders.operations.receive-remaining-atomic",
+      profileName: "orders.operations.receive-remaining-v423",
     });
   } catch (error) {
-    const message = text(error?.message);
-    if (/PGRST202|could not find the function|function .*does not exist|schema cache/i.test(message)) {
-      throw directOperationsMutationError("The additional-receipts database function is missing. Run 2026-11-16-operations-remaining-receipts-v421.sql in Supabase SQL Editor.", 503);
+    if (missingRpc(error)) {
+      if (legacyLinkConfirmed === true) {
+        throw directOperationsMutationError(
+          "The linked-stock reconciliation SQL V423 has not been installed. Run 2026-11-24-operations-linked-receipts-v423.sql in Supabase SQL Editor.",
+          503,
+        );
+      }
+      // Safe compatibility only for normal receipts (never bypass a legacy
+      // linked-stock rejection by falling back when confirmation was given).
+      try {
+        result = await supabaseRequest("/rpc/operations_receive_remaining_v421", {
+          method: "POST", body: payload, timeoutMs: 45_000,
+          profileName: "orders.operations.receive-remaining-atomic-legacy",
+        });
+      } catch (fallbackError) {
+        if (missingRpc(fallbackError)) throw directOperationsMutationError(
+          "The additional-receipts database function is missing. Install SQL V421 and V423.", 503);
+        throw directOperationsMutationError(
+          text(fallbackError?.message) || "Could not save the additional receipt.",
+          Number(fallbackError?.status) || 409,
+        );
+      }
+    } else {
+      throw directOperationsMutationError(
+        text(error?.message) || "Could not save the additional receipt.",
+        Number(error?.status) || 409,
+      );
     }
-    throw directOperationsMutationError(message || "The additional receipt could not be saved. Refresh the order.", Number(error?.status) || 409);
+  }
+  const reconciled = Array.isArray(result?.reconciledLegacyIds) ? result.reconciledLegacyIds : [];
+  if (reconciled.length) {
+    // SQL commit precedes audit. Never ask the user to retry an already
+    // committed receipt only because the History write failed.
+    try {
+      await recordHistoryForAccount({
+        account, pageName: "Operations Orders", pageKey: "orders.operations",
+        actionLabel: `Confirmed historical Stocktaking link and received separate batch for ORD-${[...orderNumbers][0]} (components: ${reconciled.join(", ")})`,
+        actionKey: "orders.operations.receive_legacy_linked_batch",
+        entityType: "order", entityId: text(reconciled[0]), entityLabel: `ORD-${[...orderNumbers][0]}`,
+        method: "POST", path: "/next/api/orders/operations/mutations-direct",
+        statusCode: 200,
+      });
+    } catch (auditError) {
+      console.warn("[operations-orders] Receipt committed; optional history write failed:", auditError?.message);
+    }
   }
   await invalidateLegacyOperationsCaches(account || {});
-  return { success: true, receivedCount: Number(result?.receivedCount || 0), source: "supabase-direct" };
+  return {
+    success: true,
+    receivedCount: Number(result?.receivedCount || 0),
+    reconciledLegacyCount: reconciled.length,
+    source: "supabase-direct",
+  };
 }
 
 export async function markOperationsShipped({
