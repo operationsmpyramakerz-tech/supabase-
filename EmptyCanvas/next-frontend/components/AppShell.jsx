@@ -9,6 +9,7 @@ import NotificationsBell from "./notifications/NotificationsBell";
 import UserProfileMenu from "./UserProfileMenu";
 import HeaderSearch from "./HeaderSearch";
 import { MODULE_LINKS, CLASSIC_MAIN_LINKS, canSeeNavigationLink } from "../lib/navigation-config";
+import { myOrderPageForPath } from "../lib/my-order-pages.mjs";
 import { featureAllowed } from "../lib/feature-permissions-registry";
 import {
   BodyClassSync,
@@ -174,7 +175,7 @@ export default function AppShell({
   const pageMainClass = [
     "container-full-width",
     "next-classic-page-content",
-    activePath === "/next/orders" ? "current-orders-main-surface" : "",
+    (activePath === "/next/orders" || myOrderPageForPath(activePath)) ? "current-orders-main-surface" : "",
   ].filter(Boolean).join(" ");
 
   useLayoutEffect(() => {
@@ -226,6 +227,7 @@ export default function AppShell({
       <ShoppingCartSidebarFlyout allowedPages={allowedPages} activePath={activePath} />
       <ShoppingCartSidebarFlyout module="operations" account={account} allowedPages={allowedPages} activePath={activePath} />
       <ShoppingCartSidebarFlyout module="review" account={account} allowedPages={allowedPages} activePath={activePath} />
+      <ShoppingCartSidebarFlyout module="my-orders" account={account} allowedPages={allowedPages} activePath={activePath} />
 
       <div className="app-container classic-app-shell">
         <aside className="sidebar" style={{ "--desktop-dock-pages-width": desktopDockPagesWidth }}>

@@ -460,9 +460,9 @@ export async function loadCurrentOrdersPage({
   };
 }
 
-export async function loadCurrentOrdersInitialPage({ account, limit = PAGE_LIMIT } = {}) {
+export async function loadCurrentOrdersInitialPage({ account, limit = PAGE_LIMIT, type = "all", tab = "all", query = "" } = {}) {
   return await measurePerformance("page-data", "orders.current.initial", async () =>
-    await loadCurrentOrdersPage({ account, tab: "all", type: "all", query: "", cursor: null, limit }),
+    await loadCurrentOrdersPage({ account, tab, type, query, cursor: null, limit }),
   );
 }
 

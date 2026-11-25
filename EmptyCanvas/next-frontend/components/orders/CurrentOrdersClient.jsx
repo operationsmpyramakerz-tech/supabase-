@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { navigateWithinApp } from "../../lib/client-navigation";
 import ClassicOrderIcon from "./ClassicOrderIcon";
-import useCompleteOrderTypeCounts from "./useCompleteOrderTypeCounts";
 import { createOrderDetailsLoader } from "./orderDetailsLoader";
 import { cancelOrderOpenTimer, loadOrderAndModalWithMetrics, markOrderOpenStarted, reportOrderVisibleAfterPaint, warmOrderModalOnIdle } from "./orderOpeningPerformance";
 import OrderDetailsLoadingOverlay from "./OrderDetailsLoadingOverlay";
@@ -595,15 +594,14 @@ function ProgressTrack({ value }) {
 }
 
 
-export default function CurrentOrdersClient({ initialOrders = [], initialPageInfo = null, bootstrapWarnings = [], permissions = null, scopePolicy = null }) {
+export default function CurrentOrdersClient({ initialOrders = [], initialPageInfo = null, bootstrapWarnings = [], permissions = null, scopePolicy = null, workspaceType = "requestproducts", initialTab = "all", initialQuery = "" }) {
   const [creatorPreview, setCreatorPreview] = useState(null);
   const [orders, setOrders] = useState(Array.isArray(initialOrders) ? initialOrders : []);
   const [pageInfo, setPageInfo] = useState(initialPageInfo || { hasMore: false, nextCursor: null, limit: 36 });
   const [listLoading, setListLoading] = useState(false);
-  const [tab, setTab] = useState("all");
-  const [type, setType] = useState("all");
-  const [query, setQuery] = useState("");
-  const completeTypes = useCompleteOrderTypeCounts({ endpoint: `${DIRECT_API_BASE}/orders/current/paged-summary`, tab, query });
+  const [tab, setTab] = useState(initialTab);
+  const type = workspaceType;
+  const [query, setQuery] = useState(initialQuery);
   const [sortMode, setSortMode] = useState("latest");
   const [selected, setSelected] = useState(null);
   const [actionError, setActionError] = useState("");
@@ -626,7 +624,8 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
   const openRequestRef = useRef(0);
   const listRequestRef = useRef(0);
   const listAbortRef = useRef(null);
-  const initialFilterKeyRef = useRef("all|all|");
+  useEffect(() => () => { ++listRequestRef.current; ++openRequestRef.current; listAbortRef.current?.abort(); }, []);
+  const initialFilterKeyRef = useRef(`${initialTab}|${workspaceType}|${initialQuery.trim()}`);
 
   // Warm the modal code after the list is interactive. Never request an
   // order's private details merely because its card was rendered or touched.
@@ -639,18 +638,8 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const requestedTab = params.get("tab");
-    if (STATUS_TABS.some((item) => item.key === requestedTab)) setTab(requestedTab);
-    const requestedType = params.get("type");
-    if (requestedType) setType(requestedType);
-    const requestedQuery = params.get("q");
-    if (requestedQuery) setQuery(requestedQuery);
-  }, []);
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
     if (tab === "all") params.delete("tab"); else params.set("tab", tab);
-    if (type === "all") params.delete("type"); else params.set("type", type);
+    params.delete("type"); params.delete("filterType"); params.delete("orderTypeKey");
     if (!query.trim()) params.delete("q"); else params.set("q", query.trim());
     const search = params.toString();
     window.history.replaceState({}, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
@@ -671,37 +660,7 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
 
   const allGroups = useMemo(() => buildGroups(orders), [orders]);
   const statusGroups = useMemo(() => groupsForCurrentTab(allGroups, orders, tab), [allGroups, orders, tab]);
-  const typeOptions = useMemo(() => {
-    const full = completeTypes.counts?.options;
-    const counts = new Map();
-    const sample = new Map();
-    for (const group of statusGroups) {
-      const key = orderTypeKey(group.orderType) || "other";
-      counts.set(key, (counts.get(key) || 0) + 1);
-      if (!sample.has(key)) sample.set(key, group);
-    }
 
-    if (full) for (const entry of full) { counts.set(entry.key, entry.count); sample.set(entry.key, { orderType: entry.raw, orderTypeColor: entry.color }); }
-
-    const preferred = ORDER_TYPE_FILTERS.map((definition) => {
-      const group = sample.get(definition.key);
-      const raw = group?.orderType || definition.raw;
-      const color = group?.orderTypeColor || "";
-      const meta = orderTypeMeta(raw, color);
-      return { key: definition.key, raw, color, label: meta.label, count: full ? (counts.get(definition.key) || 0) : null };
-    });
-
-    const known = new Set(ORDER_TYPE_FILTERS.map((definition) => definition.key));
-    const extras = [...sample.entries()]
-      .filter(([key]) => !known.has(key))
-      .map(([key, group]) => {
-        const meta = orderTypeMeta(group.orderType, group.orderTypeColor);
-        return { key, raw: group.orderType, color: group.orderTypeColor, label: meta.label, count: full ? (counts.get(key) || 0) : null };
-      })
-      .sort((a, b) => a.label.localeCompare(b.label));
-
-    return [...preferred, ...extras];
-  }, [statusGroups, completeTypes.counts]);
 
   const visibleGroups = useMemo(() => {
     const needle = lower(query);
@@ -740,7 +699,7 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
         signal: controller.signal,
       });
       if (response.status === 401) {
-        window.location.href = "/login?next=/next/orders";
+        window.location.href = `/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`;
         return;
       }
       const data = await response.json().catch(() => null);
@@ -803,7 +762,7 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
       if (requestId !== openRequestRef.current) return;
       cancelOrderOpenTimer("My Orders");
       setOpeningGroup(null);
-      if (error?.status === 401) { window.location.href = "/login?next=/next/orders"; return; }
+      if (error?.status === 401) { window.location.href = `/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`; return; }
       setNotice(error?.message || "Failed to load order details.");
       window.setTimeout(() => setNotice(""), 4500);
     }
@@ -879,7 +838,7 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
       setNotice(action === "delete" ? "Order deleted successfully." : action === "archive" ? "Order moved to Archive." : "Order restored from Archive.");
       window.setTimeout(() => setNotice(""), 3500);
     } catch (error) {
-      if (error?.status === 401) { window.location.href = "/login?next=/next/orders"; return; }
+      if (error?.status === 401) { window.location.href = `/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`; return; }
       setActionError(error?.message || "The action could not be completed.");
     } finally {
       actionInFlight.current = false;
@@ -914,7 +873,7 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
       }),
     });
     if (response.status === 401) {
-      window.location.href = "/login?next=/next/orders";
+      window.location.href = `/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`;
       throw new Error("Your session expired.");
     }
     if (!response.ok) {
@@ -954,7 +913,7 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
             </div>
           </div>
           <div className="orders-toolbar__divider" aria-hidden="true" />
-          <OrdersPreferencesControl sortMode={sortMode} onSortChange={setSortMode} hasMore={pageInfo?.hasMore} filterValue={type} onFilterChange={setType} onFilterOpen={completeTypes.refresh} loading={completeTypes.loading} error={completeTypes.error} filterOptions={typeOptions.map(option => { const meta = orderTypeMeta(option.raw || option.label); return { ...option, icon: meta.icon, bg: meta.bg, fg: meta.fg, bd: meta.bd }; })} />
+          <OrdersPreferencesControl sortOnly sortMode={sortMode} onSortChange={setSortMode} hasMore={pageInfo?.hasMore} />
         </div>
       </div>
 
@@ -964,7 +923,7 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
           {visibleGroups.length ? sortedVisibleGroups.map((group) => <OrderCard group={group} canOpen={permissions?.view_details !== false && orderCardAllows(scopePolicy, "details", group)} activeTab={tab} onOpen={openOrderDetails} onPrefetch={prefetchOrderDetails} onReason={(reason) => { void loadCurrentOrdersHeavyModals(); setReasonView(reason); }} onCreator={(anchor, selectedGroup) => { setCreatorPreview({ id: selectedGroup.createdById, name: selectedGroup.createdByName, placement: creatorPopoverPlacement(anchor) }); }} key={group.key} />) : listLoading ? (
             <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading orders…</div></div>
           ) : (
-            <OrdersEmptyState filtered={tab !== "all" || type !== "all" || !!query.trim()} context={"my-orders"} onReset={() => { setTab("all"); setType("all"); setQuery(""); }} />
+            <OrdersEmptyState filtered={tab !== "all" || !!query.trim()} context={"my-orders"} onReset={() => { setTab("all"); setQuery(""); }} />
           )}
         </div>
         {pageInfo?.hasMore ? (

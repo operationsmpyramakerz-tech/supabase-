@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { OPERATIONS_ORDER_PAGES } from "../../lib/operations-order-pages.mjs";
 import { REVIEW_ORDER_PAGES } from "../../lib/review-order-pages.mjs";
+import { MY_ORDER_PAGES } from "../../lib/my-order-pages.mjs";
 import { featureAllowed } from "../../lib/feature-permissions-registry";
 
 const PAGES = Object.freeze([
@@ -91,14 +92,17 @@ export default function ShoppingCartSidebarFlyout({ allowedPages = [], activePat
   useEffect(() => {
     const operations = module === "operations";
     const review = module === "review";
-    const pages = review
+    const myOrders = module === "my-orders";
+    const pages = myOrders
+      ? (featureAllowed(account, "orders.my.view") ? MY_ORDER_PAGES : [])
+      : review
       ? (featureAllowed(account, "orders.review.view") ? REVIEW_ORDER_PAGES : [])
       : operations
         ? (featureAllowed(account, "orders.operations.view") ? OPERATIONS_ORDER_PAGES : [])
         : allowedShoppingPages(allowedPages);
-    const parentPath = review ? "/next/orders-review" : operations ? "/next/operations-orders" : "/next/orders/new";
-    const panelId = review ? "orders-review-secondary-sidebar-next" : operations ? "operations-orders-secondary-sidebar-next" : "shopping-cart-secondary-sidebar-next";
-    const moduleLabel = review ? "Orders Review" : operations ? "Operations Orders" : "Shopping Cart";
+    const parentPath = myOrders ? "/next/orders" : review ? "/next/orders-review" : operations ? "/next/operations-orders" : "/next/orders/new";
+    const panelId = myOrders ? "my-orders-secondary-sidebar-next" : review ? "orders-review-secondary-sidebar-next" : operations ? "operations-orders-secondary-sidebar-next" : "shopping-cart-secondary-sidebar-next";
+    const moduleLabel = myOrders ? "My Orders" : review ? "Orders Review" : operations ? "Operations Orders" : "Shopping Cart";
     const parent = document.querySelector(`.classic-app-shell a.nav-link[href="${parentPath}"]`);
     if (!(parent instanceof HTMLAnchorElement)) return undefined;
 
@@ -106,7 +110,8 @@ export default function ShoppingCartSidebarFlyout({ allowedPages = [], activePat
     if (parentLi instanceof HTMLElement) parentLi.style.display = pages.length ? "" : "none";
     if (!pages.length) return undefined;
 
-    if (review) parent.dataset.ordersReviewSubpageCount = String(pages.length);
+    if (myOrders) parent.dataset.myOrdersSubpageCount = String(pages.length);
+    else if (review) parent.dataset.ordersReviewSubpageCount = String(pages.length);
     else if (operations) parent.dataset.operationsOrdersSubpageCount = String(pages.length);
     else parent.dataset.shoppingCartSubpageCount = String(pages.length);
     parent.setAttribute("aria-haspopup", pages.length > 1 ? "menu" : "false");
