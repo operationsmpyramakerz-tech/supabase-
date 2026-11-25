@@ -19,6 +19,7 @@ import byBusIcon from "../../public/expense-fund-icons/by-bus.png";
 const CASH_IN_TYPES = ["Cash Payment", "Online Transfer"];
 const SCREENSHOT_REQUIRED_KEYS = new Set(["owncar", "swvl", "gobus", "bybus", "train", "indrive", "uber", "uper", "didi"]);
 const OTHER_SCOPE_ID = "__expense_other_reason__";
+const OTHER_DESTINATION_ID = "__expense_other_destination__";
 
 function text(value) { return String(value ?? "").trim(); }
 
@@ -375,16 +376,21 @@ function ClassicSelect({ value, onChange, options = [], placeholder = "Select…
 // A dedicated searchable Destination picker. Its portal stays attached to the
 // Destination field, rather than using ClassicSelect's offset/height heuristic.
 // The search field is intentionally NOT auto-focused (no keyboard on open).
-function ExpenseDestinationSelect({ value, onChange, options = [] }) {
+function ExpenseDestinationSelect({ value, onChange, options = [], allowManual = true }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [menuStyle, setMenuStyle] = useState(null);
   const rootRef = useRef(null);
   const menuRef = useRef(null);
-  const selected = options.find((option) => option.value === value) || null;
+  const isOtherDestination = allowManual && value === OTHER_DESTINATION_ID;
+  const selected = isOtherDestination
+    ? { value: OTHER_DESTINATION_ID, label: "Other destination", note: "Enter manually" }
+    : options.find((option) => option.value === value) || null;
   const filtered = useMemo(() => options.filter((option) =>
     [option.label, option.note].some((part) => lower(part).includes(lower(query)))
   ), [options, query]);
+  const showOtherOption = allowManual && (!lower(query) ||
+    ["other destination", "other", "manual", "أخرى", "اخرى", "وجهة أخرى", "وجهه اخرى"].some((part) => part.includes(lower(query))));
 
   useEffect(() => {
     if (!open) return undefined;
@@ -452,6 +458,20 @@ function ExpenseDestinationSelect({ value, onChange, options = [] }) {
         <span className="expense-destination-menu__count">{filtered.length} users</span>
       </div>
       <div className="expense-destination-menu__list" role="listbox" aria-label="Destination users">
+        {showOtherOption ? <button
+          type="button"
+          className={`expense-destination-menu__card expense-destination-menu__card--other${isOtherDestination ? " is-selected" : ""}`}
+          role="option"
+          aria-selected={isOtherDestination}
+          onClick={() => choose(OTHER_DESTINATION_ID)}
+        >
+          <span className="expense-destination-menu__person" aria-hidden="true"><ClassicExpenseIcon name="edit-3" size={19}/></span>
+          <span className="expense-destination-menu__copy">
+            <strong>Other destination</strong>
+            <small>Write destination manually</small>
+          </span>
+          {isOtherDestination ? <span className="expense-destination-menu__selected" aria-hidden="true">✓</span> : null}
+        </button> : null}
         {filtered.length ? filtered.map((option) => {
           const active = option.value === value;
           return <button
@@ -469,7 +489,8 @@ function ExpenseDestinationSelect({ value, onChange, options = [] }) {
             </span>
             {active ? <span className="expense-destination-menu__selected" aria-hidden="true">✓</span> : null}
           </button>;
-        }) : <div className="expense-destination-menu__empty">No matching users.</div>}
+        }) : !showOtherOption ? <div className="expense-destination-menu__empty">No matching users.</div> : null}
+
       </div>
     </div>, document.body,
   ) : null;
@@ -483,7 +504,7 @@ function ExpenseDestinationSelect({ value, onChange, options = [] }) {
       onClick={toggle}
     >
       <span className="expense-destination-picker__value">
-        {selected ? <><span className="expense-destination-picker__person" aria-hidden="true"><ClassicExpenseIcon name="user" size={17}/></span><span className="expense-destination-picker__name" dir="auto">{selected.label}</span></> : <span className="expense-destination-picker__placeholder">Select destination...</span>}
+        {selected ? <><span className="expense-destination-picker__person" aria-hidden="true"><ClassicExpenseIcon name={isOtherDestination ? "edit-3" : "user"} size={17}/></span><span className="expense-destination-picker__name" dir="auto">{selected.label}</span></> : <span className="expense-destination-picker__placeholder">Select destination...</span>}
       </span>
       <ClassicExpenseIcon name="chevron-down" size={18}/>
     </button>
@@ -789,6 +810,7 @@ function CashOutModal({ fundsTypes, orderOptions, destinationPeople = [], ownCar
   const [scopeIds, setScopeIds] = useState([]);
   const [date, setDate] = useState("");
   const [destinationUserId, setDestinationUserId] = useState("");
+  const [destinationManualName, setDestinationManualName] = useState("");
   const [manualReason, setManualReason] = useState("");
   const [drafts, setDrafts] = useState([]);
   const [draftScreenshotId, setDraftScreenshotId] = useState("");
@@ -799,6 +821,7 @@ function CashOutModal({ fundsTypes, orderOptions, destinationPeople = [], ownCar
   const [step, setStep] = useState("order");
   const [showOwnCarInfo, setShowOwnCarInfo] = useState(false);
   const isManual = scopeIds.includes(OTHER_SCOPE_ID);
+  const isManualDestination = destinationUserId === OTHER_DESTINATION_ID;
   const selectedOrders = (Array.isArray(orderOptions) ? orderOptions : []).filter((item) => scopeIds.includes(text(item?.id)));
   const selectedOrderNames = selectedOrders.map((item) => text(item.orderId));
   const currentOrderLabel = isManual ? "Other reason" : selectedOrderNames.join(", ");
@@ -829,16 +852,22 @@ function CashOutModal({ fundsTypes, orderOptions, destinationPeople = [], ownCar
     if (!scopeIds.length || (!selectedOrders.length && !isManual)) return notify("Choose one or more orders or Other reason first.", "error");
     if (isManual && !text(manualReason)) return notify("Write the expense reason.", "error");
     if (!date) return notify("Choose the expense date first.", "error");
-    if (!destinationUserId || !destinationOptions.some((option) => option.value === destinationUserId)) {
-      return notify("Select a destination user before adding an expense.", "error");
+    if (isManualDestination) {
+      if (!text(destinationManualName)) return notify("Write the destination manually.", "error");
+      if (text(destinationManualName).length > 160) return notify("Destination must be 160 characters or fewer.", "error");
+    } else if (!destinationUserId || !destinationOptions.some((option) => option.value === destinationUserId)) {
+      return notify("Select a destination user or Other destination.", "error");
     }
     setStep("expense");
   };
 
   const addDraft = async () => {
     if (!date || !form.fundsType) return notify("Date and funds type are required.", "error");
-    if (!destinationOptions.some((option) => option.value === destinationUserId)) {
-      return notify("A valid destination user is required.", "error");
+    if (isManualDestination) {
+      if (!text(destinationManualName)) return notify("Write the destination manually.", "error");
+      if (text(destinationManualName).length > 160) return notify("Destination must be 160 characters or fewer.", "error");
+    } else if (!destinationOptions.some((option) => option.value === destinationUserId)) {
+      return notify("A valid destination is required.", "error");
     }
     if (!isOwnCar && number(form.amount) <= 0) return notify("Cash out amount is required.", "error");
     if (isOwnCar && (!text(form.kilometer) || number(form.kilometer) <= 0 || ownCarCostForKilometers(form.kilometer, ownCarRate) <= 0)) {
@@ -859,6 +888,7 @@ function CashOutModal({ fundsTypes, orderOptions, destinationPeople = [], ownCar
         selectedOrderLabel: currentOrderLabel,
         expenseDate: date,
         destinationUserId,
+        destinationManualName: isManualDestination ? text(destinationManualName) : "",
         screenshots: shots,
       }]);
       setForm({ fundsType: "", from: "", to: "", amount: "", kilometer: "" });
@@ -888,6 +918,7 @@ function CashOutModal({ fundsTypes, orderOptions, destinationPeople = [], ownCar
           fundsType: draft.fundsType,
           date: draft.expenseDate,
           destinationUserId: draft.destinationUserId,
+          destinationManualName: draft.destinationManualName,
           from: draft.from,
           to: draft.to,
           ...(typeKey(draft.fundsType) === "owncar" ? { kilometer: draft.kilometer } : { amount: draft.amount }),
@@ -983,6 +1014,12 @@ function CashOutModal({ fundsTypes, orderOptions, destinationPeople = [], ownCar
         onChange={setDestinationUserId}
         options={destinationOptions}
       />
+      {isManualDestination ? <div className="cashout-manual-reason expense-manual-destination">
+        <ClassicFieldLabel icon="edit-3">Other destination <span className="req-star">*</span></ClassicFieldLabel>
+        <input className="ex-input" type="text" maxLength={160} value={destinationManualName}
+          onChange={(event) => setDestinationManualName(event.target.value)}
+          placeholder="Write destination manually" aria-label="Other destination name" dir="auto" autoComplete="off"/>
+      </div> : null}
 
       <button type="button" className="ex-btn ex-dark ex-btn--block ex-add-money" onClick={openExpenseStep} disabled={busy}><ClassicExpenseIcon name="money-add" size={23}/><span>Add Expense</span></button>
 
@@ -1176,4 +1213,4 @@ export default function ExpensesDialogs({
   );
 }
 
-export { ClassicExpenseIcon, ClassicFieldLabel, ClassicSelect, FundsCardVisual, ExpenseDestinationSelect, ExpenseOrderMultiSelect, ClassicFileField, ExpenseCurrencyInput, fundsTypeOption, filesPayload, OTHER_SCOPE_ID, SCREENSHOT_REQUIRED_KEYS };
+export { ClassicExpenseIcon, ClassicFieldLabel, ClassicSelect, FundsCardVisual, ExpenseDestinationSelect, ExpenseOrderMultiSelect, ClassicFileField, ExpenseCurrencyInput, fundsTypeOption, filesPayload, OTHER_SCOPE_ID, OTHER_DESTINATION_ID, SCREENSHOT_REQUIRED_KEYS };
