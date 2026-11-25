@@ -1020,8 +1020,16 @@ export async function createExpenseCashOut(account = {}, payload = {}) {
   if (!fundsType || !date) throw expenseError("Missing required fields.", 400);
   const destinationUserId = text(payload.destinationUserId);
   if (!destinationUserId) throw expenseError("Destination is required.", 400);
-  const destination = (await expenseDestinationOptions()).find((member) => member.id === destinationUserId);
-  if (!destination) throw expenseError("Select a valid destination user.", 400);
+  let destination;
+  if (destinationUserId === "__expense_other_destination__") {
+    const name = text(payload.destinationManualName).replace(/\s+/g, " ");
+    if (!name) throw expenseError("Write the destination manually.", 400);
+    if (name.length > 160) throw expenseError("Destination must be 160 characters or fewer.", 400);
+    destination = { id: null, name };
+  } else {
+    destination = (await expenseDestinationOptions()).find((member) => member.id === destinationUserId);
+    if (!destination) throw expenseError("Select a valid destination user.", 400);
+  }
   const fundsTypeKey = expenseFundsTypeKey(fundsType);
   const screenshotRequired = new Set(["owncar", "swvl", "gobus", "bybus", "train", "indrive", "uber", "uper", "didi"]);
   const hasScreenshot = (Array.isArray(payload.screenshots) && payload.screenshots.some((shot) => text(shot?.dataUrl || shot?.screenshotDataUrl))) || !!text(payload.screenshotDataUrl);
@@ -1145,11 +1153,23 @@ export async function updateExpenseForAdmin(expenseId, payload = {}, account = {
     throw expenseError("Enter a valid distance greater than zero for Own car.", 400);
   }
   const metadata = {};
-  if (Object.hasOwn(payload, "destinationUserId") && text(payload.destinationUserId) !== old.destinationUserId) {
-    const destination = (await expenseDestinationOptions({ fresh: true })).find(member => member.id === text(payload.destinationUserId));
-    if (!destination) throw expenseError("Select a valid destination user.", 400);
-    metadata.destination_user_id = destination.id;
-    metadata.destination_user_name = destination.name;
+  if (Object.hasOwn(payload, "destinationUserId") &&
+      (text(payload.destinationUserId) !== old.destinationUserId
+        || text(payload.destinationUserId) === "__expense_other_destination__")) {
+    const nextId = text(payload.destinationUserId);
+    if (nextId === "__expense_other_destination__") {
+      if (old.cashIn > 0 || settlement) throw expenseError("Other destination is only available for Cash Out expenses.", 400);
+      const name = text(payload.destinationManualName).replace(/\s+/g, " ");
+      if (!name) throw expenseError("Write the destination manually.", 400);
+      if (name.length > 160) throw expenseError("Destination must be 160 characters or fewer.", 400);
+      metadata.destination_user_id = null;
+      metadata.destination_user_name = name;
+    } else {
+      const destination = (await expenseDestinationOptions({ fresh: true })).find(member => member.id === nextId);
+      if (!destination) throw expenseError("Select a valid destination user.", 400);
+      metadata.destination_user_id = destination.id;
+      metadata.destination_user_name = destination.name;
+    }
   }
   let reason = text(payload.reason);
   if (!Object.hasOwn(payload, "orderSelection") && !settlement && old.cashIn <= 0 && old.orders.some(order => expenseOrderCode(order.orderId))) reason = old.reason;
