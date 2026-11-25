@@ -1124,6 +1124,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
           receiptNumber: text(payload?.receiptNumber) || null,
           issueDescription: text(payload?.issueDescription) || null,
           quantities,
+          ...(receiveAnotherBatch ? { legacyLinkConfirmed: payload?.legacyLinkConfirmed === true } : {}),
         });
         loadingSuccessMessage = "Components were received by operations.";
         await completeAction("Components were received by operations.", "received");

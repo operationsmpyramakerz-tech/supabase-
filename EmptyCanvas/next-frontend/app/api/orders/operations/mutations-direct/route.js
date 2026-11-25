@@ -125,6 +125,7 @@ export async function POST(request) {
         quantities: body?.quantities,
         receiptNumber: body?.receiptNumber,
         issueDescription: body?.issueDescription,
+        legacyLinkConfirmed: body?.legacyLinkConfirmed === true,
       });
     } else if (action === "mark-arrived") {
       result = await markOperationsArrived({
