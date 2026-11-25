@@ -11,6 +11,7 @@ import OrdersPerformancePanel from "./OrdersPerformancePanel";
 import OrderTypeBadge from "./OrderTypeBadge";
 import OrdersEmptyState, { sortOrderGroups } from "./OrdersEmptyState";
 import ConnectedOrderStatusTabs from "./ConnectedOrderStatusTabs";
+import OrdersListLoading from "./OrdersListLoading";
 import CurrentOrderCreatorPopover from "./CurrentOrderCreatorPopover";
 import { creatorPopoverPlacement } from "./UnifiedOrderCreatorPopover";
 import { orderCardAllows } from "../../lib/order-data-scope.mjs";
@@ -904,7 +905,7 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
         
         <div className="co-cards" id="orders-list">
           {visibleGroups.length ? sortedVisibleGroups.map((group) => <OrderCard group={group} canOpen={permissions?.view_details !== false && orderCardAllows(scopePolicy, "details", group)} activeTab={tab} onOpen={openOrderDetails} onPrefetch={prefetchOrderDetails} onReason={(reason) => { void loadCurrentOrdersHeavyModals(); setReasonView(reason); }} onCreator={(anchor, selectedGroup) => { setCreatorPreview({ id: selectedGroup.createdById, name: selectedGroup.createdByName, placement: creatorPopoverPlacement(anchor) }); }} key={group.key} />) : listLoading ? (
-            <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading orders…</div></div>
+            <OrdersListLoading orderType={workspaceType} />
           ) : (
             <OrdersEmptyState filtered={tab !== "all" || !!query.trim()} context={"my-orders"} onReset={() => { setTab("all"); setQuery(""); }} />
           )}

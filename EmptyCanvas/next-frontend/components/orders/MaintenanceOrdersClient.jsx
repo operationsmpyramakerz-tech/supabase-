@@ -12,6 +12,7 @@ import OrdersPerformancePanel from "./OrdersPerformancePanel";
 import OrderTypeBadge from "./OrderTypeBadge";
 import OrdersEmptyState, { sortOrderGroups } from "./OrdersEmptyState";
 import ConnectedOrderStatusTabs from "./ConnectedOrderStatusTabs";
+import OrdersListLoading from "./OrdersListLoading";
 import { loadTeamMemberPublicProfile } from "../../lib/team-member-public-client";
 import { orderCardAllows } from "../../lib/order-data-scope.mjs";
 
@@ -1121,7 +1122,7 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
 
       <section className="next-maintenance-orders-list-surface">
         
-        <div className="co-cards" id="requested-list">{visibleGroups.length ? sortedVisibleGroups.map((group) => <MaintenanceCard canOpen={groupPermissions(group).details !== false} group={group} onOpen={groupPermissions(group).details === false ? () => {} : openOrderDetails} onPrefetch={groupPermissions(group).details === false ? () => {} : prefetchOrderDetails} onCreator={openCreatorProfile} key={group.key} />) : listLoading ? <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading maintenance orders…</div></div> : <OrdersEmptyState filtered={tab !== "all" || type !== "all" || !!query.trim()} context={"orders"} onReset={() => { setTab("all"); setType("all"); setQuery(""); }} />}</div>
+        <div className="co-cards" id="requested-list">{visibleGroups.length ? sortedVisibleGroups.map((group) => <MaintenanceCard canOpen={groupPermissions(group).details !== false} group={group} onOpen={groupPermissions(group).details === false ? () => {} : openOrderDetails} onPrefetch={groupPermissions(group).details === false ? () => {} : prefetchOrderDetails} onCreator={openCreatorProfile} key={group.key} />) : listLoading ? <OrdersListLoading orderType="requestmaintenance" /> : <OrdersEmptyState filtered={tab !== "all" || type !== "all" || !!query.trim()} context={"orders"} onReset={() => { setTab("all"); setType("all"); setQuery(""); }} />}</div>
         {pageInfo?.hasMore ? <div style={{ display: "flex", justifyContent: "center", padding: "16px 0 4px" }}><button type="button" className="ro-action-btn ro-action-btn--light" disabled={listLoading} onClick={() => fetchOrdersPage({ reset: false }).catch((error) => { setNotice(error?.message || "Failed to load more maintenance orders."); window.setTimeout(() => setNotice(""), 4000); })}>{listLoading ? "Loading…" : "Load more orders"}</button></div> : null}
       </section>
 

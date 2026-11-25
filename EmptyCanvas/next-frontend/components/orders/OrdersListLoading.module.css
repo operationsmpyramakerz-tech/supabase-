@@ -1,0 +1,47 @@
+/* ERP_COMPACT_ORDER_LIST_LOADING_V1 — isolated CSS, no global order-card overrides. */
+.root {
+  --loader-ink: #111827;
+  --loader-muted: #687282;
+  --loader-accent: #f66b12;
+  --loader-track: #ffede0;
+  --loader-tile: #ffeadb;
+  --loader-card: #f5f6f8;
+  --loader-border: #eef0f3;
+  --loader-block: #dce1e8;
+  --loader-shine: rgba(255,255,255,.8);
+  grid-column: 1 / -1;
+  width: 100%; min-width: 0; box-sizing: border-box;
+  min-height: clamp(310px, 58vh, 500px);
+  min-height: clamp(310px, 58dvh, 500px);
+  display: grid; place-items: center;
+  padding: 24px 12px; text-align: center;
+}
+.content { width: min(100%, 260px); display: flex; flex-direction: column; align-items: center; }
+.indicator { position: relative; display: grid; place-items: center; width: 78px; height: 78px; margin-bottom: 18px; }
+.track, .spinner { position: absolute; inset: 0; box-sizing: border-box; border: 4px solid var(--loader-track); border-radius: 50%; }
+.spinner { border-color: transparent; border-top-color: var(--loader-accent); border-right-color: var(--loader-accent); transform: rotate(-35deg); animation: ordersSpin .9s linear infinite; }
+.badge { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 50%; background: var(--loader-tile); color: var(--loader-accent); box-shadow: 0 4px 14px rgba(246,107,18,.10); }
+.badge svg { display: block; width: 25px; height: 25px; stroke: currentColor; }
+.heading { font-size: 17px; line-height: 1.35; font-weight: 750; color: var(--loader-ink); }
+.subtitle { margin-top: 5px; font-size: 12px; line-height: 1.5; color: var(--loader-muted); }
+.skeletons { display: grid; width: 100%; gap: 6px; margin-top: 28px; }
+.card { box-sizing: border-box; min-width: 0; height: 40px; padding: 6px 10px; display: grid; grid-template-columns: 29px minmax(0,1fr) 34px; gap: 9px; align-items: center; border: 1px solid var(--loader-border); border-radius: 12px; background: var(--loader-card); }
+.block { position: relative; display: block; min-width: 0; overflow: hidden; background: var(--loader-block); }
+.block::after { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 0%, var(--loader-shine) 50%, transparent 100%); transform: translateX(-100%); animation: ordersShimmer 1.45s ease-in-out infinite; }
+.card:nth-child(2) .block::after { animation-delay: .13s; }
+.card:nth-child(3) .block::after { animation-delay: .26s; }
+.thumbnail { width: 29px; height: 27px; border-radius: 8px; }
+.lines { display: grid; align-content: center; gap: 4px; }
+.lineLong { height: 8px; width: 76%; border-radius: 999px; }
+.lineShort { height: 7px; width: 45%; border-radius: 999px; }
+.pill { width: 34px; height: 12px; border-radius: 999px; }
+@keyframes ordersSpin { to { transform: rotate(325deg); } }
+@keyframes ordersShimmer { 0% { transform: translateX(-100%); } 75%,100% { transform: translateX(100%); } }
+:global(html[data-theme="dark"]) .root,
+:global(html.ops-theme-dark) .root {
+  --loader-ink: #f1f5f9; --loader-muted: #a6afbe; --loader-accent: #ff873d;
+  --loader-track: #513725; --loader-tile: #39291f; --loader-card: #20252e;
+  --loader-border: #2b313c; --loader-block: #363e4b; --loader-shine: rgba(255,255,255,.08);
+}
+@media (max-height: 620px) { .root { min-height: 290px; padding-block: 15px; } .skeletons { margin-top: 18px; } }
+@media (prefers-reduced-motion: reduce) { .spinner, .block::after { animation: none; } .block::after { display: none; } }
