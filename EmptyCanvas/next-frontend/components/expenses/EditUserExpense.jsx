@@ -3,7 +3,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { expenseDestinationMenuPosition } from "../../lib/expense-destination-menu-position.mjs";
-import { ClassicExpenseIcon, ClassicFieldLabel, ClassicSelect, FundsCardVisual, ExpenseDestinationSelect, ExpenseOrderMultiSelect, ClassicFileField, ExpenseCurrencyInput, fundsTypeOption, filesPayload, OTHER_SCOPE_ID, SCREENSHOT_REQUIRED_KEYS } from "./ExpensesDialogs";
+import { ClassicExpenseIcon, ClassicFieldLabel, ClassicSelect, FundsCardVisual, ExpenseDestinationSelect, ExpenseOrderMultiSelect, ClassicFileField, ExpenseCurrencyInput, fundsTypeOption, filesPayload, OTHER_SCOPE_ID, OTHER_DESTINATION_ID, SCREENSHOT_REQUIRED_KEYS } from "./ExpensesDialogs";
 import { expenseOrderCode, sameExpenseSelection } from "../../lib/expense-user-edit.mjs";
 import { ownCarCostForKilometers } from "../../lib/own-car-expense.mjs";
 
@@ -98,7 +98,15 @@ function Editor({ item, ownCarRate, saveExpense, onSaved, onClose, notify, rows,
   const [support, setSupport] = useState(null);
   const [loadError, setLoadError] = useState("");
   const [attempt, setAttempt] = useState(0);
-  const [form, setForm] = useState(() => ({ date: dateKey(item.date || item.createdTime), destination: clean(item.destinationUserId), fundsType: clean(item.fundsType), reason: clean(item.reason), from: clean(item.from), to: clean(item.to), cashInFrom: clean(item.cashInFrom || (amount(item.cashIn) > 0 ? item.from : "")), cashIn: amount(item.cashIn), cashOut: amount(item.cashOut), kilometer: amount(item.kilometer) }));
+  const originalManualDestination = amount(item.cashOut) > 0 && !clean(item.destinationUserId) && !!clean(item.destinationUserName);
+  const [form, setForm] = useState(() => ({
+    date: dateKey(item.date || item.createdTime),
+    destination: originalManualDestination ? OTHER_DESTINATION_ID : clean(item.destinationUserId),
+    destinationManualName: originalManualDestination ? clean(item.destinationUserName) : "",
+    fundsType: clean(item.fundsType), reason: clean(item.reason), from: clean(item.from), to: clean(item.to),
+    cashInFrom: clean(item.cashInFrom || (amount(item.cashIn) > 0 ? item.from : "")),
+    cashIn: amount(item.cashIn), cashOut: amount(item.cashOut), kilometer: amount(item.kilometer),
+  }));
   const [selectedOrders, setSelectedOrders] = useState(() => initialScope(item));
   const [shots, setShots] = useState(() => readShots(item));
   const [files, setFiles] = useState([]);
@@ -108,12 +116,13 @@ function Editor({ item, ownCarRate, saveExpense, onSaved, onClose, notify, rows,
   const cashIn = amount(item.cashIn) > 0;
   const cashOut = !cashIn || amount(item.cashOut) > 0;
   const editableOrders = !cashIn && !settlement;
+  const isManualDestination = editableOrders && form.destination === OTHER_DESTINATION_ID;
   const ownCar = key(form.fundsType) === "owncar" && cashOut && !cashIn && !settlement;
   const ownCost = ownCarCostForKilometers(form.kilometer, ownCarRate);
   const manual = selectedOrders.includes(OTHER_SCOPE_ID);
   const orderChanged = !sameExpenseSelection(selectedOrders, initialScope(item));
   const dirty = orderChanged || files.length > 0 || shots.length !== readShots(item).length || Object.entries(form).some(([field, value]) => {
-    const original = field === "date" ? dateKey(item.date || item.createdTime) : field === "destination" ? clean(item.destinationUserId) : field === "cashInFrom" ? clean(item.cashInFrom || (amount(item.cashIn) > 0 ? item.from : "")) : ["cashIn", "cashOut", "kilometer"].includes(field) ? amount(item[field]) : clean(item[field]);
+    const original = field === "date" ? dateKey(item.date || item.createdTime) : field === "destination" ? (originalManualDestination ? OTHER_DESTINATION_ID : clean(item.destinationUserId)) : field === "destinationManualName" ? (originalManualDestination ? clean(item.destinationUserName) : "") : field === "cashInFrom" ? clean(item.cashInFrom || (amount(item.cashIn) > 0 ? item.from : "")) : ["cashIn", "cashOut", "kilometer"].includes(field) ? amount(item[field]) : clean(item[field]);
     return String(value) !== String(original);
   });
   const requiredShot = SCREENSHOT_REQUIRED_KEYS.has(key(form.fundsType)) || (cashIn && key(form.fundsType) === "onlinetransfer");
@@ -164,7 +173,9 @@ function Editor({ item, ownCarRate, saveExpense, onSaved, onClose, notify, rows,
     const fail = message => setError(message);
     if (!form.date || !form.fundsType) return fail("Date and funds type are required.");
     if (editableOrders && (!selectedOrders.length || (manual && !clean(form.reason)))) return fail("Select orders or enter Other reason.");
-    if (editableOrders && !form.destination) return fail("Select a destination user.");
+    if (editableOrders && !form.destination) return fail("Select a destination user or Other destination.");
+    if (isManualDestination && !clean(form.destinationManualName)) return fail("Write the destination manually.");
+    if (isManualDestination && clean(form.destinationManualName).length > 160) return fail("Destination must be 160 characters or fewer.");
     if (cashIn && !settlement && !(Number(form.cashIn) > 0)) return fail("Enter a valid cash in amount.");
     if (cashOut && !settlement && !(ownCar ? ownCost > 0 : Number(form.cashOut) > 0)) return fail(ownCar ? "Enter a valid distance." : "Enter a valid cash out amount.");
     if (cashIn && !settlement && !clean(form.cashInFrom)) return fail("Payment by is required.");
@@ -177,7 +188,9 @@ function Editor({ item, ownCarRate, saveExpense, onSaved, onClose, notify, rows,
       const orderSelection = editableOrders && orderChanged ? { orderIds: manual ? [] : [...new Set(selected.flatMap(option => option.relationIds))], orderKeys: manual ? [] : selectedOrders } : undefined;
       const reason = settlement ? "Settled my account" : editableOrders && orderChanged && !manual ? selected.map(option => option.label).join(", ") : form.reason;
       await saveExpense(item.id, {
-        date: form.date, destinationUserId: form.destination, fundsType: form.fundsType, reason,
+        date: form.date, destinationUserId: form.destination,
+        ...(isManualDestination ? { destinationManualName: clean(form.destinationManualName) } : {}),
+        fundsType: form.fundsType, reason,
         from: cashIn && !settlement ? form.cashInFrom : form.from, to: form.to, cashInFrom: cashIn ? form.cashInFrom : clean(item.cashInFrom),
         cashIn: cashIn ? Number(form.cashIn) : 0, cashOut: cashOut ? (ownCar ? ownCost : Number(form.cashOut)) : 0,
         kilometer: ownCar ? Number(form.kilometer) : 0,
@@ -199,7 +212,13 @@ function Editor({ item, ownCarRate, saveExpense, onSaved, onClose, notify, rows,
           <fieldset disabled={busy || !support} className="expense-user-edit-fields">
             <div className="expense-user-edit-group"><h3>Expense details</h3>
               <ClassicFieldLabel icon="calendar">Date <span className="req-star">*</span></ClassicFieldLabel><input className="ex-input" type="date" aria-label="Date" value={form.date} onChange={input("date")}/>
-              <ClassicFieldLabel icon="user">Destination{editableOrders ? <span className="req-star">*</span> : null}</ClassicFieldLabel><ExpenseDestinationSelect value={form.destination} onChange={value => update("destination", value)} options={destinations}/>
+              <ClassicFieldLabel icon="user">Destination{editableOrders ? <span className="req-star">*</span> : null}</ClassicFieldLabel><ExpenseDestinationSelect value={form.destination} onChange={value => update("destination", value)} options={destinations} allowManual={editableOrders}/>
+              {isManualDestination ? <div className="expense-manual-destination">
+                <ClassicFieldLabel icon="edit-3">Other destination <span className="req-star">*</span></ClassicFieldLabel>
+                <input className="ex-input" aria-label="Other destination name" type="text" maxLength={160}
+                  placeholder="Write destination manually" dir="auto" autoComplete="off"
+                  value={form.destinationManualName} onChange={input("destinationManualName")}/>
+              </div> : null}
               {editableOrders ? <><ClassicFieldLabel icon="file-text">Orders / Reason <span className="req-star">*</span></ClassicFieldLabel><ExpenseOrderMultiSelect value={selectedOrders} onChange={changeOrders} options={orderOptions}/>{manual ? <><ClassicFieldLabel icon="edit-3">Other reason</ClassicFieldLabel><input className="ex-input" aria-label="Other reason" value={form.reason} onChange={input("reason")}/></> : null}</> : <><ClassicFieldLabel icon="file-text">Reason</ClassicFieldLabel><input className="ex-input" aria-label="Reason" value={settlement ? "Settled my account" : form.reason} onChange={input("reason")} readOnly={settlement}/></>}
             </div>
             <div className="expense-user-edit-group"><h3>{settlement ? "Settlement" : cashIn && !cashOut ? "Cash In" : "Cash Out"}</h3>

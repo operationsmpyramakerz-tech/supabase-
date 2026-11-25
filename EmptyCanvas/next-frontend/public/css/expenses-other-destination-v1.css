@@ -1,0 +1,43 @@
+/* ERP Expenses — Other destination, scoped to the Expenses and Expenses by User sheets. */
+body.expenses-page .expense-destination-menu__card--other,
+body.expenses-users-page .expense-destination-menu__card--other {
+  margin-top: 7px;
+  border: 1px dashed #fb923c;
+  background: #fff7ed;
+}
+body.expenses-page .expense-destination-menu__card--other .expense-destination-menu__person,
+body.expenses-users-page .expense-destination-menu__card--other .expense-destination-menu__person {
+  background: #fff0df;
+  color: #c2410c;
+}
+body.expenses-page .expense-destination-menu__card--other.is-selected,
+body.expenses-users-page .expense-destination-menu__card--other.is-selected {
+  border-style: solid;
+  border-color: #ea580c;
+  background: #ffedd5;
+}
+body.expenses-page .expense-manual-destination,
+body.expenses-users-page .expense-manual-destination {
+  margin-top: 10px;
+  margin-bottom: 12px;
+  animation: expenseManualDestinationIn 180ms ease-out;
+}
+body.expenses-page .expense-manual-destination .ex-input,
+body.expenses-users-page .expense-manual-destination .ex-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+@keyframes expenseManualDestinationIn {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+html[data-theme="dark"] body.expenses-page .expense-destination-menu__card--other,
+html[data-theme="dark"] body.expenses-users-page .expense-destination-menu__card--other {
+  color: #fed7aa;
+  border-color: #c2410c;
+  background: #3b2b20;
+}
+@media (prefers-reduced-motion: reduce) {
+  body.expenses-page .expense-manual-destination,
+  body.expenses-users-page .expense-manual-destination { animation: none; }
+}
