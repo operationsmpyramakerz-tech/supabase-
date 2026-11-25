@@ -1,0 +1,97 @@
+/* ORDER_CONNECTED_STATUS_TABS_V1 — shared, isolated from legacy toolbar rules */
+.viewport {
+  --tabs-shell: #ffffff;
+  --tabs-recess: #f6f7f9;
+  --tabs-button: #ffffff;
+  --tabs-border: #e9ebef;
+  --tabs-ink: #101624;
+  --tabs-selected: #101624;
+  --tabs-selected-ink: #ffffff;
+  --tabs-shadow: rgba(17,24,39,.12);
+  --tabs-hit: 46px;
+  width: 100%; max-width: 100%; min-width: 0;
+  box-sizing: border-box;
+  padding: 6px 3px 15px;
+  margin: 0 0 6px;
+  overflow-x: auto; overflow-y: hidden;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.viewport::-webkit-scrollbar { display: none; }
+.rail {
+  display: flex; align-items: center; gap: 2px;
+  box-sizing: border-box; width: max-content; min-width: 100%;
+  isolation: isolate; position: relative;
+  filter: drop-shadow(0 6px 6px var(--tabs-shadow));
+}
+.group {
+  position: relative; display: flex; align-items: center;
+  flex: 1 0 auto; height: 58px;
+  box-sizing: border-box; padding: 6px;
+  border-radius: 999px; background: var(--tabs-shell);
+}
+/* Curved bridge: two concave notches pinch the outer white capsule. The
+   active group always has its own lobe; selection in the middle pinches both sides. */
+.group + .group::before {
+  content: ""; position: absolute; pointer-events: none;
+  left: -17px; top: 0; width: 32px; height: 100%;
+  background: var(--tabs-shell); z-index: -1;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 58' preserveAspectRatio='none'%3E%3Cpath d='M0 4 C8 4 9 15 16 15 S24 4 32 4 V54 C24 54 23 43 16 43 S8 54 0 54 Z' fill='black'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 58' preserveAspectRatio='none'%3E%3Cpath d='M0 4 C8 4 9 15 16 15 S24 4 32 4 V54 C24 54 23 43 16 43 S8 54 0 54 Z' fill='black'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
+}
+.activeGroup { flex: 0 0 auto; }
+.inactiveRail {
+  display: flex; align-items: center; justify-content: space-evenly;
+  gap: 3px; flex: 1 0 auto; min-width: 0; border-radius: 999px;
+  background: var(--tabs-recess);
+}
+.viewport .tab {
+  appearance: none; -webkit-appearance: none; box-sizing: border-box;
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 7px; height: 46px; min-height: 46px; margin: 0; padding: 0;
+  border: 1px solid transparent; border-radius: 999px;
+  font: inherit; font-size: 13px; font-weight: 750; line-height: 1;
+  text-transform: none; white-space: nowrap; cursor: pointer;
+  transition: background-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.viewport .inactiveTab {
+  flex: 0 0 var(--tabs-hit); width: var(--tabs-hit); min-width: var(--tabs-hit);
+  background: var(--tabs-button); color: var(--tabs-ink);
+  border-color: var(--tabs-border); box-shadow: 0 2px 4px rgba(17,24,39,.045);
+}
+.viewport .activeTab {
+  flex: 0 0 auto; min-width: 82px; padding: 0 15px;
+  background: var(--tabs-selected); color: var(--tabs-selected-ink);
+  border-color: transparent; box-shadow: none;
+  animation: activeEnter 170ms ease both;
+}
+.icon { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 20px; width: 20px; height: 20px; }
+.icon svg { display: block; width: 20px; height: 20px; color: inherit; stroke: currentColor; }
+.label { display: inline-block; flex: 0 0 auto; white-space: nowrap; color: inherit; }
+.viewport .tab:focus-visible { outline: 2px solid #64748b; outline-offset: -3px; }
+@media (hover: hover) { .viewport .inactiveTab:hover { background: var(--tabs-recess); } }
+@keyframes activeEnter { from { opacity: .75; transform: scale(.97); } to { opacity: 1; transform: scale(1); } }
+@media (max-width: 768px) {
+  .viewport { --tabs-hit: 38px; padding: 5px 2px 13px; }
+  .group { height: 52px; padding: 5px; }
+  .viewport .tab { height: 42px; min-height: 42px; font-size: 12px; }
+  .viewport .activeTab { min-width: 74px; padding: 0 12px; }
+  .inactiveRail { gap: 2px; }
+  .icon, .icon svg { width: 19px; height: 19px; }
+  .icon { flex-basis: 19px; }
+}
+@media (max-width: 360px) { .viewport { --tabs-hit: 36px; } }
+:global(html[data-theme="dark"]) .viewport,
+:global(html.ops-theme-dark) .viewport {
+  --tabs-shell: #252a34;
+  --tabs-recess: #1b2029;
+  --tabs-button: #303641;
+  --tabs-border: #3a424f;
+  --tabs-ink: #f1f5f9;
+  --tabs-selected: #f3f4f6;
+  --tabs-selected-ink: #101624;
+  --tabs-shadow: rgba(0,0,0,.25);
+}
+@media (prefers-reduced-motion: reduce) { .viewport .tab { transition: none; animation: none; } }

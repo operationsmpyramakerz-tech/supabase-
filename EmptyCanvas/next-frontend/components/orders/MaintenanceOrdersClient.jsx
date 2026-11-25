@@ -5,14 +5,13 @@ import dynamic from "next/dynamic";
 import ClassicOrderIcon from "./ClassicOrderIcon";
 import UnifiedOrderCreatorPopover, { creatorPopoverPlacement } from "./UnifiedOrderCreatorPopover";
 
-import useCompleteOrderTypeCounts from "./useCompleteOrderTypeCounts";
 import { createOrderDetailsLoader } from "./orderDetailsLoader";
 import { cancelOrderOpenTimer, loadOrderAndModalWithMetrics, markOrderOpenStarted, reportOrderVisibleAfterPaint, warmOrderModalOnIdle } from "./orderOpeningPerformance";
 import OrderDetailsLoadingOverlay from "./OrderDetailsLoadingOverlay";
 import OrdersPerformancePanel from "./OrdersPerformancePanel";
 import OrderTypeBadge from "./OrderTypeBadge";
 import OrdersEmptyState, { sortOrderGroups } from "./OrdersEmptyState";
-import OrdersPreferencesControl from "./OrdersPreferencesControl";
+import ConnectedOrderStatusTabs from "./ConnectedOrderStatusTabs";
 import { loadTeamMemberPublicProfile } from "../../lib/team-member-public-client";
 import { orderCardAllows } from "../../lib/order-data-scope.mjs";
 
@@ -566,8 +565,7 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
   const [tab, setTab] = useState("all");
   const [type, setType] = useState("all");
   const [query, setQuery] = useState("");
-  const completeTypes = useCompleteOrderTypeCounts({ endpoint: `${DIRECT_API_BASE}/orders/maintenance/paged-summary`, tab, query });
-  const [sortMode, setSortMode] = useState("latest");
+  const sortMode = "latest";
   const [selected, setSelected] = useState(null);
   const [logGroup, setLogGroup] = useState(null);
   const [logMode, setLogMode] = useState("create");
@@ -1119,13 +1117,7 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
       {bootstrapWarnings.length ? <div className="dashboard-notice"><strong>Partial data</strong><span>One resource was not available during the initial load.</span></div> : null}
       {notice ? <div className="orders-parity-success" role="status"><ClassicOrderIcon name="check-circle" />{notice}</div> : null}
 
-      <div className="next-maintenance-orders-toolbar-wrap">
-        <div className="orders-toolbar" aria-label="Maintenance orders tools">
-          <div className="orders-toolbar__scroll"><div className="portfolio-tabs portfolio-tabs--iconic" role="tablist" aria-label="Maintenance Orders status">{STATUS_TABS.map((item) => <button type="button" className={`tab-portfolio order-status-tab ${tab === item.key ? "active" : ""}`} onClick={() => setTab(item.key)} role="tab" aria-selected={tab === item.key} key={item.key}><span className="order-status-tab__icon"><ClassicOrderIcon name={item.icon} /></span><span className="order-status-tab__label">{item.label}</span></button>)}</div></div>
-          <div className="orders-toolbar__divider" aria-hidden="true" />
-          <OrdersPreferencesControl sortMode={sortMode} onSortChange={setSortMode} hasMore={pageInfo?.hasMore} filterValue={type} onFilterChange={setType} onFilterOpen={completeTypes.refresh} loading={completeTypes.loading} error={completeTypes.error} filterOptions={[{ key: "requestmaintenance", label: "Request Maintenance", count: completeTypes.counts?.total ?? null, icon: "tool", bg: "#FEF3C7", fg: "#92400E", bd: "#FDE68A" }]} />
-        </div>
-      </div>
+      <ConnectedOrderStatusTabs tabs={STATUS_TABS} active={tab} onChange={setTab} label="Maintenance Orders status" />
 
       <section className="next-maintenance-orders-list-surface">
         

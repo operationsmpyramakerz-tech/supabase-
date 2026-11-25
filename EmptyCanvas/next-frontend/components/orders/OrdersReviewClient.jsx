@@ -5,14 +5,13 @@ import { featureAllowed } from "../../lib/feature-permissions-registry";
 import dynamic from "next/dynamic";
 import ClassicOrderIcon from "./ClassicOrderIcon";
 import { creatorPopoverPlacement } from "./UnifiedOrderCreatorPopover";
-import useCompleteOrderTypeCounts from "./useCompleteOrderTypeCounts";
 import { createOrderDetailsLoader } from "./orderDetailsLoader";
 import { cancelOrderOpenTimer, loadOrderAndModalWithMetrics, markOrderOpenStarted, reportOrderVisibleAfterPaint, warmOrderModalOnIdle } from "./orderOpeningPerformance";
 import OrderDetailsLoadingOverlay from "./OrderDetailsLoadingOverlay";
 import OrdersPerformancePanel from "./OrdersPerformancePanel";
 import OrderTypeBadge from "./OrderTypeBadge";
 import OrdersEmptyState, { sortOrderGroups } from "./OrdersEmptyState";
-import OrdersPreferencesControl from "./OrdersPreferencesControl";
+import ConnectedOrderStatusTabs from "./ConnectedOrderStatusTabs";
 import { loadTeamMemberPublicProfile } from "../../lib/team-member-public-client";
 
 const loadOrdersReviewHeavyModals = () => import("./OrdersReviewHeavyModals");
@@ -335,8 +334,7 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
   // Canonical pages stay scoped to one type; legacy deep links remain untyped.
   const [type, setType] = useState(workspaceType || "all");
   const [query, setQuery] = useState("");
-  const completeTypes = useCompleteOrderTypeCounts({ endpoint: `${DIRECT_API_BASE}/sv-orders/paged-summary`, tab, query });
-  const [sortMode, setSortMode] = useState("latest");
+  const sortMode = "latest";
   const [selectedKey, setSelectedKey] = useState("");
   const [busyIds, setBusyIds] = useState(new Set());
   const [notice, setNotice] = useState("");
@@ -430,28 +428,6 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
     return orders.filter((item) => !isArchived(item) && approvalKey(item?.approval ?? item?.svApproval ?? item?.sv_approval) === tab);
   }, [orders, tab]);
   const statusGroups = useMemo(() => buildGroups(statusRows), [statusRows]);
-  const typeOptions = useMemo(() => {
-    const full = completeTypes.counts?.options;
-    const map = new Map();
-    // While checking, expose all known types, including types not yet loaded.
-    if (!full) for (const raw of ["Request Maintenance", "Request Products", "Withdraw Products"]) {
-      const key = orderTypeKey(raw);
-      map.set(key, { key, raw, label: orderTypeMeta(raw).label, count: null });
-    }
-    const source = full || statusGroups.map((group) => ({
-      key: orderTypeKey(group.orderType) || "other", raw: group.orderType,
-      color: group.orderTypeColor, count: 0,
-    }));
-    for (const entry of source) {
-      const key = entry.key || orderTypeKey(entry.raw) || "other";
-      const meta = orderTypeMeta(entry.raw, entry.color);
-      map.set(key, {
-        key, raw: entry.raw, color: entry.color, label: meta.label,
-        count: full ? entry.count : null,
-      });
-    }
-    return [...map.values()].sort((a, b) => a.label.localeCompare(b.label));
-  }, [statusGroups, completeTypes.counts]);
 
   const visibleGroups = useMemo(() => {
     const needle = lower(query);
@@ -762,19 +738,7 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
     {bootstrapWarnings.length ? <div className="dashboard-notice"><strong>Partial data</strong><span>One resource was not available during the initial load.</span></div> : null}
     {notice ? <div className="orders-parity-success" role="status"><ClassicOrderIcon name="check-circle" />{notice}</div> : null}
 
-    <div className="next-orders-review-toolbar-wrap">
-      <div className="orders-toolbar" aria-label="Orders review tools">
-        <div className="orders-toolbar__scroll"><div className="portfolio-tabs portfolio-tabs--iconic" role="tablist" aria-label="Orders Review status">{REVIEW_TABS.map((item) => <button type="button" className={`tab-portfolio order-status-tab ${tab === item.key ? "active" : ""}`} onClick={() => setTab(item.key)} role="tab" aria-selected={tab === item.key} key={item.key}><span className="order-status-tab__icon"><ClassicOrderIcon name={item.icon}/></span><span className="order-status-tab__copy"><span className="order-status-tab__label">{item.label}</span></span></button>)}</div></div>
-        <div className="orders-toolbar__divider" aria-hidden="true"/><OrdersPreferencesControl
-          sortOnly={!!workspaceType}
-          sortMode={sortMode} onSortChange={setSortMode} hasMore={pageInfo?.hasMore}
-          filterValue={workspaceType ? "all" : type}
-          onFilterChange={workspaceType ? undefined : setType}
-          onFilterOpen={workspaceType ? undefined : completeTypes.refresh}
-          loading={completeTypes.loading} error={completeTypes.error}
-          filterOptions={workspaceType ? [] : typeOptions.map(option => { const meta = orderTypeMeta(option.raw || option.label); return { ...option, icon: meta.icon, bg: meta.bg, fg: meta.fg, bd: meta.bd }; })} />
-      </div>
-    </div>
+    <ConnectedOrderStatusTabs tabs={REVIEW_TABS} active={tab} onChange={setTab} label="Orders Review status" />
 
     <section className="orders-review-list-surface" id="sv-orders"><div className="co-cards" id="sv-list">{visibleGroups.length ? sortedVisibleGroups.map((group) => <OrderReviewCard group={group} activeTab={tab} onOpen={openReviewDetails} onPrefetch={prefetchReviewDetails} onCreator={openCreatorProfile} canOpen={permissions.view_details} key={group.key}/>) : listLoading ? <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading orders…</div></div> : <OrdersEmptyState filtered={tab !== "all" || type !== "all" || !!query.trim()} context={"orders"} onReset={() => { setTab("all"); if (!workspaceType) setType("all"); setQuery(""); }} />}</div>{pageInfo?.hasMore ? <div style={{ display: "flex", justifyContent: "center", padding: "16px 0 4px" }}><button type="button" className="ro-action-btn ro-action-btn--light" disabled={listLoading} onClick={() => fetchReviewPage({ reset: false }).catch((error) => showNotice(error?.message || "Failed to load more orders."))}>{listLoading ? "Loading…" : "Load more orders"}</button></div> : null}</section>
 

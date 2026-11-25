@@ -2,15 +2,13 @@
 
 import { operationsArrivedItemVisible, operationsHasOutstandingQuantity, operationsMatchesTab, operationsEffectiveApprovalStage, operationsApprovalRowMatches } from "../../lib/operations-remaining-status.mjs";
 import { orderCardAllows } from "../../lib/order-data-scope.mjs";
-import { OPERATIONS_STATUS_OPTIONS, normalizeOperationsStatuses, operationsMatchesStatuses } from "../../lib/operations-status-filter.mjs";
 import { isPartiallyDeliveredOrder } from "../../lib/order-partial-delivery.mjs";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import ClassicOrderIcon from "./ClassicOrderIcon";
 import UnifiedOrderCreatorPopover, { creatorPopoverPlacement } from "./UnifiedOrderCreatorPopover";
 
-import { collectOperationsFilterGroups } from "../../lib/operations-filter-preferences.mjs";
 import { withSingleOrderSourceAttribution } from "../../lib/order-kit-attribution.mjs";
 import { createOrderDetailsLoader } from "./orderDetailsLoader";
 import { cancelOrderOpenTimer, loadOrderAndModalWithMetrics, markOrderOpenStarted, reportOrderVisibleAfterPaint, warmOrderModalOnIdle } from "./orderOpeningPerformance";
@@ -18,7 +16,7 @@ import OrderDetailsLoadingOverlay from "./OrderDetailsLoadingOverlay";
 import OrdersPerformancePanel from "./OrdersPerformancePanel";
 import OrderTypeBadge from "./OrderTypeBadge";
 import OrdersEmptyState, { sortOrderGroups } from "./OrdersEmptyState";
-import OrdersPreferencesControl from "./OrdersPreferencesControl";
+import ConnectedOrderStatusTabs from "./ConnectedOrderStatusTabs";
 import ActionLoadingModal, { useActionLoading } from "../ActionLoadingModal";
 import { loadTeamMemberPublicProfile } from "../../lib/team-member-public-client";
 
@@ -681,40 +679,17 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
   const [listLoading, setListLoading] = useState(false);
   const [tab, setTab] = useState("all");
   const type = orderType;
-  const [statusFilters, setStatusFilters] = useState([]);
-  const statusKey = statusFilters.join(",");
-  function changeStatusFilters(values) {
-    const next = normalizeOperationsStatuses(values);
-    if (tab === "all" && next.join(",") === statusKey) return;
-    listAbortRef.current?.abort();
-    ++listRequestRef.current;
-    initialFilterKeyRef.current = "";
-    setListLoading(true);
-    setPageInfo(current => ({ ...current, hasMore: false, nextCursor: null }));
-    setStatusFilters(next);
-    setTab("all");
-  }
   function changeTab(value) {
-    if (value === tab && !statusFilters.length) return;
+    if (value === tab) return;
     listAbortRef.current?.abort();
     ++listRequestRef.current;
     initialFilterKeyRef.current = "";
     setListLoading(true);
     setPageInfo(current => ({ ...current, hasMore: false, nextCursor: null }));
-    setStatusFilters([]);
     setTab(value);
   }
   const [query, setQuery] = useState("");
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  const loadFilterGroups = useCallback(signal => collectOperationsFilterGroups(async (cursor, requestSignal) => {
-    const params = new URLSearchParams({ tab: "all", filterType: type, limit: "80", statuses: OPERATIONS_STATUS_OPTIONS.map(option => option.key).join(",") });
-    if (query.trim()) params.set("q", query.trim());
-    if (cursor !== null) params.set("cursor", String(cursor));
-    const response = await fetch(`${DIRECT_API_BASE}/orders/requested/paged-summary?${params}`, { credentials: "include", cache: "no-store", signal: requestSignal });
-    if (!response.ok) throw new Error("Could not count orders.");
-    return await response.json();
-  }, buildGroups, { signal }), [query, type]);
-  const [sortMode, setSortMode] = useState("latest");
+  const sortMode = "latest";
   const [selected, setSelected] = useState(null);
   const [actionState, setActionState] = useState(null);
   const [actionError, setActionError] = useState("");
@@ -740,7 +715,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
   const openRequestRef = useRef(0);
   const listRequestRef = useRef(0);
   const listAbortRef = useRef(null);
-  const initialFilterKeyRef = useRef(`all|${type}||`);
+  const initialFilterKeyRef = useRef(`all|${type}|`);
   const { actionLoading, startActionLoading, finishActionLoading } = useActionLoading();
   useEffect(() => () => {
     ++listRequestRef.current;
@@ -777,7 +752,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
   }, [tab, type, query]);
 
   useEffect(() => {
-    const key = `${tab}|${type}|${query.trim()}|${statusKey}`;
+    const key = `${tab}|${type}|${query.trim()}`;
     if (key === initialFilterKeyRef.current) return undefined;
     initialFilterKeyRef.current = key;
     const timer = window.setTimeout(() => {
@@ -787,7 +762,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
       });
     }, query.trim() ? 300 : 0);
     return () => window.clearTimeout(timer);
-  }, [tab, type, query, statusKey]);
+  }, [tab, type, query]);
 
   useEffect(() => {
     const close = (event) => {
@@ -811,13 +786,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
 
   const workspaceOrders = useMemo(() => orders.filter(item => orderTypeKey(item?.orderType) === type), [orders, type]);
   const groups = useMemo(() => buildGroups(workspaceOrders), [workspaceOrders]);
-  const tabGroups = useMemo(() => statusFilters.length ? groups.filter(group => operationsMatchesStatuses({ ...group, maintenance: isMaintenance(group.orderType) }, statusFilters)) : groupsForTab(groups, workspaceOrders, tab), [groups, workspaceOrders, tab, statusFilters]);
-  function applyFilters({ statuses, sort, reset }) {
-    const next = normalizeOperationsStatuses(statuses);
-    // Apply the entire draft in one render. Sorting alone preserves the active status tab.
-    if (reset || next.join(",") !== statusKey) changeStatusFilters(next);
-    setSortMode(sort);
-  }
+  const tabGroups = useMemo(() => groupsForTab(groups, workspaceOrders, tab), [groups, workspaceOrders, tab]);
 
   const visibleGroups = useMemo(() => {
     const needle = lower(query);
@@ -859,7 +828,6 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
         filterType: type,
         limit: String(pageInfo?.limit || 36),
       });
-      if (statusKey) params.set("statuses", statusKey);
       if (query.trim()) params.set("q", query.trim());
       if (!reset && pageInfo?.nextCursor !== null && pageInfo?.nextCursor !== undefined) params.set("cursor", String(pageInfo.nextCursor));
       if (fresh) params.set("_fresh", "1");
@@ -1461,27 +1429,17 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
   }
 
   return (
-    <section className={`next-classic-orders-parity next-classic-operations-parity orders-workspace${filtersOpen ? " ops-filters-open" : ""}`}>
+    <section className="next-classic-orders-parity next-classic-operations-parity orders-workspace">
       <ActionLoadingModal state={actionLoading} />
       {bootstrapWarnings.length ? <div className="dashboard-notice"><strong>Partial data</strong><span>One resource was not available during the initial load.</span></div> : null}
       {notice ? <div className="orders-parity-success" role="status"><ClassicOrderIcon name="check-circle" />{notice}</div> : null}
 
-      <div className="next-operations-orders-toolbar-wrap">
-        <div className="orders-toolbar" aria-label="Operations orders tools">
-          <div className="orders-toolbar__scroll">
-            <div className="portfolio-tabs portfolio-tabs--iconic" role="tablist" aria-label="Operations Orders status">
-              {STATUS_TABS.map((item) => <button type="button" className={`tab-portfolio order-status-tab ${tab === item.key ? "active" : ""}`} onClick={() => changeTab(item.key)} role="tab" aria-selected={tab === item.key} key={item.key}><span className="order-status-tab__icon"><ClassicOrderIcon name={item.icon}/></span><span className="order-status-tab__copy"><span className="order-status-tab__label">{item.label}</span></span></button>)}
-            </div>
-          </div>
-          <div className="orders-toolbar__divider" aria-hidden="true" />
-          <OrdersPreferencesControl statusOptions={OPERATIONS_STATUS_OPTIONS} statusValues={statusFilters} sortMode={sortMode} filterValue={type} onApply={applyFilters} loadGroups={loadFilterGroups} onOpenChange={setFiltersOpen} />
-        </div>
-      </div>
+      <ConnectedOrderStatusTabs tabs={STATUS_TABS} active={tab} onChange={changeTab} label="Operations Orders status" />
 
       <section className="operations-orders-list-surface" id="operations-orders-list">
         
         <div className="co-cards" id="requested-list">
-          {visibleGroups.length ? sortedVisibleGroups.map((group) => <OperationsOrderCard group={group} canOpen={permissions?.details !== false && orderCardAllows(scopePolicy, "details", group)} tab={tab} onOpen={openOrderDetails} onPrefetch={prefetchOrderDetails} onCreator={openCreatorProfile} key={group.key} />) : listLoading ? <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading orders…</div></div> : <OrdersEmptyState filtered={tab !== "all" || !!query.trim() || !!statusFilters.length} context={"orders"} onReset={() => { changeTab("all"); setQuery(""); }} />}
+          {visibleGroups.length ? sortedVisibleGroups.map((group) => <OperationsOrderCard group={group} canOpen={permissions?.details !== false && orderCardAllows(scopePolicy, "details", group)} tab={tab} onOpen={openOrderDetails} onPrefetch={prefetchOrderDetails} onCreator={openCreatorProfile} key={group.key} />) : listLoading ? <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading orders…</div></div> : <OrdersEmptyState filtered={tab !== "all" || !!query.trim()} context={"orders"} onReset={() => { changeTab("all"); setQuery(""); }} />}
         </div>
         {pageInfo?.hasMore ? <div style={{ display: "flex", justifyContent: "center", padding: "16px 0 4px" }}><button type="button" className="ro-action-btn ro-action-btn--light" disabled={listLoading} onClick={() => fetchOrdersPage({ reset: false }).catch((error) => { setNotice(error?.message || "Failed to load more orders."); window.setTimeout(() => setNotice(""), 4000); })}>{listLoading ? "Loading…" : "Load more orders"}</button></div> : null}
       </section>
@@ -1490,7 +1448,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
       {(selected || actionState || deleteConfirm) ? (
         <OperationsOrdersHeavyModals
           selected={selected}
-          tab={statusFilters.length && selected?.stage >= 5 ? "archive" : tab}
+          tab={tab}
           busy={busy}
           onCloseOrder={closeOrderDetails}
           onAction={beginAction}

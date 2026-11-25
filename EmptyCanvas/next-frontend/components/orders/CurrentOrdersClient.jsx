@@ -10,7 +10,7 @@ import OrderDetailsLoadingOverlay from "./OrderDetailsLoadingOverlay";
 import OrdersPerformancePanel from "./OrdersPerformancePanel";
 import OrderTypeBadge from "./OrderTypeBadge";
 import OrdersEmptyState, { sortOrderGroups } from "./OrdersEmptyState";
-import OrdersPreferencesControl from "./OrdersPreferencesControl";
+import ConnectedOrderStatusTabs from "./ConnectedOrderStatusTabs";
 import CurrentOrderCreatorPopover from "./CurrentOrderCreatorPopover";
 import { creatorPopoverPlacement } from "./UnifiedOrderCreatorPopover";
 import { orderCardAllows } from "../../lib/order-data-scope.mjs";
@@ -602,7 +602,7 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
   const [tab, setTab] = useState(initialTab);
   const type = workspaceType;
   const [query, setQuery] = useState(initialQuery);
-  const [sortMode, setSortMode] = useState("latest");
+  const sortMode = "latest";
   const [selected, setSelected] = useState(null);
   const [actionError, setActionError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -898,24 +898,7 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
       {bootstrapWarnings.length ? <div className="dashboard-notice"><strong>Partial data</strong><span>One resource was not available during the initial load.</span></div> : null}
       {notice ? <div className="orders-parity-success" role="status"><ClassicOrderIcon name="check-circle" />{notice}</div> : null}
 
-      <div className="next-current-orders-toolbar-wrap">
-        <div className="orders-toolbar" aria-label="Current orders tools">
-          <div className="orders-toolbar__scroll">
-            <div className="portfolio-tabs portfolio-tabs--iconic" role="tablist" aria-label="Current Orders status">
-              {STATUS_TABS.map((item) => (
-                <button type="button" className={`tab-portfolio order-status-tab ${tab === item.key ? "active" : ""}`} onClick={() => setTab(item.key)} role="tab" aria-selected={tab === item.key} key={item.key}>
-                  <span className="order-status-tab__icon"><ClassicOrderIcon name={item.icon} /></span>
-                  <span className="order-status-tab__copy">
-                    <span className="order-status-tab__label">{item.label}</span>
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="orders-toolbar__divider" aria-hidden="true" />
-          <OrdersPreferencesControl sortOnly sortMode={sortMode} onSortChange={setSortMode} hasMore={pageInfo?.hasMore} />
-        </div>
-      </div>
+      <ConnectedOrderStatusTabs tabs={STATUS_TABS} active={tab} onChange={setTab} label="My Orders status" />
 
       <section className="card" id="current-orders">
         
