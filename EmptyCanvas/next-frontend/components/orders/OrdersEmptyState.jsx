@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import ClassicOrderIcon from "./ClassicOrderIcon";
+import styles from "./OrdersEmptyState.module.css";
 
 /** Sort only the fetched groups. Pagination and server-side status filters stay unchanged. */
 export function sortOrderGroups(groups, mode = "latest") {
@@ -123,20 +124,72 @@ export function OrdersListHeader({ sortMode = "latest", onSortChange, hasMore = 
   );
 }
 
-export default function OrdersEmptyState({ filtered = false, context = "orders", onReset }) {
-  const isOwn = context === "my-orders";
+// ERP_ORDERS_EMPTY_STATE_V1
+function EmptyCabinet() {
   return (
-    <div className="orders-workspace-empty" role="status" aria-live="polite">
-      <span className="orders-workspace-empty__icon"><ClassicOrderIcon name={filtered ? "filter" : "layers"} /></span>
-      <strong>{filtered ? "No matching orders" : isOwn ? "No orders to show" : "No orders available"}</strong>
-      <p>{filtered
-        ? "Try another status, order type, or search term."
-        : isOwn ? "Orders created by your account will appear here." : "New orders will appear here when available."}</p>
-      {filtered && typeof onReset === "function" ? (
-        <button type="button" className="orders-workspace-empty__reset" onClick={onReset}>
-          <ClassicOrderIcon name="rotate-ccw" /> Clear filters
-        </button>
-      ) : null}
+    <svg className={styles.illustration} viewBox="0 0 180 180" fill="none" aria-hidden="true" focusable="false">
+      <circle cx="90" cy="91" r="79" fill="var(--empty-halo)" />
+      <ellipse cx="91" cy="151" rx="67" ry="17" fill="var(--empty-shadow)" />
+      <g stroke="var(--empty-outline)" strokeWidth="1.45" strokeLinejoin="round" strokeLinecap="round">
+        {/* Cabinet body, isometric top and side. */}
+        <path d="M65 41 102 19 143 45 106 68Z" fill="var(--empty-paper)" />
+        <path d="M106 68 143 45V132L106 155Z" fill="var(--empty-side)" />
+        <path d="M65 41 106 68V155L65 129Z" fill="var(--empty-paper)" />
+        <path d="M65 47 106 73 143 51" opacity=".48" />
+        {/* Top closed drawer. */}
+        <path d="M69 53 102 74V112L69 91Z" fill="var(--empty-paper)" />
+        <path d="m80 68 11 7v4l-11-7Z" fill="var(--empty-side)" />
+        <path d="m79 80 12 8q2 1 2 4l-1 1-12-8q-2-2-1-5Z" fill="var(--empty-paper)" />
+        {/* The lower bay and genuinely empty open drawer. */}
+        <path d="M69 96 102 117V148L69 128Z" fill="var(--empty-interior)" />
+        <path d="M38 116 72 94 103 114 69 135Z" fill="var(--empty-paper)" />
+        <path d="M42 117 72 98 99 115 69 133Z" fill="var(--empty-interior)" />
+        <path d="M72 98V115L56 126M72 115l19 11" opacity=".5" />
+        <path d="M69 135 103 114V140L69 161Z" fill="var(--empty-side)" />
+        <path d="M72 150 100 132V136L72 154Z" fill="var(--empty-interior)" />
+        <path d="M38 116 69 135V161L38 142Z" fill="var(--empty-paper)" />
+        <path d="m47 128 10 6v4l-10-6Z" fill="var(--empty-side)" />
+        <path d="m46 137 11 7q2 1 2 3l-1 1-11-7q-2-2-1-4Z" fill="var(--empty-paper)" />
+        <path d="M106 155 111 158 119 153V147M136 137v5l5-3v-6" fill="var(--empty-side)" />
+      </g>
+      <g stroke="#f66b12" strokeWidth="4" strokeLinecap="round">
+        <path d="M132 13v10M147 19l-6 9M157 31l-10 5" />
+      </g>
+    </svg>
+  );
+}
+
+// Static decorative placeholders, never a loading skeleton or actual order.
+// Keep the existing call signature compatible with all four orders clients.
+export default function OrdersEmptyState() {
+  return (
+    <div className={styles.root} role="status" aria-live="polite" aria-atomic="true">
+      <div className={styles.content}>
+        <EmptyCabinet />
+        <div className={styles.labelRow}>
+          <span className={styles.rule} aria-hidden="true" />
+          <span className={styles.label}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+              <path d="m12 7 8-4 3 4-8 4-3-4-3 4-8-4 3-4 8 4ZM4 9v10l8 4 8-4V9M12 12v11" />
+            </svg>
+            Empty
+          </span>
+          <span className={styles.rule} aria-hidden="true" />
+        </div>
+        <p className={styles.message}>No orders in this category.</p>
+        <div className={styles.placeholders} aria-hidden="true">
+          {[0, 1, 2].map(index => (
+            <div className={styles.placeholder} key={index}>
+              <span className={styles.tile}><ClassicOrderIcon name="package" /></span>
+              <span className={styles.lines}>
+                <span className={styles.lineLong} />
+                <span className={styles.lineShort} />
+              </span>
+              <span className={styles.emptyPill}>Empty</span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
