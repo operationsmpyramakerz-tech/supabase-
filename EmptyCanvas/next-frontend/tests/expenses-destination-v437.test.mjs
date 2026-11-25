@@ -16,7 +16,8 @@ test("Choose Order shows required Destination after Date with a single-select te
   const nextButton = dialogs.indexOf('className="ex-btn ex-dark ex-btn--block ex-add-money"', dateLabel);
   assert.ok(dateLabel > 0 && destinationLabel > dateLabel && nextButton > destinationLabel);
   assert.match(dialogs, /value=\{destinationUserId\}[\s\S]*?onChange=\{setDestinationUserId\}[\s\S]*?options=\{destinationOptions\}/);
-  assert.match(dialogs, /if \(!destinationUserId \|\| !destinationOptions\.some/);
+  assert.match(dialogs, /!destinationUserId \|\| !destinationOptions\.some/);
+  assert.match(dialogs, /isManualDestination/);
 });
 
 test("destination options lazy-load from the authenticated API when cash-out opens", () => {
@@ -38,7 +39,8 @@ test("each drafted cash-out sends the chosen destination user id in the final mu
 test("backend rejects missing or forged destinations and stores trusted id + name", () => {
   const cashout = backend.split("export async function createExpenseCashOut")[1].split("export async function settleExpenseAccount")[0];
   assert.match(cashout, /if \(!destinationUserId\) throw expenseError\("Destination is required\."/);
-  assert.match(cashout, /const destination = \(await expenseDestinationOptions\(\)\)\.find\(\(member\) => member\.id === destinationUserId\);/);
+  assert.match(cashout, /destination = \(await expenseDestinationOptions\(\)\)\.find\(\(member\) => member\.id === destinationUserId\);/);
+  assert.match(cashout, /destinationUserId === "__expense_other_destination__"/);
   assert.match(cashout, /if \(!destination\) throw expenseError\("Select a valid destination user\."/);
   assert.match(cashout, /destination_user_id: destination\.id,/);
   assert.match(cashout, /destination_user_name: destination\.name,/);
