@@ -1896,13 +1896,15 @@ function ReceiveModal({ state, busy, error, onCancel, onSubmit }) {
           }) : <div className="next-operations-receive-empty">No components match your search.</div>}</div>
         </section>
         {needsLegacyReview ? (
-          <label className="next-operations-receive-check" style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: 12, marginTop: 12, border: "1px solid #fed7aa", background: "#fff7ed", borderRadius: 12, lineHeight: 1.5 }}>
+          <label className={`next-operations-receive-check${legacyLinkConfirmed ? " is-checked" : ""}${busy ? " is-disabled" : ""}`} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: 12, marginTop: 12, border: "1px solid #fed7aa", background: "#fff7ed", borderRadius: 12, lineHeight: 1.5, cursor: busy ? "default" : "pointer" }}>
             <input type="checkbox" checked={legacyLinkConfirmed} disabled={busy} onChange={(event) => setLegacyLinkConfirmed(event.target.checked)}
               aria-label="Confirm review of historical Stocktaking links and physically outstanding receipt" />
+            <span className="next-operations-receive-check-box" aria-hidden="true" style={{ flexShrink: 0 }}><span>✓</span></span>
             <span style={{ display: "grid", gap: 4, minWidth: 0, color: "#7c2d12", fontSize: 12 }}>
               <strong>Verify historical Stocktaking link</strong>
               <span>Legacy component ID{selectedLegacyCandidates.length === 1 ? "" : "s"} {selectedLegacyCandidates.map((item) => text(item?.id)).join(", ")}:
                 Confirm the remaining quantity was not delivered before. A historical stock record may have a zero balance because it was consumed. Only the new receipt will be placed into a separate batch, with no changes to the original stock link.</span>
+              <strong>{legacyLinkConfirmed ? "Confirmed: quantity not previously delivered" : "I confirm this quantity was not previously delivered."}</strong>
             </span>
           </label>
         ) : null}
