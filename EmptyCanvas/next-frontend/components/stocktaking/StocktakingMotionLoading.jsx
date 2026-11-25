@@ -16,9 +16,6 @@ export default function StocktakingMotionLoading() {
             <section className="erp-stocktaking-skeleton" aria-busy="true" aria-label="Loading stock folders">
               <span className="erp-stock-motion-sr-only" role="status">Loading Stocktaking…</span>
               <div className="erp-stock-loading-card">
-                <div className="erp-stock-loading-header" aria-hidden="true">
-                  <span className="erp-stock-sk" /><span className="erp-stock-sk" /><span className="erp-stock-sk" />
-                </div>
                 <div className="erp-stock-loading-grid" aria-hidden="true">
                   {Array.from({ length: 8 }, (_, index) => (
                     <div className="erp-stock-loading-folder" key={index}>

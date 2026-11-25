@@ -1307,15 +1307,7 @@ export default function StocktakingClient({ account, initialStock = [], initialC
         {label:activeColumn.label,icon:"folder-check"}
       ]}/> : null}
       {!activeColumn ? (
-        <section className="card stocktaking-folders-card">
-          <div className="stocktaking-folders-head">
-            <div className="stocktaking-folders-title">
-              <span className="stocktaking-folders-title-icon" aria-hidden="true"><Icon name="folder" /></span>
-              <h2>Stock Folders</h2>
-            </div>
-            <span className="stocktaking-folders-count">{visibleFolders.length} folder{visibleFolders.length === 1 ? "" : "s"}</span>
-          </div>
-
+        <section className="card stocktaking-folders-card" aria-label="Stock folders">
           <div className="stocktaking-folder-grid" aria-live="polite">
             {visibleFolders.length ? visibleFolders.map((column) => (
               <article className={`products-proposal-folder stocktaking-proposal-folder ${folderMenu === column.key ? "is-menu-open" : ""}`} key={column.key}>
