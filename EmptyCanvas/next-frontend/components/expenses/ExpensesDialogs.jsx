@@ -458,6 +458,20 @@ function ExpenseDestinationSelect({ value, onChange, options = [], allowManual =
         <span className="expense-destination-menu__count">{filtered.length} users</span>
       </div>
       <div className="expense-destination-menu__list" role="listbox" aria-label="Destination users">
+        {showOtherOption ? <button
+          type="button"
+          className={`expense-destination-menu__card expense-destination-menu__card--other${isOtherDestination ? " is-selected" : ""}`}
+          role="option"
+          aria-selected={isOtherDestination}
+          onClick={() => choose(OTHER_DESTINATION_ID)}
+        >
+          <span className="expense-destination-menu__person" aria-hidden="true"><ClassicExpenseIcon name="edit-3" size={19}/></span>
+          <span className="expense-destination-menu__copy">
+            <strong>Other destination</strong>
+            <small>Write destination manually</small>
+          </span>
+          {isOtherDestination ? <span className="expense-destination-menu__selected" aria-hidden="true">✓</span> : null}
+        </button> : null}
         {filtered.length ? filtered.map((option) => {
           const active = option.value === value;
           return <button
@@ -476,20 +490,7 @@ function ExpenseDestinationSelect({ value, onChange, options = [], allowManual =
             {active ? <span className="expense-destination-menu__selected" aria-hidden="true">✓</span> : null}
           </button>;
         }) : !showOtherOption ? <div className="expense-destination-menu__empty">No matching users.</div> : null}
-        {showOtherOption ? <button
-          type="button"
-          className={`expense-destination-menu__card expense-destination-menu__card--other${isOtherDestination ? " is-selected" : ""}`}
-          role="option"
-          aria-selected={isOtherDestination}
-          onClick={() => choose(OTHER_DESTINATION_ID)}
-        >
-          <span className="expense-destination-menu__person" aria-hidden="true"><ClassicExpenseIcon name="edit-3" size={19}/></span>
-          <span className="expense-destination-menu__copy">
-            <strong>Other destination</strong>
-            <small>Write destination manually</small>
-          </span>
-          {isOtherDestination ? <span className="expense-destination-menu__selected" aria-hidden="true">✓</span> : null}
-        </button> : null}
+
       </div>
     </div>, document.body,
   ) : null;
