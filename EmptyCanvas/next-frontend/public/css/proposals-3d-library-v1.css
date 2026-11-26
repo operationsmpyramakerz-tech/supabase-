@@ -1,0 +1,391 @@
+/* ERP_PROPOSALS_3D_LIBRARY_V1
+   The Proposals library (including nested folders) only. Existing buttons, long-press
+   actions, bulk selection, permissions, counts and detail views stay intact.
+   Do not reuse these overrides on Kits or on any other library. */
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders {
+  grid-auto-rows: max-content !important;
+  align-items: start !important;
+  row-gap: 12px !important;
+}
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > :is(.kit-quick-create, article.products-proposal-folder) {
+  box-sizing: border-box !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  aspect-ratio: 1 / 1;
+  margin: 0 !important;
+  padding: 0 !important;
+  justify-self: stretch !important;
+  align-self: start !important;
+}
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > .kit-quick-create {
+  position: relative !important;
+  gap: 0 !important;
+}
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > .kit-quick-create > .kit-quick-create__tile {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  flex: none !important;
+}
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder {
+  position: relative !important;
+  border: 1px solid #d6d7da !important;
+  border-radius: 14px !important;
+  background: #fff !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder.kit-library-folder {
+  border-color: transparent !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder:hover {
+  transform: none !important;
+}
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder.kit-bulk-selected {
+  border-color: #f97316 !important;
+  box-shadow: 0 0 0 2px rgb(249 115 22 / 25%) !important;
+}
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder > .products-proposal-folder__main {
+  position: absolute !important;
+  inset: 0 !important;
+  display: grid !important;
+  --erp-proposal-name-size: .82rem;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  justify-content: stretch !important;
+  justify-items: center !important;
+  align-items: center !important;
+  align-content: stretch !important;
+  gap: 2px !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  box-sizing: border-box !important;
+  padding: 4px 5px 7px !important;
+  margin: 0 !important;
+  border: 0 !important;
+  border-radius: 13px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #171717 !important;
+  cursor: pointer;
+  text-align: center !important;
+  overflow: hidden !important;
+}
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder > .products-proposal-folder__main::before,
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder > .products-proposal-folder__main::after {
+  content: none !important;
+  display: none !important;
+}
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder > .products-proposal-folder__main:focus-visible {
+  outline: 2px solid #f97316 !important;
+  outline-offset: 2px !important;
+}
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder .proposal-folder-figure {
+  position: static !important;
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  inset: auto !important;
+  transform: none !important;
+  background: url("../images/proposals/proposal-document-3d-v1.svg") center bottom / contain no-repeat !important;
+  filter: none !important;
+  pointer-events: none;
+}
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.kit-library-folder .proposal-folder-figure {
+  background-image: url("../images/proposals/proposal-folder-three-documents-v1.svg") !important;
+}
+/* Replace only the drawing; the existing button and accessible name remain. */
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder .proposal-folder-figure > span {
+  display: none !important;
+}
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder .proposal-folder-copy {
+  position: static !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  inset: auto !important;
+  text-align: center !important;
+  transform: none !important;
+  flex-direction: column !important;
+  background: transparent !important;
+  max-width: 100% !important;
+}
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder .products-proposal-folder__main .proposal-folder-copy strong {
+  display: -webkit-box !important;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-height: 2.28em !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  color: #101010 !important;
+  font-size: var(--erp-proposal-name-size) !important;
+  font-weight: 850 !important;
+  letter-spacing: -.025em !important;
+  line-height: 1.14 !important;
+  white-space: normal !important;
+  overflow: hidden !important;
+  overflow-wrap: anywhere;
+  text-align: center !important;
+}
+/* Hide the redundant creator/folder label visually, not its stored data. */
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder .proposal-folder-copy em {
+  display: none !important;
+}
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder .products-proposal-folder__main .proposal-folder-count {
+  position: static !important;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  gap: 4px !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  height: auto !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  inset: auto !important;
+  transform: none !important;
+  background: none !important;
+  color: #626874 !important;
+  font-weight: 720 !important;
+  font-size: .65rem !important;
+  line-height: 1.18 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+}
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder .proposal-folder-count svg {
+  flex: 0 0 12px !important;
+  width: 12px !important;
+  height: 12px !important;
+  color: inherit !important;
+  stroke: currentColor;
+  stroke-width: 1.8 !important;
+}
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder .proposal-folder-count > span {
+  min-width: 0 !important;
+  color: inherit !important;
+  font: inherit !important;
+  overflow: hidden !important;
+  white-space: nowrap !important;
+  text-overflow: ellipsis !important;
+}
+@media (max-width: 720px) {
+  body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder {
+    border-radius: 13px !important;
+  }
+  body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder > .products-proposal-folder__main {
+    --erp-proposal-name-size: clamp(.63rem, 2.7vw, .78rem);
+    padding: 3px 3px 6px !important;
+    gap: 2px !important;
+  }
+  body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder .products-proposal-folder__main .proposal-folder-copy strong {
+    font-size: var(--erp-proposal-name-size) !important;
+  }
+  body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder .products-proposal-folder__main .proposal-folder-count {
+    font-size: clamp(.52rem, 2.15vw, .64rem) !important;
+    gap: 3px !important;
+  }
+  body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder .proposal-folder-count svg {
+    flex-basis: 11px !important;
+    width: 11px !important;
+    height: 11px !important;
+  }
+}
+/* Keep the preview legible under the ERP's existing dark-mode theme. */
+html[data-theme="dark"] body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder.kit-library-kit {
+  background: #25282d !important;
+  border-color: #484b51 !important;
+  box-shadow: none !important;
+}
+html[data-theme="dark"] body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder.kit-library-folder {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+html[data-theme="dark"] body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder .products-proposal-folder__main .proposal-folder-copy strong {
+  color: #f6f6f6 !important;
+}
+html[data-theme="dark"] body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder .products-proposal-folder__main .proposal-folder-count {
+  color: #bfc4ce !important;
+}
+html[data-theme="dark"] body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder.kit-bulk-selected {
+  border-color: #f97316 !important;
+  box-shadow: 0 0 0 2px rgb(249 115 22 / 35%) !important;
+}
+
+/* ERP_PROPOSALS_THREE_DOCUMENT_FOLDER_V1
+   Layered black folder with white lining and three matching proposal documents.
+   Individual document cards use a white frame with centered title and count. */
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder.kit-library-folder {
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder.kit-library-folder > .products-proposal-folder__main {
+  --erp-folder-title-size: .94rem;
+  --erp-folder-subtitle-size: .72rem;
+  --erp-folder-count-size: .72rem;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: 50% minmax(0, 1fr) auto;
+  align-items: center !important;
+  justify-items: stretch !important;
+  justify-content: stretch !important;
+  gap: 2px !important;
+  padding: 0 9% 8% !important;
+  text-align: left !important;
+  color: #fff !important;
+  overflow: visible !important;
+  isolation: isolate;
+}
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder.kit-library-folder > .products-proposal-folder__main > .proposal-folder-figure {
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  background: url("../images/proposals/proposal-folder-three-documents-v1.svg") center / 100% 100% no-repeat !important;
+  transform: none !important;
+  filter: drop-shadow(0 4px 5px rgb(0 0 0 / 22%)) !important;
+  pointer-events: none;
+}
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder.kit-library-folder > .products-proposal-folder__main > .proposal-folder-copy {
+  grid-row: 2;
+  grid-column: 1;
+  position: relative !important;
+  z-index: 2 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  justify-content: center !important;
+  gap: 3px !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  text-align: left !important;
+  container: erp-proposal-folder-label / size;
+  font-size: var(--erp-folder-title-size);
+}
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder.kit-library-folder > .products-proposal-folder__main .proposal-folder-copy strong {
+  width: 100% !important;
+  color: #fafafa !important;
+  font-size: var(--erp-folder-title-size) !important;
+  font-weight: 850 !important;
+  line-height: 1.12 !important;
+  letter-spacing: -.025em !important;
+  text-align: left !important;
+  margin: 0 !important;
+  max-height: 2.24em !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere;
+}
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder.kit-library-folder > .products-proposal-folder__main .proposal-folder-copy em {
+  display: block !important;
+  position: static !important;
+  width: 100% !important;
+  color: #bfc0c2 !important;
+  font-size: var(--erp-folder-subtitle-size) !important;
+  font-style: normal !important;
+  font-weight: 650 !important;
+  line-height: 1.1 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  text-align: left !important;
+}
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder.kit-library-folder > .products-proposal-folder__main > .proposal-folder-count {
+  grid-row: 3;
+  grid-column: 1;
+  position: relative !important;
+  z-index: 2 !important;
+  align-self: end !important;
+  justify-content: flex-start !important;
+  color: #fafafa !important;
+  font-size: var(--erp-folder-count-size) !important;
+  font-weight: 780 !important;
+  gap: 4px !important;
+  line-height: 1.15 !important;
+  text-align: left !important;
+  overflow: visible !important;
+}
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder.kit-library-folder > .products-proposal-folder__main > .proposal-folder-count > span {
+  color: inherit !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere;
+  display: -webkit-box !important;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+/* Use one complete title line (with ellipsis) when two lines cannot fit.
+   The full folder name remains available in its existing accessible label. */
+@container erp-proposal-folder-label (max-height: 3.4em) {
+  body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder.kit-library-folder > .products-proposal-folder__main .proposal-folder-copy strong {
+    display: block !important;
+    flex: none !important;
+    max-height: 1.12em !important;
+    white-space: nowrap !important;
+    text-overflow: ellipsis !important;
+  }
+}
+@media (max-width: 720px) {
+  body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder.kit-library-folder > .products-proposal-folder__main {
+    --erp-folder-title-size: clamp(.64rem, 2.85vw, .91rem);
+    --erp-folder-subtitle-size: clamp(.52rem, 2.2vw, .69rem);
+    --erp-folder-count-size: clamp(.49rem, 2.25vw, .68rem);
+  }
+  body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder.kit-library-folder > .products-proposal-folder__main > .proposal-folder-copy {
+    gap: 2px !important;
+  }
+  body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder.kit-library-folder > .products-proposal-folder__main > .proposal-folder-count {
+    gap: 3px !important;
+  }
+}
+/* Keep the black-card labels white in dark mode, overriding V1's generic text. */
+html[data-theme="dark"] body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder.kit-library-folder > .products-proposal-folder__main .proposal-folder-copy strong,
+html[data-theme="dark"] body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder.kit-library-folder > .products-proposal-folder__main > .proposal-folder-count {
+  color: #fafafa !important;
+}
+
+/* Shared paper pictogram for both kinds of proposal counts.
+   The original count strings remain in the DOM, accessible and dynamic. */
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder > .products-proposal-folder__main > .proposal-folder-count > svg,
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder > .products-proposal-folder__main > .proposal-folder-count > span[aria-hidden="true"] {
+  display: none !important;
+}
+body.proposals-page:not(.kits-page) .next-proposals-classic-parity .proposal-library-page .proposal-library-grid.kit-library-grid--root.products-proposal-folders > article.products-proposal-folder > .products-proposal-folder__main > .proposal-folder-count::before {
+  content: "";
+  display: block;
+  flex: 0 0 1.12em;
+  width: 1.12em;
+  height: 1.12em;
+  background: currentColor;
+  mask: center / contain no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M6 2h8l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zM14 2v6h5M8 13h7M8 17h7'/%3E%3C/svg%3E");
+  pointer-events: none;
+}

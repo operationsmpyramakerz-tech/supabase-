@@ -7,6 +7,7 @@ export default function ProposalsMotionLayout({ children }) {
       <link rel="stylesheet" href="/next/css/proposals-nested-folders-v1.css?v=proposals-folder-library-v1" precedence="erp-detail" />
       <link rel="stylesheet" href="/next/css/proposals-kits-full-parity-v2.css?v=proposals-kits-full-parity-v2" precedence="erp-detail" />
       <link rel="stylesheet" href="/next/css/erp-kits-proposals-folder-select-fix-v1.css?v=folder-select-fix-v1" precedence="erp-detail" />
+      <link rel="stylesheet" href="/next/css/proposals-3d-library-v1.css?v=1" precedence="erp-detail" />
       {children}
     </>
   );
