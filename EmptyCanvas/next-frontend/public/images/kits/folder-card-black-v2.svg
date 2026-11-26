@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" fill="none">
+  <defs>
+    <linearGradient id="orange" x1="80" y1="12" x2="192" y2="38" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FF8A20"/>
+      <stop offset="1" stop-color="#F9690A"/>
+    </linearGradient>
+    <linearGradient id="black" x1="100" y1="2" x2="100" y2="198" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#191919"/>
+      <stop offset="1" stop-color="#151515"/>
+    </linearGradient>
+  </defs>
+  <!-- Rear orange insert peeks out behind the top of the black folder. -->
+  <path d="M19 12H174C186 12 194 21 194 32V174C194 185 185 194 174 194H19C9 194 3 186 3 176V31C3 20 10 12 19 12Z" fill="url(#orange)" stroke="#191919" stroke-width="4" stroke-linejoin="round"/>
+  <!-- The actual card is the front folder silhouette, not a rectangle around an icon. -->
+  <path d="M3 24C3 10 12 2 25 2H62C74 2 81 7 87 18L93 27C98 36 103 39 114 39H178C190 39 198 48 198 61V174C198 188 188 198 175 198H25C12 198 3 189 3 175V24Z" fill="url(#black)" stroke="#1B1B1B" stroke-width="1.2"/>
+  <path d="M6 24C6 11 14 5 25 5H62C73 5 79 10 85 20" stroke="#272727" stroke-opacity=".8" stroke-width="1" stroke-linecap="round"/>
+  <!-- White folder outline in the upper right, matching the approved design. -->
+  <path d="M155 59V55Q155 52 158 52H166L170 56H181Q184 56 184 59V69Q184 72 181 72H158Q155 72 155 69Z" stroke="#FAFAFA" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+</svg>

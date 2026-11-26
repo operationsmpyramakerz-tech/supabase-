@@ -4,7 +4,7 @@ export default function KitsMotionLayout({ children }) {
   return (
     <>
       <link rel="stylesheet" href="/next/css/kits-motion-step7.css?v=cinematic-step7-stagger-v2" precedence="erp-detail" />
-      <link rel="stylesheet" href="/next/css/kits-create-folder-tile.css?v=kits-3d-library-final-v1" precedence="erp-detail" />
+      <link rel="stylesheet" href="/next/css/kits-create-folder-tile.css?v=kits-black-folder-card-v2" precedence="erp-detail" />
       <link rel="stylesheet" href="/next/css/kits-move-fullwidth-folders.css?v=move-sheet-cards-v1" precedence="erp-detail" />
       <link rel="stylesheet" href="/next/css/kits-move-header-footer-v2.css?v=move-sheet-header-footer-v2" precedence="erp-detail" />
       <link rel="stylesheet" href="/next/css/kits-modern-action-popover.css?v=kits-modern-actions-v1" precedence="erp-detail" />
