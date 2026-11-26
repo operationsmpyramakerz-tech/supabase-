@@ -665,9 +665,9 @@ html[data-theme="dark"] body.kits-page .next-kits-classic-parity .kit-library-gr
   box-shadow: 0 0 0 2px rgb(249 115 22 / 35%) !important;
 }
 
-/* ERP_KITS_BLACK_FOLDER_CARD_V2
-   Restore the approved black/orange folder-shaped CARD in Kits only.
-   Individual kit box cards and both Create tiles retain V1 unchanged. */
+/* ERP_KITS_THREE_BOX_FOLDER_CARD_V3
+   Layered black folder with white lining and three matching kit boxes.
+   Individual kit box cards, Create tiles and other screens remain unchanged. */
 body.kits-page .next-kits-classic-parity .kit-library-grid--root.products-proposal-folders > article.products-proposal-folder.kit-library-folder {
   border: 0 !important;
   background: transparent !important;
@@ -679,12 +679,12 @@ body.kits-page .next-kits-classic-parity .kit-library-grid--root.products-propos
   --erp-folder-count-size: .72rem;
   display: grid !important;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: 42% minmax(0, 1fr) auto;
+  grid-template-rows: 50% minmax(0, 1fr) auto;
   align-items: center !important;
   justify-items: stretch !important;
   justify-content: stretch !important;
   gap: 2px !important;
-  padding: 0 10% 10% !important;
+  padding: 0 9% 8% !important;
   text-align: left !important;
   color: #fff !important;
   overflow: visible !important;
@@ -697,9 +697,9 @@ body.kits-page .next-kits-classic-parity .kit-library-grid--root.products-propos
   width: 100% !important;
   height: 100% !important;
   margin: 0 !important;
-  background: url("../images/kits/folder-card-black-v2.svg") center / 100% 100% no-repeat !important;
+  background: url("../images/kits/folder-card-three-kits-v3.svg") center / 100% 100% no-repeat !important;
   transform: none !important;
-  filter: drop-shadow(0 5px 7px rgb(0 0 0 / 15%));
+  filter: drop-shadow(0 4px 5px rgb(0 0 0 / 22%));
   pointer-events: none;
 }
 body.kits-page .next-kits-classic-parity .kit-library-grid--root.products-proposal-folders > article.products-proposal-folder.kit-library-folder > .products-proposal-folder__main > .proposal-folder-copy {
@@ -719,6 +719,8 @@ body.kits-page .next-kits-classic-parity .kit-library-grid--root.products-propos
   margin: 0 !important;
   padding: 0 !important;
   text-align: left !important;
+  container: erp-folder-label / size;
+  font-size: var(--erp-folder-title-size);
 }
 body.kits-page .next-kits-classic-parity .kit-library-grid--root.products-proposal-folders > article.products-proposal-folder.kit-library-folder > .products-proposal-folder__main .proposal-folder-copy strong {
   width: 100% !important;
@@ -770,17 +772,16 @@ body.kits-page .next-kits-classic-parity .kit-library-grid--root.products-propos
   -webkit-line-clamp: 2;
   line-clamp: 2;
 }
-/* Use the same small briefcase pictogram as the kit counter in the reference. */
-body.kits-page .next-kits-classic-parity .kit-library-grid--root.products-proposal-folders > article.products-proposal-folder.kit-library-folder > .products-proposal-folder__main > .proposal-folder-count > svg {
-  display: none !important;
-}
-body.kits-page .next-kits-classic-parity .kit-library-grid--root.products-proposal-folders > article.products-proposal-folder.kit-library-folder > .products-proposal-folder__main > .proposal-folder-count::before {
-  content: "";
-  display: block;
-  flex: 0 0 1.15em;
-  width: 1.15em;
-  height: 1.15em;
-  background: center / contain no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fafafa' stroke-width='2.3' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='7' width='18' height='13' rx='2'/%3E%3Cpath d='M8 20V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v15'/%3E%3C/svg%3E");
+/* Use one complete title line (with ellipsis) when two lines cannot fit.
+   The full folder name remains available in its existing accessible label. */
+@container erp-folder-label (max-height: 3.4em) {
+  body.kits-page .next-kits-classic-parity .kit-library-grid--root.products-proposal-folders > article.products-proposal-folder.kit-library-folder > .products-proposal-folder__main .proposal-folder-copy strong {
+    display: block !important;
+    flex: none !important;
+    max-height: 1.12em !important;
+    white-space: nowrap !important;
+    text-overflow: ellipsis !important;
+  }
 }
 @media (max-width: 720px) {
   body.kits-page .next-kits-classic-parity .kit-library-grid--root.products-proposal-folders > article.products-proposal-folder.kit-library-folder > .products-proposal-folder__main {
