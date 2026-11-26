@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="10 5 220 178" fill="none">
+  <defs>
+    <linearGradient id="back" x1="31" y1="34" x2="197" y2="160" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F87900"/><stop offset=".45" stop-color="#DF5300"/>
+      <stop offset="1" stop-color="#A63200"/>
+    </linearGradient>
+    <linearGradient id="front" x1="80" y1="60" x2="155" y2="168" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FF9600"/><stop offset=".41" stop-color="#FF7500"/>
+      <stop offset="1" stop-color="#F95A00"/>
+    </linearGradient>
+    <linearGradient id="highlight" x1="23" y1="62" x2="217" y2="166" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFD48A" stop-opacity=".9"/><stop offset=".55" stop-color="#FFAB47" stop-opacity=".65"/>
+      <stop offset="1" stop-color="#D44700" stop-opacity=".7"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-80%" width="160%" height="260%">
+      <feGaussianBlur stdDeviation="5"/>
+    </filter>
+  </defs>
+  <ellipse cx="121" cy="163" rx="97" ry="8" fill="#573118" opacity=".21" filter="url(#shadow)"/>
+  <!-- Rear folder layer, with rounded tab. -->
+  <path d="M23 48Q23 32 39 32H92Q105 32 115 41Q123 47 137 47H198Q216 47 216 65V141Q216 158 199 158H40Q23 158 23 141Z" fill="url(#back)" stroke="#D85800" stroke-width="1"/>
+  <path d="M25 49Q25 34 40 34H92Q105 34 115 43Q123 49 137 49H198Q213 49 214 63" stroke="#FF9B38" stroke-opacity=".62" stroke-width="1.5"/>
+  <!-- Front pocket, soft sloped tab and straight-on rectangular body. -->
+  <path d="M23 75Q23 58 41 58H81Q96 58 109 68L119 75Q127 81 142 81H200Q218 81 218 99V144Q218 163 199 163H42Q23 163 23 144Z" fill="url(#front)" stroke="url(#highlight)" stroke-width="1.6"/>
+  <path d="M25 75Q25 60 41 60H81Q96 60 108 70L118 77Q127 83 142 83H199Q215 83 216 99" stroke="#FFC069" stroke-opacity=".68" stroke-width="1.4" stroke-linecap="round"/>
+  <path d="M24 144Q24 162 42 162H199Q217 162 217 144" stroke="#D94E00" stroke-opacity=".65" stroke-width="1.4"/>
+  <g transform="translate(44 121)" stroke="#fff" stroke-width="2.3" stroke-linejoin="round" stroke-linecap="round">
+    <rect x="0" y="5" width="22" height="16" rx="3"/>
+    <path d="M7 20V3Q7 0 10 0H12Q15 0 15 3V20"/>
+  </g>
+</svg>
