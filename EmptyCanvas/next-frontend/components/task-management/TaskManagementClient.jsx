@@ -146,6 +146,9 @@ function FeatherIcon({ name, className = "" }) {
     calendar: <><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></>,
     layers: <><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></>,
     circle: <circle cx="12" cy="12" r="10"/>,
+    "tm-pause": <><line x1="9" y1="5" x2="9" y2="19"/><line x1="15" y1="5" x2="15" y2="19"/></>,
+    "tm-sync": <><path d="M20 7V3m0 4h-4M4 17v4m0-4h4"/><path d="M20 7a9 9 0 0 0-15 2M4 17a9 9 0 0 0 15-2"/></>,
+    "tm-done": <polyline points="4 12 10 18 20 6"/>,
     activity: <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>,
     "check-circle": <><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></>,
     archive: <><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></>,
@@ -312,6 +315,7 @@ function MobileTaskDashboard({ tickets, view, selectedDate, onSelectDate, onOpen
   // All three task views use the calendar as their only task list. Keep the
   // status cards and archive control connected to the authorized day feed.
   const calendarOnly = CALENDAR_ONLY_VIEWS.has(view);
+  const delegatedDesign = view === "delegated";
   const archiveActive = calendarOnly && activeStatus === "archived";
   const showArchiveControl = calendarOnly && (archiveActive || allTickets.some((ticket) => ticket?.isArchived));
   const dayTickets = calendarOnly
@@ -341,8 +345,8 @@ function MobileTaskDashboard({ tickets, view, selectedDate, onSelectDate, onOpen
     : selected.toLocaleDateString(undefined, { weekday: "long" }).toUpperCase();
 
   return (
-    <section className="tm-mobile-dashboard" aria-label="Task Management mobile dashboard">
-      {canCreate ? (
+    <section className={`tm-mobile-dashboard${delegatedDesign ? " tm-mobile-dashboard--delegated-final" : ""}`} aria-label="Task Management mobile dashboard">
+      {canCreate && !delegatedDesign ? (
         <button type="button" className="tm-mobile-add-card" onClick={onCreate} aria-label="Add new project">
           <span className="tm-mobile-add-card__copy">
             <strong>Add new</strong>
@@ -386,20 +390,20 @@ function MobileTaskDashboard({ tickets, view, selectedDate, onSelectDate, onOpen
       </section>
 
       <section className="tm-mobile-summary-grid" aria-label="Task summary">
-        <button type="button" className={`tm-mobile-summary-card tm-mobile-summary-card--not-started${activeStatus === "not_started" ? " is-active" : ""}`} onClick={() => onStatusChange(activeStatus === "not_started" ? "all" : "not_started")}>
-          <span><FeatherIcon name="circle" /> Not started</span>
+        <button type="button" className={`tm-mobile-summary-card tm-mobile-summary-card--not-started${activeStatus === "not_started" ? " is-active" : ""}`} onClick={() => onStatusChange(activeStatus === "not_started" ? "all" : "not_started")} aria-pressed={activeStatus === "not_started"}>
+          {delegatedDesign ? <><span className="tm-delegated-status-label">Not started</span><span className="tm-delegated-status-icon"><FeatherIcon name="tm-pause" /></span></> : <span><FeatherIcon name="circle" /> Not started</span>}
           <strong>{statusCounts.not_started}</strong>
-          <small>waiting to begin</small>
+          {!delegatedDesign ? <small>waiting to begin</small> : null}
         </button>
-        <button type="button" className={`tm-mobile-summary-card tm-mobile-summary-card--progress${activeStatus === "in_progress" ? " is-active" : ""}`} onClick={() => onStatusChange(activeStatus === "in_progress" ? "all" : "in_progress")}>
-          <span><FeatherIcon name="activity" /> In progress</span>
+        <button type="button" className={`tm-mobile-summary-card tm-mobile-summary-card--progress${activeStatus === "in_progress" ? " is-active" : ""}`} onClick={() => onStatusChange(activeStatus === "in_progress" ? "all" : "in_progress")} aria-pressed={activeStatus === "in_progress"}>
+          {delegatedDesign ? <><span className="tm-delegated-status-label">In progress</span><span className="tm-delegated-status-icon"><FeatherIcon name="tm-sync" /></span></> : <span><FeatherIcon name="activity" /> In progress</span>}
           <strong>{statusCounts.in_progress}</strong>
-          <small>active workflow</small>
+          {!delegatedDesign ? <small>active workflow</small> : null}
         </button>
-        <button type="button" className={`tm-mobile-summary-card tm-mobile-summary-card--done${activeStatus === "completed" ? " is-active" : ""}`} onClick={() => onStatusChange(activeStatus === "completed" ? "all" : "completed")}>
-          <span><FeatherIcon name="check-circle" /> Done</span>
+        <button type="button" className={`tm-mobile-summary-card tm-mobile-summary-card--done${activeStatus === "completed" ? " is-active" : ""}`} onClick={() => onStatusChange(activeStatus === "completed" ? "all" : "completed")} aria-pressed={activeStatus === "completed"}>
+          {delegatedDesign ? <><span className="tm-delegated-status-label">Done</span><span className="tm-delegated-status-icon"><FeatherIcon name="tm-done" /></span></> : <span><FeatherIcon name="check-circle" /> Done</span>}
           <strong>{statusCounts.completed}</strong>
-          <small>completed projects</small>
+          {!delegatedDesign ? <small>completed projects</small> : null}
         </button>
       </section>
 
@@ -438,7 +442,7 @@ function MobileTaskDashboard({ tickets, view, selectedDate, onSelectDate, onOpen
             <div className="tm-mobile-day-empty">
               <span><FeatherIcon name="calendar" /></span>
               <strong>No tasks on this date</strong>
-              <small>Select another day from the week above{canCreate ? " or use the Add new card above." : "."}</small>
+              <small>Select another day from the week above{canCreate ? (delegatedDesign ? " or tap + to add a new project." : " or use the Add new card above.") : "."}</small>
             </div>
           )}
         </div>
@@ -624,9 +628,10 @@ export default function TaskManagementClient({ view, initialMeta, initialTickets
   const userName = account?.name || account?.username || meta?.currentUser?.name || "...";
 
   return (
-    <section className="task-management-page next-task-classic-parity">
+    <section className={`task-management-page next-task-classic-parity${view === "delegated" && canCreate ? " tm-delegated-with-fab" : ""}`}>
       <link rel="stylesheet" href="/next/css/task-management-next-parity.css?v=classic-parity-v3-workflow" precedence="erp-detail" />
       {calendarOnly ? <link rel="stylesheet" href="/next/css/task-management-calendar-only-v1.css?v=2" precedence="erp-detail" /> : null}
+      {view === "delegated" ? <link rel="stylesheet" href="/next/css/task-delegated-status-fab-v1.css?v=1" precedence="erp-detail" /> : null}
       <BodyClassSync className="task-management-page" />
       <Toast toast={toast} onClose={() => setToast(null)} />
       <header className="main-header tm-page-header next-task-classic-header">
@@ -667,6 +672,7 @@ export default function TaskManagementClient({ view, initialMeta, initialTickets
           </section> : null}
         </div>
       </main>
+      {view === "delegated" && canCreate ? <button type="button" className="tm-delegated-create-fab" onClick={() => setEditor(editorFromTicket())} aria-label="Add new project" title="Add new project"><FeatherIcon name="plus" /></button> : null}
       {selectedTicket ? <TaskPortal><ClassicTaskWorkflowDetails ticket={selectedTicket} view={view} meta={meta} onClose={() => setSelectedTicket(null)} onEdit={canOnTicket("project_edit", selectedTicket) ? (ticket) => requestAction("edit", ticket) : null} onRefresh={() => refresh({ silent: true })} onWork={canOnTicket("assignment_work", selectedTicket, { personalWork: true }) || canOnTicket("section_work", selectedTicket, { personalWork: true }) || canOnTicket("section_work", selectedTicket) ? setWorkTarget : null} onTeamWorkflow={canOnTicket("workflow_save", selectedTicket) ? setTeamSection : null} onArchive={canOnTicket("project_archive", selectedTicket) ? (ticket) => requestAction("archive", ticket) : null} onDelete={canOnTicket("project_delete", selectedTicket) ? (ticket) => requestAction("delete", ticket) : null} onDelivered={canOnTicket("mark_delivered", selectedTicket) ? delivered : null} featurePermissions={Object.fromEntries(["workflow_save", "assignment_work", "section_work", "assignment_archive", "assignment_delete"].map(key => [key, canOnTicket(key, selectedTicket, { personalWork: key.startsWith("assignment_") || key === "section_work" }) || (key === "section_work" && canOnTicket(key, selectedTicket))]))} notify={notify} /></TaskPortal> : null}
       {(editor || workTarget || teamSection || adminAction || confirmAction || rejectedReason) ? <TaskPortal><TaskManagementDialogs
         editor={editor}

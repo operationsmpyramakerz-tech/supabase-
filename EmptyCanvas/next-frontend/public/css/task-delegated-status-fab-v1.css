@@ -1,0 +1,162 @@
+/* ERP_DELEGATED_STATUS_FAB_V1 — approved Delegated Tasks mobile design.
+   Scoped to Delegated Tasks (including its route-level loading skeleton). */
+.tm-delegated-create-fab { display: none !important; }
+
+@media (max-width: 760px) {
+  .task-management-page .tm-mobile-dashboard--delegated-final .tm-mobile-summary-grid {
+    gap: 7px;
+    margin-top: 10px;
+  }
+  .task-management-page .tm-mobile-dashboard--delegated-final .tm-mobile-summary-card {
+    --tm-status-accent: #f04851;
+    --tm-status-icon-bg: #48282b;
+    --tm-status-icon-color: #ff6269;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    align-items: center;
+    gap: 3px 3px;
+    min-height: 72px;
+    padding: 10px 9px 10px;
+    border: 1px solid #151515 !important;
+    border-radius: 15px;
+    background: linear-gradient(150deg, #303133 0%, #202122 48%, #171819 100%) !important;
+    color: #fff;
+    box-shadow: inset 0 3px 0 #ffffff12, inset 0 -4px 0 #090a0b, inset 0 0 0 3px #090a0b44, 0 4px 9px #00000020;
+    text-align: left;
+  }
+  .task-management-page .tm-mobile-dashboard--delegated-final .tm-mobile-summary-card--progress {
+    --tm-status-accent: #ff981c;
+    --tm-status-icon-bg: #48331f;
+    --tm-status-icon-color: #ff9b32;
+  }
+  .task-management-page .tm-mobile-dashboard--delegated-final .tm-mobile-summary-card--done {
+    --tm-status-accent: #31d05e;
+    --tm-status-icon-bg: #203e2c;
+    --tm-status-icon-color: #4ce17a;
+  }
+  .task-management-page .tm-mobile-dashboard--delegated-final .tm-mobile-summary-card::before {
+    left: 10px;
+    right: 10px;
+    height: 4px;
+    background: var(--tm-status-accent);
+    border-radius: 0 0 8px 8px;
+  }
+  .task-management-page .tm-mobile-dashboard--delegated-final .tm-mobile-summary-card > .tm-delegated-status-label {
+    display: block;
+    grid-column: 1;
+    grid-row: 1;
+    font-size: clamp(8px, 2.25vw, 12px);
+    font-weight: 800;
+    line-height: 1.16;
+    white-space: normal;
+    overflow: visible;
+    color: #fff;
+  }
+  .task-management-page .tm-mobile-dashboard--delegated-final .tm-mobile-summary-card > .tm-delegated-status-icon {
+    display: grid;
+    place-items: center;
+    grid-column: 2;
+    grid-row: 1;
+    width: clamp(20px, 5.7vw, 28px);
+    height: clamp(20px, 5.7vw, 28px);
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    color: var(--tm-status-icon-color);
+    background: var(--tm-status-icon-bg);
+  }
+  .task-management-page .tm-mobile-dashboard--delegated-final .tm-delegated-status-icon svg {
+    width: 14px !important;
+    height: 14px !important;
+    stroke-width: 2.4;
+  }
+  .task-management-page .tm-mobile-dashboard--delegated-final .tm-mobile-summary-card > strong {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    color: #fff !important;
+    font-size: clamp(24px, 6.5vw, 34px);
+    margin: 0;
+    line-height: 1;
+    letter-spacing: -.035em;
+    font-weight: 900;
+    font-variant-numeric: tabular-nums;
+  }
+  .task-management-page .tm-mobile-dashboard--delegated-final .tm-mobile-summary-card.is-active {
+    box-shadow: inset 0 0 0 1.5px var(--tm-status-accent), inset 0 -4px 0 #08090a, 0 4px 9px #00000020;
+  }
+  .task-management-page .tm-mobile-dashboard--delegated-final .tm-mobile-summary-card:focus-visible,
+  .task-management-page .tm-delegated-create-fab:focus-visible {
+    outline: 2px solid #ff8c35;
+    outline-offset: 3px;
+  }
+
+  /* Reserve extra scroll space so the last task remains reachable above the FAB. */
+  body.task-management-page .next-task-classic-parity.tm-delegated-with-fab > .tm-main {
+    padding-bottom: calc(170px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  .task-management-page .tm-delegated-create-fab {
+    display: grid !important;
+    place-items: center;
+    position: fixed;
+    z-index: 1500;
+    right: max(20px, calc(env(safe-area-inset-right, 0px) + 16px));
+    bottom: calc(88px + env(safe-area-inset-bottom, 0px));
+    width: 54px;
+    height: 54px;
+    min-width: 54px;
+    min-height: 54px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: #ff7110;
+    color: #fff;
+    box-shadow: 0 5px 14px #00000026, inset 0 1px 0 #ffffff30;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .task-management-page .tm-delegated-create-fab > svg {
+    display: block;
+    width: 29px !important;
+    height: 29px !important;
+    stroke-width: 2.6;
+  }
+  .task-management-page .tm-delegated-create-fab:active {
+    background: #e96108;
+    transform: scale(.96);
+  }
+
+  /* Same frame and height while the calendar is loading — never the old white cards. */
+  .tm-calendar-only-loading .tm-mobile-dashboard--delegated-final .tm-mobile-summary-card {
+    grid-template-rows: 22px 26px;
+  }
+  .tm-calendar-only-loading .tm-mobile-dashboard--delegated-final .tm-mobile-summary-card > .classic-task-loading__line {
+    background: #555659;
+    border-radius: 6px;
+    margin: 0;
+  }
+  .tm-calendar-only-loading .tm-mobile-dashboard--delegated-final .tm-mobile-summary-card > .tm-delegated-status-label {
+    width: 92%;
+    height: 9px;
+    overflow: hidden;
+  }
+  .tm-calendar-only-loading .tm-mobile-dashboard--delegated-final .tm-mobile-summary-card > .tm-delegated-status-icon {
+    background: var(--tm-status-icon-bg);
+    border-radius: 50%;
+    height: clamp(20px, 5.7vw, 28px);
+  }
+  .tm-calendar-only-loading .tm-mobile-dashboard--delegated-final .tm-delegated-status-count-placeholder {
+    width: 24px;
+    height: 24px;
+    grid-column: 1;
+    grid-row: 2;
+  }
+}
+
+@media (max-width: 760px) {
+  /* The global dark-mode rule is important; retain the same sculpted frame in dark mode. */
+  html[data-theme="dark"] body.task-management-page .tm-mobile-dashboard--delegated-final .tm-mobile-summary-card {
+    background: linear-gradient(150deg, #303133 0%, #202122 48%, #171819 100%) !important;
+    border-color: #151515 !important;
+  }
+}
