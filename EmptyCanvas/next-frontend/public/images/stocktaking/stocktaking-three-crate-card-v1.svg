@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 220" role="img" aria-label="Three stacked black stock containers with orange tape">
+  <defs>
+    <linearGradient id="rim" x1="0" y1="0" x2=".94" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#555"/><stop offset=".17" stop-color="#171717"/><stop offset=".52" stop-color="#080808"/><stop offset=".85" stop-color="#303030"/><stop offset="1" stop-color="#060606"/>
+    </linearGradient>
+    <linearGradient id="panel" x2=".22" y2="1">
+      <stop stop-color="#292929"/><stop offset="1" stop-color="#161616"/>
+    </linearGradient>
+    <linearGradient id="left" x2=".9" y2="1">
+      <stop stop-color="#363636"/><stop offset=".6" stop-color="#202020"/><stop offset="1" stop-color="#101010"/>
+    </linearGradient>
+    <linearGradient id="front" x1="0" y1="0" x2=".25" y2="1">
+      <stop stop-color="#373737"/><stop offset=".3" stop-color="#242424"/><stop offset="1" stop-color="#0d0d0d"/>
+    </linearGradient>
+    <linearGradient id="lid" x1="0" y1="0" x2=".25" y2="1">
+      <stop stop-color="#606060"/><stop offset=".45" stop-color="#3c3c3c"/><stop offset="1" stop-color="#292929"/>
+    </linearGradient>
+    <linearGradient id="edge" x2="0" y2="1">
+      <stop stop-color="#4b4b4b"/><stop offset=".35" stop-color="#313131"/><stop offset="1" stop-color="#181818"/>
+    </linearGradient>
+    <linearGradient id="tape" x2=".6" y2="1">
+      <stop stop-color="#ffb24b"/><stop offset=".45" stop-color="#ff8319"/><stop offset="1" stop-color="#f25a00"/>
+    </linearGradient>
+    <filter id="floor-shadow" x="-.2" y="-1" width="1.4" height="3">
+      <feGaussianBlur stdDeviation="3"/>
+    </filter>
+    <filter id="box-shadow" x="-.2" y="-.2" width="1.4" height="1.5">
+      <feDropShadow dx="1" dy="2" stdDeviation="1.8" flood-color="#000" flood-opacity=".34"/>
+    </filter>
+    <radialGradient id="window">
+      <stop offset=".78" stop-color="#fff"/><stop offset="1" stop-color="#f3f3f3"/>
+    </radialGradient>
+    <clipPath id="recess"><rect x="7" y="7" width="186" height="129" rx="15"/></clipPath>
+    <symbol id="crate" viewBox="0 0 110 82">
+      <!-- Body: rounded moulded plastic, two faces, reinforcing ribs. -->
+      <g stroke="#131313" stroke-linejoin="round" stroke-width="1.1">
+        <path fill="url(#left)" d="M5 24 37 38 37 77 12 66Q6 63 6 56Z"/>
+        <path fill="url(#front)" d="M37 38 103 28 103 61Q103 67 97 69L44 79Q37 80 37 74Z"/>
+        <path fill="#161616" d="M11 33 17 36 17 60 11 57ZM24 39 30 42 30 67 24 64Z"/>
+        <path d="M13 35V57M26 41V64" fill="none" stroke="#484848" stroke-width="1"/>
+        <path fill="#1d1d1d" d="M39 40 45 39 45 75 39 76ZM93 32 99 31 99 64 93 66Z"/>
+        <path d="M44 42V73M98 35V62" fill="none" stroke="#484848"/>
+        <!-- Lid, bevel and wrap-over orange sealing tape. -->
+        <path fill="url(#edge)" d="M2 20 37 34 108 22 108 34Q108 37 104 38L38 50Q35 50 31 48L3 34Q1 33 1 29Z"/>
+        <path fill="url(#lid)" d="M2 20Q2 15 7 14L70 2Q74 1 79 3L105 15Q109 16 108 22L38 36Q34 37 29 34L4 24Q2 23 2 20Z"/>
+        <path d="M5 19Q6 17 10 17L71 5Q74 4 78 6L101 17M6 24 35 37 106 23" fill="none" stroke="#858585" stroke-opacity=".48"/>
+        <path d="M4 34 34 48 105 35" fill="none" stroke="#080808" stroke-opacity=".85"/>
+      </g>
+      <path fill="url(#tape)" d="M35 9 53 5 88 22 87 38 69 42 69 26Z"/>
+      <path d="M69 26 87 22" stroke="#ffcb78" stroke-opacity=".8" stroke-width=".9"/>
+      <path d="M70 41 86 37" stroke="#ce4800" stroke-width=".8"/>
+      <!-- Individual inventory barcode. -->
+      <g transform="matrix(1 -.17 0 1 57 52)">
+        <rect width="32" height="16" rx="2.1" fill="#fcfcfc"/>
+        <rect x="1.5" y="2" width="29" height="11" rx="1" fill="#e7e7e7"/>
+        <path d="M3 3V12M5 3V12M8 3V12M9 3V12M12 3V12M15 3V12M17 3V12M18 3V12M21 3V12M24 3V12M26 3V12M28 3V12" stroke="#3e3e3e" stroke-width=".85"/>
+        <path d="M4 14H28" stroke="#999" stroke-width=".45"/>
+      </g>
+    </symbol>
+  </defs>
+  <rect x="1" y="1" width="198" height="218" rx="23" fill="url(#rim)" stroke="#0a0a0a" stroke-width="1.5"/>
+  <rect x="3" y="3" width="194" height="214" rx="21" fill="none" stroke="#707070" stroke-opacity=".45"/>
+  <rect x="6" y="6" width="188" height="131" rx="16" fill="url(#window)" stroke="#090909" stroke-width="2"/>
+  <g clip-path="url(#recess)">
+    <ellipse cx="100" cy="121" rx="72" ry="10" fill="#000" opacity=".19" filter="url(#floor-shadow)"/>
+    <use href="#crate" x="96" y="58" width="72" height="56" filter="url(#box-shadow)"/>
+    <use href="#crate" x="32" y="62" width="83" height="62" filter="url(#box-shadow)"/>
+    <use href="#crate" x="64" y="17" width="75" height="56" filter="url(#box-shadow)"/>
+  </g>
+  <rect x="6" y="136" width="188" height="77" rx="15" fill="url(#panel)" stroke="#111" stroke-width="1.7"/>
+  <path d="M21 137H179Q193 137 193 150" fill="none" stroke="#858585" stroke-opacity=".45"/>
+  <rect x="8.5" y="146" width="5.5" height="52" rx="2.75" fill="url(#tape)"/>
+  <path d="M11 149V195" stroke="#ffae49" stroke-width=".8" stroke-linecap="round"/>
+</svg>

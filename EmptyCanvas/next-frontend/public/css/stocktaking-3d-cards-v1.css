@@ -1,0 +1,166 @@
+/* ERP_STOCKTAKING_3D_CARDS_V1 — Stocktaking index only.
+   Keep all existing card buttons, labels, counts, context menu and workspace logic.
+   The self-contained SVG replaces the old paper illustration and pocket. */
+body.stocktaking-page .next-stocktaking-classic-parity.next-stocktaking-folders-page:not(.erp-stocktaking-skeleton) > .stocktaking-folders-card > .stocktaking-folder-grid > article.stocktaking-proposal-folder {
+  box-sizing: border-box !important;
+  position: relative !important;
+  display: block !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  aspect-ratio: 10 / 11;
+  border: 0 !important;
+  border-radius: 10% !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+body.stocktaking-page .next-stocktaking-classic-parity.next-stocktaking-folders-page:not(.erp-stocktaking-skeleton) > .stocktaking-folders-card > .stocktaking-folder-grid > article.stocktaking-proposal-folder > button.stocktaking-proposal-folder__main {
+  --erp-stock-card-type: .86rem;
+  position: absolute !important;
+  inset: 0 !important;
+  isolation: isolate;
+  box-sizing: border-box !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  padding: 0 8% 7% 9% !important;
+  display: grid !important;
+  grid-template-rows: 67% minmax(0,1fr) auto !important;
+  grid-template-columns: minmax(0,1fr) !important;
+  gap: 1px !important;
+  align-items: center !important;
+  justify-items: stretch !important;
+  border: 0 !important;
+  border-radius: 10% !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+  color: #fff !important;
+  text-align: center !important;
+}
+body.stocktaking-page .next-stocktaking-classic-parity.next-stocktaking-folders-page:not(.erp-stocktaking-skeleton) > .stocktaking-folders-card > .stocktaking-folder-grid > article.stocktaking-proposal-folder > button.stocktaking-proposal-folder__main::before,
+body.stocktaking-page .next-stocktaking-classic-parity.next-stocktaking-folders-page:not(.erp-stocktaking-skeleton) > .stocktaking-folders-card > .stocktaking-folder-grid > article.stocktaking-proposal-folder > button.stocktaking-proposal-folder__main::after {
+  content: none !important;
+  display: none !important;
+}
+body.stocktaking-page .next-stocktaking-classic-parity.next-stocktaking-folders-page:not(.erp-stocktaking-skeleton) > .stocktaking-folders-card > .stocktaking-folder-grid > article.stocktaking-proposal-folder > button.stocktaking-proposal-folder__main > .stocktaking-proposal-folder-figure {
+  box-sizing: border-box !important;
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 0 !important;
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  transform: none !important;
+  background: url("/next/images/stocktaking/stocktaking-three-crate-card-v1.svg") center / 100% 100% no-repeat !important;
+  filter: drop-shadow(0 3px 3px rgba(0,0,0,.24));
+  pointer-events: none !important;
+}
+body.stocktaking-page .next-stocktaking-classic-parity.next-stocktaking-folders-page:not(.erp-stocktaking-skeleton) > .stocktaking-folders-card > .stocktaking-folder-grid > article.stocktaking-proposal-folder > button.stocktaking-proposal-folder__main > .stocktaking-proposal-folder-figure > span {
+  display: none !important;
+}
+body.stocktaking-page .next-stocktaking-classic-parity.next-stocktaking-folders-page:not(.erp-stocktaking-skeleton) > .stocktaking-folders-card > .stocktaking-folder-grid > article.stocktaking-proposal-folder > button.stocktaking-proposal-folder__main > .stocktaking-proposal-folder-copy {
+  position: relative !important;
+  inset: auto !important;
+  z-index: 2 !important;
+  grid-row: 2;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  gap: 1px !important;
+  background: transparent !important;
+  text-align: center !important;
+  container-type: size;
+  container-name: erp-stock-label;
+  font-size: var(--erp-stock-card-type) !important;
+}
+body.stocktaking-page .next-stocktaking-classic-parity.next-stocktaking-folders-page:not(.erp-stocktaking-skeleton) > .stocktaking-folders-card > .stocktaking-folder-grid > article.stocktaking-proposal-folder > button.stocktaking-proposal-folder__main > .stocktaking-proposal-folder-copy > strong {
+  margin: 0 !important;
+  width: 100% !important;
+  color: #fff !important;
+  font-size: var(--erp-stock-card-type) !important;
+  font-weight: 800 !important;
+  line-height: 1.05 !important;
+  letter-spacing: -.025em !important;
+  text-align: center !important;
+  text-overflow: ellipsis !important;
+  white-space: normal !important;
+  overflow: hidden !important;
+  overflow-wrap: anywhere !important;
+  display: -webkit-box !important;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  max-height: 2.1em;
+  flex-shrink: 0;
+}
+body.stocktaking-page .next-stocktaking-classic-parity.next-stocktaking-folders-page:not(.erp-stocktaking-skeleton) > .stocktaking-folders-card > .stocktaking-folder-grid > article.stocktaking-proposal-folder > button.stocktaking-proposal-folder__main > .stocktaking-proposal-folder-copy > em {
+  display: block !important;
+  margin: 0 !important;
+  color: #d2d2d2 !important;
+  font-size: calc(var(--erp-stock-card-type) * .76) !important;
+  font-weight: 500 !important;
+  font-style: normal !important;
+  line-height: 1.12 !important;
+  white-space: nowrap !important;
+  flex-shrink: 0;
+}
+body.stocktaking-page .next-stocktaking-classic-parity.next-stocktaking-folders-page:not(.erp-stocktaking-skeleton) > .stocktaking-folders-card > .stocktaking-folder-grid > article.stocktaking-proposal-folder > button.stocktaking-proposal-folder__main > .stocktaking-proposal-folder-count {
+  position: relative !important;
+  inset: auto !important;
+  grid-row: 3;
+  z-index: 2 !important;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  gap: .34em !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  color: #fff !important;
+  font-size: calc(var(--erp-stock-card-type) * .87) !important;
+  font-weight: 750 !important;
+  line-height: 1.12 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+}
+body.stocktaking-page .next-stocktaking-classic-parity.next-stocktaking-folders-page:not(.erp-stocktaking-skeleton) > .stocktaking-folders-card > .stocktaking-folder-grid > article.stocktaking-proposal-folder > button.stocktaking-proposal-folder__main > .stocktaking-proposal-folder-count > span[aria-hidden="true"] {
+  display: none !important;
+}
+body.stocktaking-page .next-stocktaking-classic-parity.next-stocktaking-folders-page:not(.erp-stocktaking-skeleton) > .stocktaking-folders-card > .stocktaking-folder-grid > article.stocktaking-proposal-folder > button.stocktaking-proposal-folder__main > .stocktaking-proposal-folder-count::before {
+  content: "" !important;
+  display: block !important;
+  width: 1em !important;
+  height: .75em !important;
+  flex: 0 0 1em !important;
+  background: center / contain no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 14' fill='none' stroke='white' stroke-width='2'%3E%3Crect x='1.5' y='2.5' width='17' height='9' rx='1.5'/%3E%3Cpath d='M7 7h6' stroke-linecap='round'/%3E%3C/svg%3E") !important;
+}
+@media (max-width: 720px) {
+  body.stocktaking-page .next-stocktaking-classic-parity.next-stocktaking-folders-page:not(.erp-stocktaking-skeleton) > .stocktaking-folders-card > .stocktaking-folder-grid > article.stocktaking-proposal-folder > button.stocktaking-proposal-folder__main {
+    --erp-stock-card-type: clamp(.55rem, 2.65vw, 1rem);
+  }
+}
+/* At compact sizes, keep the label and count inside the black panel. The
+   original accessible name still contains the full folder title. */
+@container erp-stock-label (max-height: 2.85em) {
+  body.stocktaking-page .next-stocktaking-classic-parity.next-stocktaking-folders-page:not(.erp-stocktaking-skeleton) > .stocktaking-folders-card > .stocktaking-folder-grid > article.stocktaking-proposal-folder > button.stocktaking-proposal-folder__main > .stocktaking-proposal-folder-copy > strong {
+    display: block !important;
+    white-space: nowrap !important;
+    max-height: 1.05em;
+  }
+}
