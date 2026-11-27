@@ -53,11 +53,13 @@ export function taskTicketVisible(ticket, resolved, scopedAssignments = []) {
   if (resolved?.scope === null || resolved?.scope === "all") return true;
   if (resolved?.scope === "none") return false;
   if (taskOwnerAllowed(ticket, resolved.scope, resolved.visibleIds)) return true;
+  if (ticket.kind === "task") return resolved.visibleIds.includes(clean(ticket.directAssigneeId));
   const sections = new Set((ticket?.sections || []).map(row => clean(row.id)).filter(Boolean));
   return scopedAssignments.some(row => sections.has(clean(row.section_id)) && resolved.visibleIds.includes(clean(row.assignee_id)));
 }
 
 export function scopedTaskTicket(ticket, assignments = []) {
+  if (ticket.kind === "task") return { ...ticket, scopeAssigneeIds: [clean(ticket.directAssigneeId)].filter(Boolean) };
   const sections = new Set((ticket.sections || []).map(row => clean(row.id)));
   const scopeAssigneeIds = [...new Set(assignments.filter(row => sections.has(clean(row.section_id))).map(row => clean(row.assignee_id)).filter(Boolean))];
   return { ...ticket, scopeAssigneeIds };
@@ -95,6 +97,12 @@ export async function assertTaskActionScope(context, permissionKey, action, payl
   const projectId = sectionRow ? clean(sectionRow.ticket_id) : objectId;
   const ticket = await selectById(ticketsTable(), projectId);
   if (!ticket) denial("Task project not found.", 404);
+  if (action === "ticket-task-work") {
+    const memberId = clean(context.memberId || ownId(context.account));
+    if (ticket.ticket_kind !== "task" || !memberId || clean(ticket.direct_assignee_id) !== memberId || context.view !== "my") denial("Only the assigned person can update this task.");
+    if (!taskAssigneeAllowed({ assignee_id: ticket.direct_assignee_id }, resolved.scope, resolved.visibleIds)) denial("Task is outside your permitted data scope.");
+    return;
+  }
   if (resolved.scope === "all") return;
   if (assignmentAction) {
     if (!taskAssigneeAllowed(assigneeRow, resolved.scope, resolved.visibleIds)) denial("Task assignment is outside your permitted data scope.");

@@ -451,8 +451,80 @@ function validateProjectPayload(payload = {}) {
   return { title, description, priority: normalizedPriority, dueDate, ...plan };
 }
 
+// A direct task is a ticket with one authenticated assignee and no workflow blocks.
+function directTaskFields(payload = {}) {
+  const title = text(payload.title, 500);
+  const dueDate = dateValue(payload.dueDate);
+  const rawPriority = text(payload.priority, 30).toLowerCase();
+  if (!title) throw errorWithStatus("Task title is required.");
+  if (!dueDate || Number.isNaN(Date.parse(dueDate)) || new Date(dueDate).toISOString().slice(0, 10) !== dueDate) throw errorWithStatus("A valid task due date is required.");
+  if (!["urgent", "high", "normal", "low"].includes(rawPriority)) throw errorWithStatus("Task priority is required.");
+  return { title, description: text(payload.description, 8000) || null, priority: priority(rawPriority), due_date: dueDate };
+}
+
+function assertDirectTaskCreator(ticket, currentUser, context) {
+  if (ticket.kind !== "task") return;
+  if (!currentUser.id || (ticket.createdById !== currentUser.id && !context.isPageAdmin)) {
+    throw errorWithStatus("Only the task creator or an admin can manage this task.", 403);
+  }
+}
+
+async function createDirectTask(context, payload) {
+  const currentUser = taskManagementCurrentMember(context);
+  if (!currentUser.id) throw errorWithStatus("Your member identity could not be verified.", 403);
+  const fields = directTaskFields(payload);
+  const assigneeId = text(payload.assigneeId, 120);
+  if (!assigneeId) throw errorWithStatus("Select one assignee.");
+  const members = await listTeamMembersLite({ fresh: true });
+  const assignee = members.find((member) => text(member.id) === assigneeId);
+  if (!assignee) throw errorWithStatus("The selected assignee is not a valid team member.");
+  let created;
+  try {
+    created = await insert(ticketsTable(), {
+      ...fields,
+      ticket_kind: "task",
+      direct_assignee_id: assigneeId,
+      direct_assignee_name: assignee.name,
+      status: "not_started",
+      created_by_id: currentUser.id,
+      created_by_name: currentUser.name,
+    });
+  } catch (error) {
+    if (/ticket_kind|direct_assignee_/i.test(text(error?.message)) && ["42703", "PGRST204"].includes(error?.details?.code)) {
+      throw errorWithStatus("Run the Individual Tasks SQL migration before creating a task.", 503);
+    }
+    throw error;
+  }
+  const id = idFor(created);
+  if (!id) throw errorWithStatus("Task was created without an ID.", 500);
+  return await loadRawTaskManagementTicket(id);
+}
+
+export async function updateDirectTaskWork(context, ticketId, payload = {}) {
+  const id = text(ticketId);
+  if (!id) throw errorWithStatus("Missing task ID.");
+  const ticket = await loadRawTaskManagementTicket(id);
+  if (!ticket || ticket.kind !== "task") throw errorWithStatus("Individual task not found.", 404);
+  const user = taskManagementCurrentMember(context);
+  if (context.view !== "my" || !user.id || ticket.directAssigneeId !== user.id) throw errorWithStatus("Only the assigned person can update this task from My Tasks.", 403);
+  if (ticket.isArchived) throw errorWithStatus("This task is archived.", 409);
+  const status = text(payload.status);
+  if (!["not_started", "in_progress", "completed", "rejected"].includes(status)) throw errorWithStatus("Invalid task status.");
+  const rejectionReason = text(payload.rejectionReason, 8000);
+  if (status === "rejected" && !rejectionReason) throw errorWithStatus("A rejection reason is required.");
+  await updateById(ticketsTable(), id, {
+    status,
+    direct_work_report: text(payload.workReport, 8000) || null,
+    direct_rejection_reason: status === "rejected" ? rejectionReason : null,
+    updated_at: new Date().toISOString(),
+  });
+  return await loadRawTaskManagementTicket(id);
+}
+
 export async function createTaskManagementTicket(context, payload = {}) {
-  if (context?.view !== "delegated") throw errorWithStatus("Projects can be created from Delegated Tasks only.", 403);
+  if (context?.view !== "delegated") throw errorWithStatus("Tasks and projects can be created from Delegated Tasks only.", 403);
+  if (payload.kind === "task") return await createDirectTask(context, payload);
+  if (payload.kind && payload.kind !== "project") throw errorWithStatus("Invalid ticket type.");
   const project = validateProjectPayload(payload);
   const currentUser = taskManagementCurrentMember(context);
   const created = await insert(ticketsTable(), {
@@ -507,7 +579,14 @@ export async function updateTaskManagementTicket(context, ticketId, payload = {}
   if (!existingTicket) throw errorWithStatus("Project not found.", 404);
   const currentUser = taskManagementCurrentMember(context);
   if (!taskManagementTicketBelongsToView(existingTicket, currentUser, context.view)) throw errorWithStatus("This project is not available in the selected Task Management view.", 403);
+  assertDirectTaskCreator(existingTicket, currentUser, context);
   await authorizeAdmin(context, payload?.adminPassword);
+  if (existingTicket.kind === "task") {
+    if (existingTicket.isArchived) throw errorWithStatus("Restore the task before editing it.", 409);
+    // The assignee is immutable here; editing cannot silently transfer another person's task.
+    await updateById(ticketsTable(), cleanId, { ...directTaskFields(payload), updated_at: new Date().toISOString() });
+    return await loadRawTaskManagementTicket(cleanId);
+  }
   const project = validateProjectPayload(payload);
   const now = new Date().toISOString();
   await updateById(ticketsTable(), cleanId, {
@@ -567,6 +646,7 @@ export async function markTaskManagementDelivered(context, ticketId) {
   const cleanId = text(ticketId);
   const ticket = await loadRawTaskManagementTicket(cleanId);
   if (!ticket) throw errorWithStatus("Project not found.", 404);
+  if (ticket.kind === "task") throw errorWithStatus("Individual tasks are completed by their assigned person in My Tasks.", 403);
   const currentUser = taskManagementCurrentMember(context);
   if (!taskManagementSameMember(ticket, currentUser) && !context.isPageAdmin) throw errorWithStatus("Only the project creator or an admin can mark it as delivered.", 403);
   if (ticket.isArchived) throw errorWithStatus("Unarchive this project before marking it as delivered.", 409);
@@ -595,6 +675,7 @@ export async function archiveTaskManagementTicket(context, ticketId, { archived 
   if (!ticket) throw errorWithStatus("Project not found.", 404);
   const currentUser = taskManagementCurrentMember(context);
   if (!taskManagementTicketBelongsToView(ticket, currentUser, context.view)) throw errorWithStatus("This project is not available in the selected Task Management view.", 403);
+  assertDirectTaskCreator(ticket, currentUser, context);
   await authorizeAdmin(context, adminPassword);
   const shouldArchive = archived !== false;
   const now = new Date().toISOString();
@@ -626,6 +707,7 @@ export async function deleteTaskManagementTicket(context, ticketId, { adminPassw
     ? ((taskManagementArchivedByMember(ticket, currentUser) && taskManagementArchiveView(ticket) === context.view) || context.isPageAdmin)
     : taskManagementTicketBelongsToView(ticket, currentUser, context.view);
   if (!isAvailable) throw errorWithStatus("This project is not available in the selected Task Management view.", 403);
+  assertDirectTaskCreator(ticket, currentUser, context);
   await authorizeAdmin(context, adminPassword);
   await deleteById(ticketsTable(), cleanId);
   return { deletedId: cleanId };

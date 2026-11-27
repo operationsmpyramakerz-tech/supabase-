@@ -17,6 +17,7 @@ import {
   saveTaskManagementPeopleWorkflow,
   taskManagementMutationError,
   updateTaskManagementAssignmentWork,
+  updateDirectTaskWork,
   updateTaskManagementSection,
   updateTaskManagementSectionWork,
   updateTaskManagementTicket,
@@ -40,6 +41,7 @@ function json(payload, status = 200) {
 const ACTION_PERMISSION = Object.freeze({
   "ticket-create": "tasks.project_create",
   "ticket-update": "tasks.project_edit",
+  "ticket-task-work": "tasks.assignment_work",
   "ticket-archive": "tasks.project_archive",
   "ticket-delete": "tasks.project_delete",
   "ticket-mark-delivered": "tasks.mark_delivered",
@@ -76,6 +78,10 @@ export async function POST(request) {
     }
     if (action === "ticket-update") {
       const ticket = await updateTaskManagementTicket(context, body?.ticketId || body?.id, body);
+      return json({ ok: true, ticket, source: "supabase-next" });
+    }
+    if (action === "ticket-task-work") {
+      const ticket = await updateDirectTaskWork(context, body?.ticketId || body?.id, body);
       return json({ ok: true, ticket, source: "supabase-next" });
     }
     if (action === "ticket-archive") {

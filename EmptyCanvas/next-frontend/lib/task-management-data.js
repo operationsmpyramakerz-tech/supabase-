@@ -37,6 +37,8 @@ const TICKET_SUMMARY_SELECT = [
   "archived_from_view",
 ].join(",");
 
+const DIRECT_TASK_SUMMARY_SELECT = TICKET_SUMMARY_SELECT + ",ticket_kind,direct_assignee_id,direct_assignee_name";
+
 const SECTION_SUMMARY_SELECT = [
   "id",
   "ticket_id",
@@ -275,12 +277,16 @@ function statusFromSections(sections = []) {
 
 function serializeTicket(row = {}, sectionRows = [], edgeRows = [], { summary = false } = {}) {
   const id = ticketId(row);
-  const sections = sectionRows.map((item) => serializeSection(item, { summary })).sort((a, b) => (a.executionGroup - b.executionGroup) || (a.sortOrder - b.sortOrder) || Number(a.id) - Number(b.id));
-  const calculatedStatus = statusFromSections(sections);
-  const completedCount = sections.filter((section) => section.status === "completed").length;
+  const kind = row.ticket_kind === "task" ? "task" : "project";
+  const sections = (kind === "task" ? [] : sectionRows).map((item) => serializeSection(item, { summary })).sort((a, b) => (a.executionGroup - b.executionGroup) || (a.sortOrder - b.sortOrder) || Number(a.id) - Number(b.id));
+  const calculatedStatus = kind === "task" ? normalizeStatus(row.status) : statusFromSections(sections);
+  const sectionsCount = kind === "task" ? 1 : sections.length;
+  const completedCount = kind === "task" ? Number(calculatedStatus === "completed") : sections.filter((section) => section.status === "completed").length;
   const base = {
     id,
     ticketCode: ticketCode(row),
+    kind,
+    ...(kind === "task" ? { directAssigneeId: text(row.direct_assignee_id, 120), directAssigneeName: text(row.direct_assignee_name, 180) } : {}),
     title: text(valueFor(row, ["title", "Title", "name", "Name"]), 500) || "Untitled ticket",
     priority: priority(valueFor(row, ["priority", "Priority"])),
     dueDate: dateValue(valueFor(row, ["due_date", "dueDate", "deadline", "Deadline"])),
@@ -296,15 +302,16 @@ function serializeTicket(row = {}, sectionRows = [], edgeRows = [], { summary = 
     archivedByName: text(valueFor(row, ["archived_by_name", "archivedByName"]), 180),
     archivedFromView: text(valueFor(row, ["archived_from_view", "archivedFromView"]), 30),
     sections,
-    sectionsCount: sections.length,
+    sectionsCount,
     completedCount,
-    progress: sections.length ? Math.round((completedCount / sections.length) * 100) : 0,
+    progress: sectionsCount ? Math.round((completedCount / sectionsCount) * 100) : 0,
   };
   if (summary) return base;
   return {
     ...base,
     description: text(valueFor(row, ["description", "details", "Description"]), 8000),
-    edges: edgeRows.map(serializeEdge).filter((edge) => edge.from && edge.to),
+    ...(kind === "task" ? { directWorkReport: text(row.direct_work_report, 8000), directRejectionReason: text(row.direct_rejection_reason, 8000) } : {}),
+    edges: (kind === "task" ? [] : edgeRows).map(serializeEdge).filter((edge) => edge.from && edge.to),
   };
 }
 
@@ -342,6 +349,13 @@ function archiveView(ticket = {}) {
 }
 
 function belongsToView(ticket = {}, member = {}, view = "") {
+  if (ticket.kind === "task") {
+    if (ticket.isArchived) return !!member.id && ticket.archivedById === member.id && archiveView(ticket) === view;
+    if (view === "all") return true;
+    if (!member.id) return false;
+    return view === "delegated" ? ticket.createdById === member.id
+      : view === "my" && ticket.directAssigneeId === member.id;
+  }
   if (ticket.isArchived) return archivedByMember(ticket, member) && archiveView(ticket) === view;
   if (view === "all") return true;
   if (view === "delegated") return sameMember(ticket, member);
@@ -432,7 +446,7 @@ async function assignmentsForMember(member = {}) {
 }
 
 function viewerProgress(ticket = {}, member = {}, context = {}, assignmentRows = []) {
-  if (context.view !== "my") {
+  if (ticket.kind === "task" || context.view !== "my") {
     return { viewerSectionsCount: ticket.sectionsCount, viewerCompletedCount: ticket.completedCount, viewerProgress: ticket.progress };
   }
   if (canManageDepartment(context)) {
@@ -455,11 +469,16 @@ function viewerProgress(ticket = {}, member = {}, context = {}, assignmentRows =
 
 
 async function loadTicketRows() {
-  const rows = await select(ticketsTable(), {
-    select: TICKET_SUMMARY_SELECT,
-    limit: "5000",
-    order: "created_at.desc,id.desc",
-  });
+  const options = { limit: "5000", order: "created_at.desc,id.desc" };
+  let rows;
+  try {
+    rows = await select(ticketsTable(), { ...options, select: DIRECT_TASK_SUMMARY_SELECT });
+  } catch (error) {
+    // Older deployments remain readable until the additive migration runs.
+    // Do not swallow authorization, connection, or partial-schema errors.
+    if (!/ticket_kind/i.test(String(error?.message)) || !["42703", "PGRST204"].includes(error?.details?.code)) throw error;
+    rows = await select(ticketsTable(), { ...options, select: TICKET_SUMMARY_SELECT });
+  }
   return Array.isArray(rows) ? rows : [];
 }
 
@@ -491,7 +510,7 @@ async function loadSummaryTickets(context = {}) {
   const scopedAssignments = await visibleTaskAssignments(context, scoped);
   if (needsAssignments) {
     const assignedSectionIds = new Set([...assignmentRows, ...scopedAssignments].map((row) => text(valueFor(row, ["section_id", "sectionId"]))).filter(Boolean));
-    tickets = tickets.filter((ticket) => ticket.sections.some((section) => assignedSectionIds.has(text(section.id))));
+    tickets = tickets.filter((ticket) => ticket.kind === "task" || ticket.sections.some((section) => assignedSectionIds.has(text(section.id))));
   }
   tickets = tickets.filter((ticket) => taskTicketVisible(ticket, scoped, scopedAssignments));
   return tickets.map((ticket) => scoped.scope === null
@@ -504,6 +523,7 @@ export async function loadRawTaskManagementTicket(id) {
   if (!cleanId) return null;
   const row = await selectById(ticketsTable(), cleanId);
   if (!row) return null;
+  if (row.ticket_kind === "task") return serializeTicket(row);
   const [sectionRows, edgeRows] = await Promise.all([
     select(sectionsTable(), { select: "*", ticket_id: `eq.${cleanId}`, limit: "1000", order: "sort_order.asc,id.asc" }),
     select(edgesTable(), { select: "*", ticket_id: `eq.${cleanId}`, limit: "3000", order: "id.asc" }),
@@ -589,6 +609,9 @@ export async function taskManagementMeta(context = {}, { force = false } = {}) {
     view: context.view,
     currentUser: currentMember(context),
     departments,
+    ...(context.view === "delegated" && featureGate(context, "tasks.project_create").ok ? {
+      taskAssignees: members.map(({ id, name, department }) => ({ id, name, department })),
+    } : {}),
     accessLevel: context.accessLevel || "view",
     isPageAdmin: !!context.isPageAdmin,
     scopePolicy: await taskUiScopePolicy(context.account),
@@ -682,4 +705,5 @@ export const __taskManagementDataTest = {
   serializeTicket,
   taskViewAccess,
   belongsToView,
+  viewerProgress,
 };

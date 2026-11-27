@@ -1044,7 +1044,8 @@ function AdminActionModal({ action, ticket, view, onClose, onVerified }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   if (!action || !ticket) return null;
-  const label = action === "delete" ? "Delete project" : action === "archive" ? (ticket.isArchived ? "Restore project" : "Archive project") : "Edit project workflow";
+  const item = ticket.kind === "task" ? "task" : "project";
+  const label = action === "delete" ? `Delete ${item}` : action === "archive" ? `${ticket.isArchived ? "Restore" : "Archive"} ${item}` : ticket.kind === "task" ? "Edit task" : "Edit project workflow";
   const submit = async (event) => {
     event.preventDefault();
     if (!text(password)) return setError("Enter the admin password.");
@@ -1072,9 +1073,10 @@ function ProjectConfirmModal({ confirmAction, onCancel, onConfirm }) {
   const { type, ticket } = confirmAction;
   const restoring = type === "archive" && !!ticket.isArchived;
   const deleting = type === "delete";
-  const title = deleting ? "Delete project?" : (restoring ? "Restore project?" : "Archive project?");
+  const item = ticket.kind === "task" ? "task" : "project";
+  const title = deleting ? `Delete ${item}?` : (restoring ? `Restore ${item}?` : `Archive ${item}?`);
   const message = deleting
-    ? `“${ticket.title || ticket.ticketCode || "This project"}” will be permanently deleted with its workflow blocks, arrows, team assignments, reports, and files.`
+    ? `“${ticket.title || ticket.ticketCode || "This " + item}” will be permanently deleted${item === "task" ? " with its work report." : " with its workflow blocks, arrows, team assignments, reports, and files."}`
     : restoring
       ? `“${ticket.title || ticket.ticketCode || "This project"}” will be restored and visible again to the users who normally have access to it.`
       : `“${ticket.title || ticket.ticketCode || "This project"}” will be hidden from everyone and kept only in your Archive tab on this Task Management page.`;
