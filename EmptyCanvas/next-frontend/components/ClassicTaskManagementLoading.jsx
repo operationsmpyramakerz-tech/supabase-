@@ -1,3 +1,4 @@
+import TaskCalendarLoadingContent from "./task-management/TaskCalendarLoadingContent";
 import ShellStyleLinks from "./ShellStyleLinks";
 import { BodyClassSync } from "./ClassicShellControls";
 import { ClassicStableLoadingHeader, ClassicStableLoadingSidebar } from "./ClassicStableLoadingChrome";
@@ -15,6 +16,7 @@ export default function ClassicTaskManagementLoading() {
         <div className="main-content">
           <ClassicStableLoadingHeader title={"Task Management"} />
           <main className="container-full-width next-classic-page-content">
+            <TaskCalendarLoadingContent>
             <section className="next-task-page task-management-page classic-task-loading">
               <div className="next-task-viewbar classic-task-loading__viewbar"><div><span /><span /><span /></div><div><span /><span /></div></div>
               <div className="next-task-layout tm-agenda-layout">
@@ -25,6 +27,7 @@ export default function ClassicTaskManagementLoading() {
                 <section className="tm-tasks-column"><div className="tm-toolbar tm-orders-toolbar classic-task-loading__toolbar"><span /><span /><span /><span /><span /></div><div className="tm-ticket-grid">{Array.from({ length: 4 }, (_, i) => <article className="tm-ticket-card classic-task-loading__ticket" key={i}><div className="classic-task-loading__line wide" /><div className="classic-task-loading__line" /><div className="classic-task-loading__line wide" /></article>)}</div></section>
               </div>
             </section>
+            </TaskCalendarLoadingContent>
           </main>
         </div>
       </div>

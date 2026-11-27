@@ -1,0 +1,79 @@
+/* ERP_TASKS_CALENDAR_ONLY_V1 — All Tasks only.
+   Mobile keeps the weekly dashboard; desktop keeps the monthly agenda.
+   No duplicate task list or empty second grid column. */
+.task-management-page .tm-agenda-layout.tm-agenda-layout--calendar-only {
+  grid-template-columns: minmax(0,1fr) !important;
+}
+.task-management-page .tm-agenda-layout--calendar-only > .tm-agenda-column {
+  position: static !important;
+  grid-template-columns: minmax(0,1fr) minmax(0,1fr);
+  align-items: start;
+}
+@media (max-width: 760px) {
+  .task-management-page .tm-agenda-layout.tm-agenda-layout--calendar-only {
+    display: none !important;
+  }
+}
+.task-management-page .tm-calendar-only-archive {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  margin-left: auto;
+  padding: 0;
+  border: 1px solid rgba(127,127,127,.25);
+  border-radius: 10px;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+.task-management-page .tm-calendar-only-archive svg {
+  width: 16px !important;
+  height: 16px !important;
+}
+.task-management-page .tm-calendar-only-archive[aria-pressed="true"] {
+  color: #ea580c;
+  border-color: #f97316;
+  background: rgba(249,115,22,.10);
+}
+/* Mobile loading displays the same three upper groups, without the old list. */
+.task-management-page .tm-calendar-only-loading .tm-main { min-height: 0; }
+.tm-calendar-only-loading .tm-calendar-only-loading__toolbar > span,
+.tm-calendar-only-loading .tm-calendar-only-loading__day,
+.tm-calendar-only-loading .tm-calendar-only-loading__task > span,
+.tm-calendar-only-loading .classic-task-loading__line,
+.tm-calendar-only-loading .classic-task-loading__calendar-grid > span {
+  display: block;
+  background: #e7e9ee;
+  overflow: hidden;
+  position: relative;
+}
+.tm-calendar-only-loading .tm-calendar-only-loading__toolbar > span::after,
+.tm-calendar-only-loading .tm-calendar-only-loading__day::after,
+.tm-calendar-only-loading .tm-calendar-only-loading__task > span::after,
+.tm-calendar-only-loading .classic-task-loading__line::after,
+.tm-calendar-only-loading .classic-task-loading__calendar-grid > span::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg,transparent,rgba(255,255,255,.48),transparent);
+  transform: translateX(-100%);
+  animation: erpTaskCalendarLoading 1.5s ease-in-out infinite;
+}
+@keyframes erpTaskCalendarLoading { to { transform: translateX(100%); } }
+@media (max-width: 760px) {
+  .tm-calendar-only-loading .tm-calendar-only-loading__toolbar > span { height: 40px; border-radius: 10px; }
+  .tm-calendar-only-loading .tm-calendar-only-loading__toolbar > span:nth-child(2) { width: 64%; height: 25px; justify-self: center; }
+  .tm-calendar-only-loading .tm-calendar-only-loading__day { min-height: 64px; border-radius: 14px; }
+  .tm-calendar-only-loading .tm-mobile-summary-card { display: flex; flex-direction: column; gap: 10px; }
+  .tm-calendar-only-loading .tm-mobile-summary-card > .classic-task-loading__line:nth-child(2) { height: 24px; width: 25%; }
+  .tm-calendar-only-loading .tm-calendar-only-loading__task { display: flex; gap: 10px; align-items: center; padding: 10px; margin-top: 10px; border: 1px solid rgba(127,127,127,.12); border-radius: 17px; }
+  .tm-calendar-only-loading .tm-calendar-only-loading__task > span { width: 50px; height: 50px; border-radius: 13px; flex: 0 0 50px; }
+  .tm-calendar-only-loading .tm-calendar-only-loading__task > div { display: grid; gap: 6px; flex: 1; }
+}
+html[data-theme="dark"] .tm-calendar-only-loading :is(.tm-calendar-only-loading__toolbar > span,.tm-calendar-only-loading__day,.tm-calendar-only-loading__task > span,.classic-task-loading__line,.classic-task-loading__calendar-grid > span) { background: #30343b; }
+@media (prefers-reduced-motion: reduce) {
+  .tm-calendar-only-loading :is(.tm-calendar-only-loading__toolbar > span,.tm-calendar-only-loading__day,.tm-calendar-only-loading__task > span,.classic-task-loading__line,.classic-task-loading__calendar-grid > span)::after { animation: none; }
+}

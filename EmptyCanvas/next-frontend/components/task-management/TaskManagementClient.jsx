@@ -233,7 +233,7 @@ function StatusPill({ status, archived = false, onRejected = null }) {
 }
 
 
-function CalendarAgenda({ tickets, selectedDate, onSelectDate, month, onMonthChange, onOpenTicket, view }) {
+function CalendarAgenda({ tickets, selectedDate, onSelectDate, month, onMonthChange, onOpenTicket, view, showArchiveControl = false, archiveActive = false, onToggleArchive }) {
   const year = month.getFullYear();
   const monthIndex = month.getMonth();
   const firstMondayOffset = (new Date(year, monthIndex, 1).getDay() + 6) % 7;
@@ -277,6 +277,7 @@ function CalendarAgenda({ tickets, selectedDate, onSelectDate, month, onMonthCha
         <div className="tm-day-tasks-head">
           <div className="tm-day-date-block"><b>{selected.getDate()}</b><span>{selected.toLocaleDateString(undefined, { weekday: "long" })}</span></div>
           <div className="tm-day-tasks-title"><span>{isToday ? "Today" : selected.toLocaleDateString(undefined, { month: "short", year: "numeric" })}</span><h2>{isToday ? "Today tasks" : `Tasks on ${selected.toLocaleDateString(undefined, { day: "numeric", month: "short" })}`}</h2></div>
+          {showArchiveControl ? <button type="button" className="tm-calendar-only-archive" aria-label={archiveActive ? "Show active tasks" : "Show archived tasks"} title={archiveActive ? "Show active tasks" : "Show archived tasks"} aria-pressed={archiveActive} onClick={onToggleArchive}><FeatherIcon name="archive" /></button> : null}
           <span className="tm-day-tasks-count">{selectedTasks.length}</span>
         </div>
         <div className="tm-day-task-list" aria-live="polite">
@@ -284,7 +285,7 @@ function CalendarAgenda({ tickets, selectedDate, onSelectDate, month, onMonthCha
             const stats = ticketStats(ticket, view);
             return <article className="tm-agenda-task" role="button" tabIndex={0} onClick={() => onOpenTicket(ticket)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") onOpenTicket(ticket); }} key={ticket.id}>
               <span className={`tm-agenda-task__priority tm-agenda-task__priority--${priorityKey(ticket.priority)}`} />
-              <span className="tm-agenda-task__body"><small>{ticket.ticketCode}</small><b>{ticket.title}</b><span>{statusLabel(ticket.status)} · {stats.completed}/{stats.total} complete</span></span>
+              <span className="tm-agenda-task__body"><small>{ticket.ticketCode}</small><b>{ticket.title}</b><span>{view === "all" && ticket.isArchived ? "Archived" : statusLabel(ticket.status)} · {stats.completed}/{stats.total} complete</span></span>
               <span className="tm-agenda-task__actions"><span className={`tm-agenda-task__progress-ring tm-status--${ticket.status}`} style={{ "--tm-agenda-progress": `${stats.progress}%` }}><b>{stats.progress}%</b></span><CreatorProfileButton ticket={ticket} className="tm-agenda-task__creator" /></span>
             </article>;
           }) : <div className="tm-agenda-empty"><FeatherIcon name="calendar" /><b>No tasks on this date</b><span>Select a dark calendar day to view its scheduled tasks.</span></div>}
@@ -305,12 +306,20 @@ function MobileTaskDashboard({ tickets, view, selectedDate, onSelectDate, onOpen
     day.setDate(weekStart.getDate() + index);
     return day;
   });
-  const liveTickets = (Array.isArray(tickets) ? tickets : []).filter((ticket) => !ticket?.isArchived);
-  const selectedTasks = liveTickets
+  const allTickets = Array.isArray(tickets) ? tickets : [];
+  const liveTickets = allTickets.filter((ticket) => !ticket?.isArchived);
+  // On All Tasks, the calendar is now the only task list. The existing status
+  // cards must filter it directly, while My/Delegated retain their old behavior.
+  const archiveActive = view === "all" && activeStatus === "archived";
+  const showArchiveControl = view === "all" && (archiveActive || allTickets.some((ticket) => ticket?.isArchived));
+  const dayTickets = view === "all"
+    ? (archiveActive ? allTickets.filter((ticket) => ticket?.isArchived) : liveTickets.filter((ticket) => activeStatus === "all" || ticket?.status === activeStatus))
+    : liveTickets;
+  const selectedTasks = dayTickets
     .filter((ticket) => dateKey(ticket?.dueDate) === selectedDate)
     .sort((a, b) => text(a?.ticketCode).localeCompare(text(b?.ticketCode), undefined, { numeric: true }));
   const dayCounts = new Map();
-  for (const ticket of liveTickets) {
+  for (const ticket of dayTickets) {
     const key = dateKey(ticket?.dueDate);
     if (key) dayCounts.set(key, (dayCounts.get(key) || 0) + 1);
   }
@@ -398,6 +407,7 @@ function MobileTaskDashboard({ tickets, view, selectedDate, onSelectDate, onOpen
             <span>{selectedLabel}</span>
             <h3 id="tmMobileDayTitle">{selected.toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}</h3>
           </div>
+          {showArchiveControl ? <button type="button" className="tm-calendar-only-archive" aria-label={archiveActive ? "Show active tasks" : "Show archived tasks"} title={archiveActive ? "Show active tasks" : "Show archived tasks"} aria-pressed={archiveActive} onClick={() => onStatusChange(archiveActive ? "all" : "archived")}><FeatherIcon name="archive" /></button> : null}
           <b>{selectedTasks.length}</b>
         </div>
         <div className="tm-mobile-task-list">
@@ -568,7 +578,7 @@ export default function TaskManagementClient({ view, initialMeta, initialTickets
   const doArchive = async (ticket, password = "") => {
     try {
       await requestJson("/next/api/task-management/mutations-direct", { method: "POST", body: JSON.stringify({ action: "ticket-archive", view, ticketId: ticket.id, archived: !ticket.isArchived, adminPassword: password }) });
-      notify("success", ticket.isArchived ? "Project restored" : "Project archived", ticket.isArchived ? "The project is active and visible again to its permitted users." : "The project is hidden from everyone and is available only in your Archive tab on this page.");
+      notify("success", ticket.isArchived ? "Project restored" : "Project archived", ticket.isArchived ? "The project is active and visible again to its permitted users." : (view === "all" ? "The project is available in the calendar's Archive view." : "The project is hidden from everyone and is available only in your Archive tab on this page."));
       setSelectedTicket(null); setAdminAction(null); setConfirmAction(null); refresh({ silent: true });
     } catch (error) { notify("error", "Archive action failed", error?.message || "The project could not be updated."); }
   };
@@ -613,6 +623,7 @@ export default function TaskManagementClient({ view, initialMeta, initialTickets
   return (
     <section className="task-management-page next-task-classic-parity">
       <link rel="stylesheet" href="/next/css/task-management-next-parity.css?v=classic-parity-v3-workflow" precedence="erp-detail" />
+      {view === "all" ? <link rel="stylesheet" href="/next/css/task-management-calendar-only-v1.css?v=1" precedence="erp-detail" /> : null}
       <BodyClassSync className="task-management-page" />
       <Toast toast={toast} onClose={() => setToast(null)} />
       <header className="main-header tm-page-header next-task-classic-header">
@@ -632,9 +643,9 @@ export default function TaskManagementClient({ view, initialMeta, initialTickets
           activeStatus={status}
           onStatusChange={setStatus}
         />
-        <div className="tm-agenda-layout">
-          <CalendarAgenda tickets={agendaTickets} selectedDate={selectedDate} onSelectDate={setSelectedDate} month={month} onMonthChange={setMonth} onOpenTicket={openTicket} view={view} />
-          <section className="tm-tasks-column" aria-label="Task list">
+        <div className={`tm-agenda-layout${view === "all" ? " tm-agenda-layout--calendar-only" : ""}`}>
+          <CalendarAgenda tickets={agendaTickets} selectedDate={selectedDate} onSelectDate={setSelectedDate} month={month} onMonthChange={setMonth} onOpenTicket={openTicket} view={view} showArchiveControl={view === "all" && (status === "archived" || tickets.some((ticket) => ticket?.isArchived))} archiveActive={status === "archived"} onToggleArchive={() => setStatus(status === "archived" ? "all" : "archived")} />
+          {view !== "all" ? <section className="tm-tasks-column" aria-label="Task list">
             <div className="tm-mobile-list-heading">
               <div><span>PROJECTS</span><h2>{copy.label}</h2></div>
               <b>{activeTickets.length}</b>
@@ -649,7 +660,7 @@ export default function TaskManagementClient({ view, initialMeta, initialTickets
               {canCreate ? <button type="button" className="tm-new-ticket tm-new-ticket--toolbar" onClick={() => setEditor(editorFromTicket())}><FeatherIcon name="plus" /><span>Add Project</span></button> : null}
             </div>
             <section className="tm-ticket-grid" aria-live="polite">{busy ? <div className="modern-loading" role="status"><div className="modern-loading__spinner" /><div className="modern-loading__text">Loading projects</div></div> : activeTickets.length ? activeTickets.map((ticket) => <ProjectCard ticket={ticket} view={view} onOpen={openTicket} onRejected={() => setRejectedReason((ticket.sections || []).find((section) => section.status === "rejected" && text(section.rejectionReason))?.rejectionReason || "No rejected reason was provided.")} key={ticket.id} />) : <div className="tm-empty-state"><div className="tm-empty-state__icon"><FeatherIcon name="git-branch" /></div><h2>{copy.empty}</h2><p>{copy.emptyText}</p></div>}</section>
-          </section>
+          </section> : null}
         </div>
       </main>
       {selectedTicket ? <TaskPortal><ClassicTaskWorkflowDetails ticket={selectedTicket} view={view} meta={meta} onClose={() => setSelectedTicket(null)} onEdit={canOnTicket("project_edit", selectedTicket) ? (ticket) => requestAction("edit", ticket) : null} onRefresh={() => refresh({ silent: true })} onWork={canOnTicket("assignment_work", selectedTicket, { personalWork: true }) || canOnTicket("section_work", selectedTicket, { personalWork: true }) || canOnTicket("section_work", selectedTicket) ? setWorkTarget : null} onTeamWorkflow={canOnTicket("workflow_save", selectedTicket) ? setTeamSection : null} onArchive={canOnTicket("project_archive", selectedTicket) ? (ticket) => requestAction("archive", ticket) : null} onDelete={canOnTicket("project_delete", selectedTicket) ? (ticket) => requestAction("delete", ticket) : null} onDelivered={canOnTicket("mark_delivered", selectedTicket) ? delivered : null} featurePermissions={Object.fromEntries(["workflow_save", "assignment_work", "section_work", "assignment_archive", "assignment_delete"].map(key => [key, canOnTicket(key, selectedTicket, { personalWork: key.startsWith("assignment_") || key === "section_work" }) || (key === "section_work" && canOnTicket(key, selectedTicket))]))} notify={notify} /></TaskPortal> : null}
