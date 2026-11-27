@@ -4,7 +4,7 @@ export default function StocktakingMotionLayout({ children }) {
   return (
     <>
       <link rel="stylesheet" href="/next/css/stocktaking-motion-v1.css?v=stocktaking-kits-size-v1" precedence="erp-detail" />
-      <link rel="stylesheet" href="/next/css/stocktaking-3d-cards-v1.css?v=1" precedence="erp-detail" />
+      <link rel="stylesheet" href="/next/css/stocktaking-3d-cards-v1.css?v=2" precedence="erp-detail" />
       {children}
     </>
   );

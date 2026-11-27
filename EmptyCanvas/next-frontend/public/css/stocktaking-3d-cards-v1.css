@@ -164,3 +164,100 @@ body.stocktaking-page .next-stocktaking-classic-parity.next-stocktaking-folders-
     max-height: 1.05em;
   }
 }
+
+/* ERP_STOCKTAKING_3D_LOADING_V2
+   The Suspense fallback uses separate markup. Reuse the exact live-card art
+   and geometry, but keep three animated placeholders instead of fake data.
+   Scope to this skeleton even before BodyClassSync runs on navigation. */
+.erp-stocktaking-skeleton {
+  box-sizing: border-box !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  padding: 18px 18px 110px !important;
+}
+body .erp-stocktaking-skeleton .erp-stock-loading-card {
+  width: 100% !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+body .erp-stocktaking-skeleton .erp-stock-loading-grid {
+  display: grid !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  grid-template-columns: repeat(auto-fill,minmax(154px,154px)) !important;
+  grid-auto-rows: max-content !important;
+  justify-content: start !important;
+  align-items: start !important;
+  gap: 18px 16px !important;
+  padding: 0 !important;
+  overflow: visible !important;
+}
+body .erp-stocktaking-skeleton .erp-stock-loading-grid > .erp-stock-loading-folder {
+  box-sizing: border-box !important;
+  position: relative !important;
+  display: block !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  aspect-ratio: 10 / 11;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 10% !important;
+  background: url("/next/images/stocktaking/stocktaking-three-crate-card-v1.svg") center / 100% 100% no-repeat !important;
+  box-shadow: none !important;
+  filter: drop-shadow(0 3px 3px rgba(0,0,0,.24));
+  overflow: hidden !important;
+}
+/* Retire the previous orange banner and paper placeholder. */
+body .erp-stocktaking-skeleton .erp-stock-loading-folder > .erp-stock-loading-folder-top {
+  display: none !important;
+}
+body .erp-stocktaking-skeleton .erp-stock-loading-folder > .erp-stock-loading-folder-front {
+  position: absolute !important;
+  inset: 65% 8% 8% 9% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  height: auto !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  gap: 0 !important;
+}
+body .erp-stocktaking-skeleton .erp-stock-loading-folder-front > .erp-stock-sk {
+  flex: 0 0 auto !important;
+  margin: 0 !important;
+  border-radius: 999px !important;
+  background: #777 !important;
+}
+body .erp-stocktaking-skeleton .erp-stock-loading-folder-front > .erp-stock-sk:nth-child(1) {
+  width: 63% !important;
+  height: 26% !important;
+}
+body .erp-stocktaking-skeleton .erp-stock-loading-folder-front > .erp-stock-sk:nth-child(2) {
+  width: 42% !important;
+  height: 19% !important;
+  background: #626262 !important;
+}
+body .erp-stocktaking-skeleton .erp-stock-loading-folder-front > .erp-stock-sk:nth-child(3) {
+  width: 49% !important;
+  height: 23% !important;
+}
+@media (max-width: 720px) {
+  .erp-stocktaking-skeleton { padding: 14px 14px 100px !important; }
+  body .erp-stocktaking-skeleton .erp-stock-loading-grid {
+    grid-template-columns: repeat(3,minmax(0,1fr)) !important;
+    justify-content: stretch !important;
+    justify-items: stretch !important;
+    gap: 12px 8px !important;
+  }
+}
