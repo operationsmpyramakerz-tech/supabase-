@@ -1,4 +1,4 @@
-/* ERP_TASKS_CALENDAR_ONLY_V1 — All Tasks only.
+/* ERP_TASKS_CALENDAR_ONLY_V2 — All Tasks, My Tasks, Delegated Tasks.
    Mobile keeps the weekly dashboard; desktop keeps the monthly agenda.
    No duplicate task list or empty second grid column. */
 .task-management-page .tm-agenda-layout.tm-agenda-layout--calendar-only {
@@ -13,6 +13,19 @@
   .task-management-page .tm-agenda-layout.tm-agenda-layout--calendar-only {
     display: none !important;
   }
+}
+/* Delegated Tasks keeps its authorized create action on desktop even
+   though the old list toolbar is gone; mobile already has the Add New card. */
+.task-management-page .tm-agenda-layout--calendar-only > .tm-calendar-only-create {
+  justify-self: end;
+  align-self: start;
+  width: auto;
+  min-height: 40px;
+  padding: 10px 15px;
+  border-radius: 13px;
+}
+.task-management-page .tm-agenda-layout--calendar-only > .tm-calendar-only-create > span {
+  display: inline !important;
 }
 .task-management-page .tm-calendar-only-archive {
   display: inline-flex;

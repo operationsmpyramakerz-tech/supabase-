@@ -2,15 +2,15 @@
 
 import { usePathname } from "next/navigation";
 
-// Only All Tasks uses the calendar-only loading skeleton. The route segment
-// is shared by My Tasks and Delegated Tasks, so preserve their existing fallback.
+// Match the calendar-only design on all three Task Management views.
+// Accept paths with and without the application's /next base path.
 export default function TaskCalendarLoadingContent({ children }) {
   const pathname = String(usePathname() || "").replace(/\/+$/, "");
-  if (pathname !== "/task-management/all-tasks" && pathname !== "/next/task-management/all-tasks") return children;
+  if (!/^\/(?:next\/)?task-management\/(?:all-tasks|my-tasks|delegated-tasks)$/.test(pathname)) return children;
   return (
     <>
       <link rel="stylesheet" href="/next/css/task-management-next-parity.css?v=classic-parity-v3-workflow" precedence="erp-detail" />
-      <link rel="stylesheet" href="/next/css/task-management-calendar-only-v1.css?v=1" precedence="erp-detail" />
+      <link rel="stylesheet" href="/next/css/task-management-calendar-only-v1.css?v=2" precedence="erp-detail" />
       <section className="task-management-page next-task-classic-parity classic-task-loading tm-calendar-only-loading" aria-busy="true" aria-label="Loading task calendar">
         <div className="tm-main">
           <section className="tm-mobile-dashboard" aria-hidden="true">
