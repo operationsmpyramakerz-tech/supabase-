@@ -631,7 +631,7 @@ export default function TaskManagementClient({ view, initialMeta, initialTickets
     <section className={`task-management-page next-task-classic-parity${view === "delegated" && canCreate ? " tm-delegated-with-fab" : ""}`}>
       <link rel="stylesheet" href="/next/css/task-management-next-parity.css?v=classic-parity-v3-workflow" precedence="erp-detail" />
       {calendarOnly ? <link rel="stylesheet" href="/next/css/task-management-calendar-only-v1.css?v=2" precedence="erp-detail" /> : null}
-      {view === "delegated" ? <link rel="stylesheet" href="/next/css/task-delegated-status-fab-v1.css?v=1" precedence="erp-detail" /> : null}
+      {view === "delegated" ? <link rel="stylesheet" href="/next/css/task-delegated-status-fab-v1.css?v=2" precedence="erp-detail" /> : null}
       <BodyClassSync className="task-management-page" />
       <Toast toast={toast} onClose={() => setToast(null)} />
       <header className="main-header tm-page-header next-task-classic-header">

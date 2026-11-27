@@ -12,7 +12,7 @@ export default function TaskCalendarLoadingContent({ children }) {
     <>
       <link rel="stylesheet" href="/next/css/task-management-next-parity.css?v=classic-parity-v3-workflow" precedence="erp-detail" />
       <link rel="stylesheet" href="/next/css/task-management-calendar-only-v1.css?v=2" precedence="erp-detail" />
-      {delegatedDesign ? <link rel="stylesheet" href="/next/css/task-delegated-status-fab-v1.css?v=1" precedence="erp-detail" /> : null}
+      {delegatedDesign ? <link rel="stylesheet" href="/next/css/task-delegated-status-fab-v1.css?v=2" precedence="erp-detail" /> : null}
       <section className="task-management-page next-task-classic-parity classic-task-loading tm-calendar-only-loading" aria-busy="true" aria-label="Loading task calendar">
         <div className="tm-main">
           <section className={`tm-mobile-dashboard${delegatedDesign ? " tm-mobile-dashboard--delegated-final" : ""}`} aria-hidden="true">

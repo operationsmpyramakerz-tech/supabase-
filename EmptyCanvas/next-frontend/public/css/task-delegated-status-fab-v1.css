@@ -91,9 +91,13 @@
     outline-offset: 3px;
   }
 
-  /* Reserve extra scroll space so the last task remains reachable above the FAB. */
+  /* Use the shell's dock-safe clearance (80px dock + 18px offset + 28px gap).
+     Both this button and the scroll clearance share the same safe-area-aware offset. */
+  .task-management-page.tm-delegated-with-fab {
+    --tm-delegated-fab-bottom: var(--mobile-dock-safe-focus-clearance, calc(126px + env(safe-area-inset-bottom, 0px)));
+  }
   body.task-management-page .next-task-classic-parity.tm-delegated-with-fab > .tm-main {
-    padding-bottom: calc(170px + env(safe-area-inset-bottom, 0px)) !important;
+    padding-bottom: calc(var(--tm-delegated-fab-bottom) + 54px + 14px) !important;
   }
   .task-management-page .tm-delegated-create-fab {
     display: grid !important;
@@ -101,7 +105,7 @@
     position: fixed;
     z-index: 1500;
     right: max(20px, calc(env(safe-area-inset-right, 0px) + 16px));
-    bottom: calc(88px + env(safe-area-inset-bottom, 0px));
+    bottom: var(--tm-delegated-fab-bottom, calc(126px + env(safe-area-inset-bottom, 0px)));
     width: 54px;
     height: 54px;
     min-width: 54px;
