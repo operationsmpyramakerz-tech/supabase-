@@ -90,11 +90,14 @@ export default function DelegatedTaskAddDock({ onTask, onProject }) {
     };
     const dismissScroll = () => setOpen(false);
     document.addEventListener("pointerdown", dismissOutside, true);
+    // Keyboard navigation leaving the chooser also restores the sharp page.
+    document.addEventListener("focusin", dismissOutside, true);
     document.addEventListener("keydown", dismissEscape);
     // When the dock slides away on scroll, never leave a stale flyout open.
     document.addEventListener("scroll", dismissScroll, true);
     return () => {
       document.removeEventListener("pointerdown", dismissOutside, true);
+      document.removeEventListener("focusin", dismissOutside, true);
       document.removeEventListener("keydown", dismissEscape);
       document.removeEventListener("scroll", dismissScroll, true);
     };
