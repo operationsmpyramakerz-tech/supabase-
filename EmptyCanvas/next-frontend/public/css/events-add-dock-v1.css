@@ -1,0 +1,246 @@
+/* Events calendar only: the approved three-part mobile dock.
+   The existence of the page-owned portal is the scope marker, so other
+   routes, denied accounts and loading shells retain their original dock. */
+.events-add-dock { display: none; }
+
+@media (max-width: 760px) {
+  body.next-classic-shell-active:has(.events-add-dock) {
+    /* Reuse the normal Classic Home rail dimensions on both ends.
+       Only the fluid middle track gives up space for Add. */
+    --events-add-dock-side-w: var(--mobile-home-block-w, 88px);
+    --events-add-dock-gap: var(--mobile-home-gap, 18px);
+  }
+
+  body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host > .sidebar-nav:has(> .events-add-dock) {
+    grid-template-columns: var(--events-add-dock-side-w) minmax(0, 1fr) var(--events-add-dock-side-w) !important;
+    column-gap: var(--events-add-dock-gap) !important;
+    padding-right: 0 !important;
+    overflow: visible !important;
+  }
+
+  /* Only the middle rail scrolls. Keep the existing icon order/active
+     indicator and 42px Classic touch targets; shrink spacing, not hit areas. */
+  body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host > .sidebar-nav:has(> .events-add-dock) > .mobile-dock-pages-clip > .mobile-dock-pages-list {
+    gap: 2px !important;
+    padding: 4px 5px !important;
+  }
+
+
+  body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host > .sidebar-nav > .events-add-dock {
+    box-sizing: border-box;
+    position: relative;
+    z-index: 4;
+    display: grid;
+    width: 100%;
+    min-width: 0;
+    height: 80px;
+    min-height: 80px;
+    max-height: 80px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: var(--mobile-pages-block-radius, 30px);
+    background: var(--mobile-dock-bg, #0b0c10);
+    box-shadow: var(--mobile-dock-shadow, 0 18px 40px #0f172a2e);
+    overflow: visible;
+    animation: events-add-rail-appear .32s cubic-bezier(.22,1,.36,1) backwards;
+  }
+
+  .events-add-dock::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    right: calc(100% + (var(--events-add-dock-gap) - var(--mobile-home-bridge-w, 10px)) / 2);
+    width: var(--mobile-home-bridge-w, 10px);
+    height: 24px;
+    transform: translateY(-50%);
+    border-radius: 999px;
+    background: var(--mobile-dock-bg, #0b0c10);
+    pointer-events: none;
+  }
+  /* Explicit, identical geometry in closed/open/pressed/focused states.
+     Avoid relying on grid/aspect-ratio auto sizing on mobile browsers. */
+  body.next-classic-shell-active .events-add-dock .events-add-dock__trigger {
+    appearance: none;
+    position: relative;
+    box-sizing: border-box;
+    display: block;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    margin: 0;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: inherit;
+    background: transparent !important;
+    color: #fff;
+    box-shadow: none !important;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body.next-classic-shell-active .events-add-dock .events-add-dock__trigger > .events-add-dock__accent {
+    position: absolute;
+    inset: 0;
+    margin: auto !important;
+    box-sizing: border-box !important;
+    display: grid;
+    place-items: center;
+    width: 46px !important;
+    min-width: 46px !important;
+    max-width: 46px !important;
+    height: 46px !important;
+    min-height: 46px !important;
+    max-height: 46px !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 50% !important;
+    background: #ff7110 !important;
+    color: #fff;
+    box-shadow: 0 5px 12px #ed690d30;
+    transition: transform .15s ease-out;
+    pointer-events: none;
+  }
+  .events-add-dock__accent svg {
+    display: block;
+    width: 23px !important;
+    height: 23px !important;
+    stroke: currentColor;
+    color: #fff;
+    transform: rotate(0deg) !important;
+    transform-origin: center;
+    transition: transform .28s cubic-bezier(.34,1.35,.64,1);
+  }
+  .events-add-dock__trigger[aria-expanded="true"] .events-add-dock__accent svg {
+    transform: rotate(45deg) !important;
+  }
+  .events-add-dock__trigger:active .events-add-dock__accent {
+    transform: scale(.94);
+  }
+
+  /* Soften only the page content. The header, detached dock, Add button
+     and menu stay sharp; the effect is scoped to the open mobile chooser. */
+  body.next-classic-shell-active:has(.events-add-dock) .agenda-v2.events-calendar-shell > :is(.agenda-top, .agenda-layout) {
+    filter: none;
+    opacity: 1;
+    transition: filter .24s ease, opacity .24s ease;
+  }
+  body.next-classic-shell-active:has(.events-add-dock > .events-add-menu[data-open="true"]) .agenda-v2.events-calendar-shell > :is(.agenda-top, .agenda-layout) {
+    filter: blur(3.5px);
+    opacity: .78;
+    /* An outside tap should dismiss the chooser, not activate a blurred card. */
+    pointer-events: none;
+  }
+
+  @keyframes events-add-rail-appear {
+    from { opacity: 0; transform: translateY(12px) scale(.96); }
+    to { opacity: 1; transform: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host > .sidebar-nav > .events-add-dock {
+      animation: none !important;
+    }
+    body.next-classic-shell-active:has(.events-add-dock) .agenda-v2.events-calendar-shell > :is(.agenda-top, .agenda-layout),
+    .events-add-dock > .events-add-menu,
+    .events-add-dock__accent,
+    .events-add-dock__accent svg { transition: none !important; }
+  }
+}
+
+  /* No pointer or modal. A compact, black, right-anchored second rail with
+     exactly two vertically stacked, labeled actions. */
+  :is(.events-add-dock, .events-add-inline) > .events-add-menu {
+    box-sizing: border-box;
+    position: absolute;
+    z-index: 5;
+    right: 0;
+    bottom: calc(100% + 12px);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 5px;
+    width: min(210px, calc(100vw - 24px));
+    padding: 9px;
+    border: 1px solid #202124;
+    border-radius: 19px;
+    background: #0b0c10;
+    color: #fff;
+    box-shadow: 0 10px 24px #0f172a44;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateY(10px) scale(.95);
+    transform-origin: bottom right;
+    transition: opacity .18s ease, transform .24s cubic-bezier(.22,1,.36,1), visibility 0s linear .24s;
+  }
+  :is(.events-add-dock, .events-add-inline) > .events-add-menu[data-open="true"] {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateY(0) scale(1);
+    transition-delay: 0s;
+  }
+  /* The approved popup has a clean rounded rectangle, with no pointer. */
+
+  .events-add-menu .events-add-menu__choice {
+    appearance: none;
+    box-sizing: border-box;
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr);
+    align-items: center;
+    gap: 9px;
+    width: 100%;
+    min-height: 44px;
+    margin: 0;
+    padding: 4px;
+    border: 0;
+    border-radius: 12px;
+    background: transparent;
+    text-align: left;
+    color: #fff;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .events-add-menu .events-add-menu__choice:hover,
+  .events-add-menu .events-add-menu__choice:active { background: #292a2e; }
+  .events-add-menu__icon {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 13px;
+    background: #292a2e;
+    color: #fff;
+  }
+  .events-add-menu__icon svg {
+    display: block;
+    width: 21px !important;
+    height: 21px !important;
+    color: #fff;
+    stroke: currentColor;
+    transform: none !important;
+  }
+  .events-add-menu__choice strong {
+    color: #fff;
+    font-size: 12px;
+    font-weight: 750;
+    line-height: 1.15;
+    white-space: normal;
+  }
+  .events-add-dock__trigger:focus-visible,
+  .events-add-menu__choice:focus-visible {
+    outline: 2px solid #ff8d38;
+    outline-offset: 2px;
+  }
+
+.events-add-inline { position: relative; }
+.events-add-inline > .agenda-add { width: 100%; }
+.events-add-inline > .events-add-menu { top: calc(100% + 9px); bottom: auto; z-index: 20; transform-origin: top right; }
+.events-add-menu__icon.is-confirmed { color: #69d69a; background: #163a2a; }
+.events-add-menu__icon.is-pending { color: #ffb85c; background: #3d2c19; }
+.events-add-menu__icon svg { color: inherit; }
+.events-add-menu__choice:disabled { opacity: .45; cursor: not-allowed; }
+.events-add-menu__choice:disabled:hover { background: transparent; }
+@media (prefers-reduced-motion: reduce) {
+  .events-add-inline > .events-add-menu { transition: none !important; }
+}

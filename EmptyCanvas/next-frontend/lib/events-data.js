@@ -837,8 +837,12 @@ async function eventWriteRow(body = {}, account = {}) {
   };
 }
 
-export async function createEventRequest(body = {}, account = {}) {
-  const row = await insert(eventsTable(), await eventWriteRow(body, account));
+export async function createEventRequest(body = {}, account = {}, initialStatus = "submitted") {
+  const writeRow = await eventWriteRow(body, account);
+  // Only the authenticated create endpoint may opt into a confirmed insert.
+  // Never accept an arbitrary status from the form payload.
+  writeRow.status = initialStatus === "in_progress" ? "in_progress" : "submitted";
+  const row = await insert(eventsTable(), writeRow);
   clearEventsCache();
   return serializeEvent(row || {});
 }

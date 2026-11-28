@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { navigateWithinApp } from "../../lib/client-navigation";
 import EventIcon from "./EventIcon";
+import EventsAddDock from "./EventsAddDock";
 import { AuthorizationModal, ConfirmationModal, EventsDetailsModal } from "./EventsDialogs";
 import { featureAllowed } from "../../lib/feature-permissions-registry";
 import { eventRequestScopeFor } from "../../lib/event-request-scope.mjs";
@@ -306,8 +307,9 @@ export default function EventsCalendarClient({ account, initialEvents = [], canM
     // Only run once for legacy bookmark/notification deep links.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  function openNewEvent() {
-    const params = new URLSearchParams({ startDate: selectedKey });
+  function openNewEvent(creationStatus) {
+    if (!canCreate || (creationStatus === "confirmed" && !canConfirm)) return;
+    const params = new URLSearchParams({ startDate: selectedKey, creationStatus });
     const codes = [...new Set(scheduled.filter(event => eventOnDate(event,selectedDate)).map(event => text(event.eventCode)).filter(Boolean))];
     if (codes.length) params.set("conflictCodes", codes.join(","));
     navigateWithinApp(`/next/events/new?${params.toString()}`);
@@ -393,7 +395,7 @@ export default function EventsCalendarClient({ account, initialEvents = [], canM
             })}</div>
             <div className="agenda-legend"><span><i className="agenda-dot agenda-dot--pending"/>Pending Confirmation</span><span><i className="agenda-dot agenda-dot--confirmed"/>Confirmed</span></div>
           </section>
-          {canCreate ? <button type="button" className="agenda-add" onClick={openNewEvent}><EventIcon name="plus-circle"/>Add New Event</button> : null}
+          {canCreate ? <EventsAddDock onCreate={openNewEvent} canConfirm={canConfirm} /> : null}
         </aside>
         <section className="agenda-panel agenda-list" aria-label="Event agenda">
           <div className="agenda-toolbar"><div className="agenda-tabs" role="tablist" aria-label="Event history">{[{key:"upcoming",label:"Upcoming",icon:"calendar"},{key:"past",label:"Past",icon:"clock"},{key:"archived",label:"Archived",icon:"archive"}].map(tab => <button type="button" role="tab" aria-selected={activeList === tab.key} key={tab.key} className={activeList === tab.key ? "is-active" : ""} onClick={() => {setActiveList(tab.key);setFilter("all");if(tab.key === "upcoming" && selectedDate < today) {setSelectedKey(dateKey(today));setWeek(startOfWeek(today));}}}><EventIcon name={tab.icon}/>{tab.label} ({lists[tab.key].length})</button>)}</div><AgendaStatusFilter activeList={activeList} value={filter} onChange={setFilter}/></div>

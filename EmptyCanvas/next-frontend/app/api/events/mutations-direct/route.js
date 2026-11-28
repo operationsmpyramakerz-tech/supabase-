@@ -19,10 +19,11 @@ import {
   uploadEventComponentAsset,
 } from "../../../../lib/events-data";
 import { verifyEventsAuthorizationToken } from "../../../../lib/events-action-auth";
-import { directPageMutationAccess } from "../../../../lib/order-action-auth";
+import { directPageMutationAccess, verifySharedAdminPasswordDirect } from "../../../../lib/order-action-auth";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
 import { featureGate } from "../../../../lib/feature-permissions-server";
 import { assertEventRequestScope } from "../../../../lib/event-request-scope";
+import { eventRequestScopeFor } from "../../../../lib/event-request-scope.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -97,7 +98,27 @@ export async function POST(request) {
 
   try {
     if (action === "create-event") {
-      const event = await createEventRequest(body?.payload || body, gate.account || {});
+      // Default and legacy callers retain the existing pending-request flow.
+      const creationStatus = body?.creationStatus ?? "pending";
+      if (!["pending", "confirmed"].includes(creationStatus)) {
+        return json({ ok: false, error: "Choose a valid event creation type." }, { status: 400 });
+      }
+      if (creationStatus === "confirmed") {
+        // Do not let the new shortcut bypass the existing Workflow grant,
+        // all-events scope or shared Admin password needed for confirmation.
+        const workflow = featureGate(gate, "events.requests.workflow");
+        if (!workflow.ok || ["own", "team", "none"].includes(eventRequestScopeFor(gate.account, "events.requests.workflow"))) {
+          return json({ ok: false, error: "Event confirmation permission is required." }, { status: 403 });
+        }
+        const password = text(body?.confirmationPassword);
+        if (!password) return json({ ok: false, error: "Admin password is required." }, { status: 400 });
+        const verified = await verifySharedAdminPasswordDirect(password);
+        if (verified === null) return json({ ok: false, error: "The direct Admin password context is unavailable." }, { status: 503 });
+        // 403 (not 401): a wrong Admin password is not an expired login session.
+        if (!verified) return json({ ok: false, error: "Invalid Admin password." }, { status: 403 });
+      }
+      const event = await createEventRequest(body?.payload || body, gate.account || {}, creationStatus === "confirmed" ? "in_progress" : "submitted");
+      if (creationStatus === "confirmed") dispatchEventAlerts();
       return json({ ok: true, event, source: "supabase-next" }, { status: 201 });
     }
 

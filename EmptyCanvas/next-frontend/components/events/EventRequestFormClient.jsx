@@ -515,11 +515,14 @@ export default function EventRequestFormClient({
   initialCanEditRates = false,
   initialEvent = null,
   initialStartDate = "",
+  creationStatus = "pending",
   bootstrapWarnings = [],
 }) {
   const accessLevel = useMemo(() => pageAccessLevel(account), [account]);
   const viewOnly = accessLevel === "view";
   const editingId = text(initialEvent?.id);
+  const createConfirmed = !editingId && creationStatus === "confirmed";
+  const [confirmationPassword, setConfirmationPassword] = useState("");
   const [form, setForm] = useState(() => initialForm(initialEvent, initialStartDate));
   const [step, setStep] = useState(0);
   const wizardHeadingRef = useRef(null);
@@ -838,6 +841,7 @@ export default function EventRequestFormClient({
       const validationError = validateStep(index);
       if (validationError) { goToStep(index, validationError); return; }
     }
+    if (createConfirmed && !confirmationPassword.trim()) { setError("Enter the Admin password to create a confirmed event."); return; }
     setError("");
     setSubmitting(true);
     try {
@@ -847,13 +851,16 @@ export default function EventRequestFormClient({
           action: editingId ? "update-event" : "create-event",
           eventId: editingId || "",
           authorizationToken: editingId ? editAuthorizationToken : "",
+          ...(!editingId ? { creationStatus: createConfirmed ? "confirmed" : "pending" } : {}),
+          ...(createConfirmed ? { confirmationPassword } : {}),
           payload: payload(),
         }),
       });
       if (editingId) {
         try { window.sessionStorage.removeItem(`erp.events.editAuth.${editingId}`); } catch {}
       }
-      notify("success", "Events", editingId ? "Event request updated successfully." : "Event request submitted successfully.");
+      setConfirmationPassword("");
+      notify("success", "Events", editingId ? "Event request updated successfully." : createConfirmed ? "Confirmed event created successfully." : "Event request submitted successfully.");
       window.setTimeout(() => { navigateWithinApp("/next/events-calendar"); }, 550);
     } catch (submitError) {
       setError(submitError?.message || "Could not save the event request.");
@@ -956,7 +963,7 @@ export default function EventRequestFormClient({
 
       <header className="event-wizard-intro" ref={wizardHeadingRef} tabIndex={-1}>
         <div className="event-wizard-intro-icon"><EventIcon name="calendar" /></div>
-        <div><h1>{editingId ? "Edit Event Request" : "Add New Event"}</h1><p>{editingId ? "Update your event details and resources." : "Create an event request for confirmation."}</p></div>
+        <div><h1>{editingId ? "Edit Event Request" : createConfirmed ? "Add Confirmed Event" : "Add New Event"}</h1><p>{editingId ? "Update your event details and resources." : createConfirmed ? "Create an event that is already confirmed." : "Create an event request for confirmation."}</p></div>
         <a href="/next/events-calendar" className="event-wizard-back" aria-label="Back to Events"><EventIcon name="chevron-left" /> <span>Events</span></a>
       </header>
       <nav className="event-wizard-steps" aria-label="Event request progress">
@@ -1094,7 +1101,10 @@ export default function EventRequestFormClient({
 
         </> : null}
         {step === 3 ? <>
-        <div className="event-wizard-review-notice"><EventIcon name="clipboard" /><div><strong>{editingId ? "Review your changes" : "Ready for confirmation"}</strong><p>{editingId ? "Check the event details before saving." : "After submission, the event will appear in the agenda as Pending Confirmation."}</p></div></div>
+        <div className="event-wizard-review-notice"><EventIcon name="clipboard" /><div><strong>{editingId ? "Review your changes" : createConfirmed ? "Ready to create confirmed event" : "Ready for confirmation"}</strong><p>{editingId ? "Check the event details before saving." : createConfirmed ? "The event will appear in the agenda as Confirmed after Admin authorization." : "After submission, the event will appear in the agenda as Pending Confirmation."}</p></div></div>
+        {createConfirmed && <FormSection title="Confirm event" icon="check-circle">
+          <Field label="Admin Password" required wide><input type="password" aria-label="Admin password" autoComplete="off" value={confirmationPassword} onChange={event => setConfirmationPassword(event.target.value)} placeholder="Enter the Admin password" disabled={viewOnly || submitting} /></Field>
+        </FormSection>}
         <ReviewSection title="Event Details" icon="calendar" onEdit={() => goToStep(0)} disabled={submitting}>
           <ReviewFields items={[
             ["Event Name", form.eventName], ["Event Type", types.find(item => item.code === form.eventType)?.label || form.eventType],
@@ -1129,7 +1139,7 @@ export default function EventRequestFormClient({
           <span className="event-wizard-step-count">Step {step + 1} of {EVENT_FORM_STEPS.length}</span>
           <div className="event-wizard-action-buttons">
             <button type="button" className="event-wizard-previous" disabled={step === 0 || submitting} onClick={() => goToStep(step - 1)}><EventIcon name="chevron-left" /> Previous</button>
-            <button type="submit" className="event-wizard-next" disabled={submitting || (viewOnly && step === 3)}>{step < 3 ? <>Next <EventIcon name="chevron-right" /></> : submitting ? (editingId ? "Updating…" : "Submitting…") : (editingId ? "Update Event" : "Submit Event")}</button>
+            <button type="submit" className="event-wizard-next" disabled={submitting || (viewOnly && step === 3)}>{step < 3 ? <>Next <EventIcon name="chevron-right" /></> : submitting ? (editingId ? "Updating…" : "Submitting…") : (editingId ? "Update Event" : createConfirmed ? "Create Confirmed Event" : "Submit Event")}</button>
           </div>
         </footer>
       </form>

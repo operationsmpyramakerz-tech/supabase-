@@ -3,6 +3,7 @@ import AppShell from "../../../components/AppShell";
 import EventRequestFormClient from "../../../components/events/EventRequestFormClient";
 import { loadDirectEventsPageData } from "../../../lib/events-data";
 import { featureAllowed } from "../../../lib/feature-permissions-registry";
+import { eventRequestScopeFor } from "../../../lib/event-request-scope.mjs";
 
 export const dynamic = "force-dynamic";
 
@@ -10,12 +11,20 @@ export default async function NewEventRequestPage({ searchParams }) {
   const resolvedSearch = await Promise.resolve(searchParams);
   const editId = String(resolvedSearch?.edit || "").trim();
   const startDate = String(resolvedSearch?.startDate || "").trim();
-  const currentPath = `/next/events/new${editId ? `?edit=${encodeURIComponent(editId)}` : ""}`;
+  const creationStatus = !editId && resolvedSearch?.creationStatus === "confirmed" ? "confirmed" : "pending";
+  const query = new URLSearchParams();
+  if (editId) query.set("edit", editId);
+  else {
+    if (startDate) query.set("startDate", startDate);
+    if (resolvedSearch?.creationStatus) query.set("creationStatus", creationStatus);
+  }
+  const currentPath = `/next/events/new${query.size ? `?${query.toString()}` : ""}`;
 
   const pageData = await loadDirectEventsPageData({ mode: "new", editId }).catch(() => null);
 
   if (pageData?.status === 401) redirect(`/login?next=${encodeURIComponent(currentPath)}`);
-  if (pageData?.status === 403 || (pageData?.ok && (!featureAllowed(pageData.account, "events.requests.view") || !featureAllowed(pageData.account, editId ? "events.requests.edit" : "events.requests.create")))) {
+  const confirmedAllowed = creationStatus !== "confirmed" || (featureAllowed(pageData?.account, "events.requests.workflow") && !["own", "team", "none"].includes(eventRequestScopeFor(pageData?.account, "events.requests.workflow")));
+  if (pageData?.status === 403 || (pageData?.ok && (!confirmedAllowed || !featureAllowed(pageData.account, "events.requests.view") || !featureAllowed(pageData.account, editId ? "events.requests.edit" : "events.requests.create")))) {
     return (
       <main className="standalone-state">
         <section className="state-card">
@@ -39,7 +48,7 @@ export default async function NewEventRequestPage({ searchParams }) {
           <h1>The Event Request form could not load</h1>
           <p>{pageData?.error || "The Events data service is temporarily unavailable."}</p>
           <div className="actions">
-            <a className="primary-button" href={editId ? `/next/events/new?edit=${encodeURIComponent(editId)}` : "/next/events/new"}>Try again</a>
+            <a className="primary-button" href={currentPath}>Try again</a>
             <a className="secondary-button" href="/next/events-calendar">Return to Events</a>
           </div>
         </section>
@@ -72,7 +81,7 @@ export default async function NewEventRequestPage({ searchParams }) {
   return (
     <AppShell
       account={pageData.account}
-      title={editId ? "Edit Event" : "Add New Event"}
+      title={editId ? "Edit Event" : creationStatus === "confirmed" ? "Confirmed Event" : "Add New Event"}
       eyebrow="Event planning and execution brief"
       activePath="/next/events/new"
       bodyClass="events-page events-new-page"
@@ -87,6 +96,7 @@ export default async function NewEventRequestPage({ searchParams }) {
         initialCanEditRates={!!pageData.canEditRates && featureAllowed(pageData.account, "events.requests.governorate_rates")}
         initialEvent={pageData.event || null}
         initialStartDate={startDate}
+        creationStatus={creationStatus}
         bootstrapWarnings={pageData.warnings || []}
       />
     </AppShell>
