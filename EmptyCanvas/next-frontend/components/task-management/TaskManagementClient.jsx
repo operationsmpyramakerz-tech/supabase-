@@ -8,6 +8,7 @@ import NotificationsBell from "../notifications/NotificationsBell";
 import UserProfileMenu from "../UserProfileMenu";
 import ClassicTaskSelect from "./ClassicTaskSelect";
 import { TaskCreateChoice, DirectTaskEditor, DirectTaskDetail } from "./DirectTaskControls";
+import DelegatedTaskAddDock from "./DelegatedTaskAddDock";
 import { loadTeamMemberPublicProfile } from "../../lib/team-member-public-client";
 import { featureAllowed } from "../../lib/feature-permissions-registry";
 import { taskCardAllows } from "../../lib/task-data-scope.mjs";
@@ -646,11 +647,12 @@ export default function TaskManagementClient({ view, initialMeta, initialTickets
   const userName = account?.name || account?.username || meta?.currentUser?.name || "...";
 
   return (
-    <section className={`task-management-page next-task-classic-parity${view === "delegated" && canCreate ? " tm-delegated-with-fab" : ""}`}>
+    <section className="task-management-page next-task-classic-parity">
       <link rel="stylesheet" href="/next/css/task-management-next-parity.css?v=classic-parity-v3-workflow" precedence="erp-detail" />
       <link rel="stylesheet" href="/next/css/task-individual-v1.css?v=1" precedence="erp-detail" />
       {calendarOnly ? <link rel="stylesheet" href="/next/css/task-management-calendar-only-v1.css?v=2" precedence="erp-detail" /> : null}
       {view === "delegated" ? <link rel="stylesheet" href="/next/css/task-delegated-status-fab-v1.css?v=2" precedence="erp-detail" /> : null}
+      {canCreate ? <link rel="stylesheet" href="/next/css/task-delegated-add-dock-v1.css?v=1" precedence="erp-detail" /> : null}
       <BodyClassSync className="task-management-page" />
       <Toast toast={toast} onClose={() => setToast(null)} />
       <header className="main-header tm-page-header next-task-classic-header">
@@ -691,7 +693,7 @@ export default function TaskManagementClient({ view, initialMeta, initialTickets
           </section> : null}
         </div>
       </main>
-      {view === "delegated" && canCreate ? <button type="button" className="tm-delegated-create-fab" onClick={() => setCreateMenu(true)} aria-label="Add new task or project" title="Add new task or project"><FeatherIcon name="plus" /></button> : null}
+      {canCreate ? <DelegatedTaskAddDock onTask={startTask} onProject={startProject} /> : null}
       {createMenu && canCreate ? <TaskPortal><TaskCreateChoice onClose={() => setCreateMenu(false)} onTask={startTask} onProject={startProject} /></TaskPortal> : null}
       {selectedTicket?.kind === "task" ? <TaskPortal><DirectTaskDetail key={selectedTicket.id} ticket={selectedTicket} view={view}
         canWork={view === "my" && !selectedTicket.isArchived && !!meta.currentUser?.id && meta.currentUser.id === selectedTicket.directAssigneeId && canOnTicket("assignment_work", selectedTicket, { personalWork: true })}
