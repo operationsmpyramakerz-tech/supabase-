@@ -8,9 +8,12 @@
     box-sizing: border-box;
     display: grid !important;
     place-items: end stretch !important;
+    grid-template-rows: minmax(0, 1fr);
     inset: 0 !important;
     width: 100% !important;
-    height: 100dvh !important;
+    /* Let the fixed insets determine the available height, not a second
+       viewport-height measurement that can extend under Android system bars. */
+    height: auto !important;
     min-height: 0 !important;
     padding: 44px 0 0 !important;
     overflow: hidden !important;
@@ -35,9 +38,11 @@
     max-width: none !important;
     min-height: 0 !important;
     height: auto !important;
-    max-height: calc(100dvh - 44px) !important;
+    max-height: 100% !important;
     margin: 0 !important;
-    padding: 0 !important;
+    /* Non-scrolling bottom clearance keeps the action row above the
+       phone navigation area even in installed/edge-to-edge browsers. */
+    padding: 0 0 calc(56px + env(safe-area-inset-bottom, 0px)) !important;
     border-radius: 28px 28px 0 0 !important;
     overflow: visible !important;
     box-shadow: 0 -14px 42px rgba(15, 23, 42, .18);
@@ -83,7 +88,8 @@
     flex: 1 1 auto;
     min-height: 0;
     max-width: 100%;
-    padding: 48px 20px max(24px, env(safe-area-inset-bottom, 0px));
+    padding: 48px 20px 24px;
+    scroll-padding-bottom: 24px;
     border-radius: inherit;
     overflow-x: hidden;
     overflow-y: auto;
