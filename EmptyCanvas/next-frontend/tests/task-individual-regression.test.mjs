@@ -37,9 +37,21 @@ const dataUri = load("../lib/task-management-data.js", {
   "./task-data-scope":scopeUri,"./task-data-scope.mjs":scopePure,"./products-auth":uri("export const getDirectAccountGate=async()=>null;"),"./supabase-rest":database,"./team-members-service":team,
 });
 const data = await import(dataUri);
+const attachmentPolicy = new URL("../lib/direct-task-attachment-policy.mjs", import.meta.url).href;
+const { directTaskOwnerPrefix, DIRECT_TASK_ATTACHMENT_BUCKET } = await import(attachmentPolicy);
+const storageMock = uri(`
+const files = new Map();
+export const addReference=(ref,payload)=>files.set(ref,payload);
+export const verifyFileReference=(ref)=>{if(!files.has(ref)){const e=Error('Invalid signature');e.status=403;throw e;}return files.get(ref)};
+export const fileUrl=(ref,name)=>'/next/api/storage/file-direct?reference='+encodeURIComponent(ref)+'&name='+encodeURIComponent(name);
+`);
+const storage = await import(storageMock);
 const mutations = await import(load("../lib/task-management-mutations.js", {
   "./supabase-rest":database,"./team-members-service":team,"./task-management-data":dataUri,
   "./order-action-auth":uri("export const verifyPageAdminPasswordDirect=async()=>true;"),
+  "./storage-direct":storageMock,
+  "./direct-task-attachment-policy.mjs":attachmentPolicy,
+  "./feature-permissions-server":uri("export const featureGate=(context)=>context.denyUploads?{ok:false,status:403,error:'Upload denied'}:context;"),
 }));
 const scope = await import(scopeUri);
 const ctx = (id,view,admin=false, scoped=false) => ({ok:true,view,memberId:id,isPageAdmin:admin,account:{teamMemberId:id,name:id==='owner'?'Owner':'Same Name',department:'Operations', ...(scoped?{featureAccess:{mode:'enforced',grants:{'tasks.__scoped':{allowed:true},'tasks.view':{allowed:true,scope:'own'},'tasks.assignment_work':{allowed:true,scope:'own'},'tasks.project_create':{allowed:true,scope:'own'}}}}:{})}});
@@ -107,4 +119,27 @@ test("creator can archive and restore; archived tasks are not writable by assign
   await assert.rejects(mutations.updateDirectTaskWork(ctx("assigned","my"),task.id,{status:"not_started"}),{status:409});
   await mutations.archiveTaskManagementTicket(creator,task.id,{archived:false});
   assert.ok((await list(ctx("assigned","my"))).some(t=>t.id===task.id));
+});
+
+test("individual task attachment is saved atomically, visible only in permitted detail, and preserved after work/edit", async()=>{
+  const ref="signed-upload-owner-test-token";
+  const ownerFile={scope:"task-management",bucket:DIRECT_TASK_ATTACHMENT_BUCKET,path:directTaskOwnerPrefix("owner")+"file.pdf",recordAuthRequired:true,name:"actual.pdf",type:"application/pdf",size:120};
+  storage.addReference(ref,ownerFile);
+  const input={...payload,attachments:[{url:storage.fileUrl(ref,"fake.pdf"),name:"forged",size:1}]};
+  await assert.rejects(mutations.createTaskManagementTicket({...ctx("owner","delegated"),denyUploads:true},input),{status:403});
+  await assert.rejects(mutations.createTaskManagementTicket(ctx("colleague","delegated"),input),{status:403});
+  await assert.rejects(mutations.createTaskManagementTicket(ctx("owner","delegated"),{...payload,attachments:[{url:"https://example.invalid/file.pdf"}]}),{status:400});
+  await assert.rejects(mutations.createTaskManagementTicket(ctx("owner","delegated"),{...payload,attachments:[{url:storage.fileUrl("forged-ref","fake.pdf")}]}),{status:403});
+  const direct=await mutations.createTaskManagementTicket(ctx("owner","delegated"),input);
+  const expected=[{name:"actual.pdf",url:storage.fileUrl(ref,"actual.pdf"),type:"application/pdf",size:120}];
+  assert.deepEqual(direct.directAttachments,expected);
+  assert.deepEqual(db.rows.department_tickets.find(r=>r.id===direct.id).direct_attachments,expected);
+  assert.equal((await list(ctx("assigned","my"))).find(t=>t.id===direct.id).directAttachments,undefined);
+  const loaded=await data.getTaskManagementTicket(direct.id,ctx("assigned","my",false,true),{force:true});
+  assert.deepEqual(loaded.directAttachments,expected);
+  await assert.rejects(data.getTaskManagementTicket(direct.id,ctx("colleague","my"),{force:true}),{status:403});
+  const updated=await mutations.updateDirectTaskWork(ctx("assigned","my"),direct.id,{status:"completed"});
+  assert.deepEqual(updated.directAttachments,expected);
+  const edited=await mutations.updateTaskManagementTicket(ctx("owner","delegated",true),direct.id,{...payload,attachments:[]});
+  assert.deepEqual(edited.directAttachments,expected);
 });

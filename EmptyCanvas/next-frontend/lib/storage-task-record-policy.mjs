@@ -20,9 +20,10 @@ export function hasTaskFileReference(files, reference) {
 
 export function taskLinkIsVisible(link, ticket, reference, workflow = null) {
   if (!ticket || String(link?.ticket_id || "") !== String(ticket?.id || "")) return false;
+  const kind = String(link.file_kind || "");
+  if (kind === "direct_task_attachment") return ticket.kind === "task" && !link.section_id && !link.assignment_id && hasTaskFileReference(ticket.directAttachments, reference);
   const section = (ticket.sections || []).find(item => String(item.id) === String(link.section_id));
   if (!section) return false;
-  const kind = String(link.file_kind || "");
   if (kind === "section_attachment") return hasTaskFileReference(section.attachments, reference);
   if (kind === "section_work") return hasTaskFileReference(section.workFiles, reference);
   const assignment = (workflow?.assignments || []).find(item => String(item.id) === String(link.assignment_id));

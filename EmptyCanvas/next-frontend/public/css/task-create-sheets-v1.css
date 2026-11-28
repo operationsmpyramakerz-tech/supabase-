@@ -196,3 +196,27 @@ body.task-management-page .tm-create-sheet .tm-direct-actions > button {
     width: 17px; height: 17px; flex-basis: 17px;
   }
 }
+
+/* Individual-task attachments: same ERP Workflow picker and attachment rows. */
+body.task-management-page .tm-direct-attachments .tm-upload-field__picker {
+  width: 100%;
+  min-width: 0;
+  text-align: left;
+  align-items: center;
+  font-family: inherit;
+}
+body.task-management-page .tm-direct-attachments .tm-upload-field__picker:disabled,
+body.task-management-page .tm-direct-attachment-list button:disabled {
+  cursor: wait;
+  opacity: .65;
+}
+body.task-management-page .tm-direct-attachments input[type="file"][hidden] { display: none !important; }
+body.task-management-page .tm-direct-attachment-list .tm-upload-file__info { overflow: hidden; }
+body.task-management-page .tm-direct-description > .tm-direct-attachment-list { margin-top: 8px; }
+body.task-management-page .tm-direct-attachment-list .tm-upload-file__open {
+  flex: 0 0 30px;
+  text-decoration: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  body.task-management-page .tm-direct-attachments .tm-upload-progress span { animation: none; }
+}

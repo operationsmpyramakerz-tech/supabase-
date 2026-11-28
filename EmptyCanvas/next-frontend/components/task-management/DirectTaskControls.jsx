@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import TaskCreateSelect from "./TaskCreateSelect";
+import { DirectTaskAttachmentPicker, DirectTaskFiles } from "./DirectTaskAttachments";
 
 const STATUS = { not_started: "Not started", in_progress: "In progress", completed: "Done", rejected: "Rejected" };
 const PRIORITIES = ["Low", "Normal", "High", "Urgent"];
@@ -55,16 +56,51 @@ export function TaskCreateChoice({ onClose, onTask, onProject }) {
   </Dialog>;
 }
 
-export function DirectTaskEditor({ editor, meta, view, requestJson, notify, onClose, onSaved }) {
+export function DirectTaskEditor({ editor, meta, view, requestJson, notify, onClose, onSaved, canUploadAttachments = false }) {
   const [draft, setDraft] = useState(editor);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const saving = useRef(false);
+  const uploadLock = useRef(false);
+  const [files, setFiles] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState("");
+  const [uploadError, setUploadError] = useState("");
+  const chooseFiles = async (chosen) => {
+    if (draft.id || !canUploadAttachments || saving.current || uploadLock.current || !chosen.length) return;
+    setUploadError("");
+    if (files.length + chosen.length > 20) { setUploadError("Choose at most 20 attachments."); return; }
+    if (chosen.some(file => !file.size || file.size > 10 * 1024 * 1024)) {
+      setUploadError("Each attachment must be non-empty and 10 MB or less."); return;
+    }
+    uploadLock.current = true;
+    setUploading(true);
+    const failures = [];
+    try {
+      for (const [index, file] of chosen.entries()) {
+        setUploadProgress(`Uploading ${index + 1} of ${chosen.length}…`);
+        try {
+          const result = await requestJson(`/next/api/task-management/upload-task-attachment?filename=${encodeURIComponent(file.name)}`, {
+            method: "POST", headers: { "Content-Type": file.type || "application/octet-stream" }, body: file,
+          });
+          if (!result?.file?.url) throw new Error("Storage did not confirm the attachment upload.");
+          setFiles(current => [...current, result.file]);
+        } catch (err) {
+          failures.push(`${file.name}: ${err.message || "Upload failed."}`);
+        }
+      }
+      if (failures.length) setUploadError(failures.join(" · "));
+    } finally {
+      uploadLock.current = false;
+      setUploading(false);
+      setUploadProgress("");
+    }
+  };
   const set = (key, value) => setDraft((old) => ({ ...old, [key]: value }));
-  const close = () => { if (!saving.current) onClose(); };
+  const close = () => { if (!saving.current && !uploadLock.current) onClose(); };
   const submit = async (event) => {
     event.preventDefault();
-    if (saving.current) return;
+    if (saving.current || uploadLock.current) return;
     if (!draft.id && !members.some(member => String(member.id) === String(draft.assigneeId))) {
       setError("Select a team member.");
       return;
@@ -73,7 +109,7 @@ export function DirectTaskEditor({ editor, meta, view, requestJson, notify, onCl
     try {
       const result = await requestJson("/next/api/task-management/mutations-direct", { method: "POST", body: JSON.stringify({
         action: draft.id ? "ticket-update" : "ticket-create", view, ticketId: draft.id,
-        kind: "task", title: draft.title, description: draft.description, priority: draft.priority, dueDate: draft.dueDate, assigneeId: draft.assigneeId, adminPassword: draft.adminPassword,
+        kind: "task", ...(!draft.id && files.length ? { attachments: files } : {}), title: draft.title, description: draft.description, priority: draft.priority, dueDate: draft.dueDate, assigneeId: draft.assigneeId, adminPassword: draft.adminPassword,
       }) });
       notify("success", draft.id ? "Task updated" : "Task created", draft.title);
       await onSaved(result.ticket);
@@ -87,8 +123,9 @@ export function DirectTaskEditor({ editor, meta, view, requestJson, notify, onCl
       {draft.id ? <label>Assigned to <input readOnly value={draft.assigneeName || ""}/></label> : <div className="tm-create-select-field"><span>Assigned to</span><TaskCreateSelect label="Assigned to" value={draft.assigneeId} onChange={(value) => { set("assigneeId", value); setError(""); }} placeholder={members.length ? "Select a team member" : "No team members available"} options={members.map(member => ({ value: member.id, label: `${member.name}${member.department ? ` · ${member.department}` : ""}` }))}/></div>}
       <div className="tm-direct-fields"><label>Due date <input required type="date" value={draft.dueDate} onChange={(e) => set("dueDate", e.target.value)}/></label>{draft.id ? <label>Priority <select required value={draft.priority} onChange={(e) => set("priority", e.target.value)}>{PRIORITIES.map(p => <option key={p}>{p}</option>)}</select></label> : <div className="tm-create-select-field"><span>Priority</span><TaskCreateSelect label="Priority" priority value={draft.priority} options={PRIORITIES.map(p => ({value:p,label:p}))} onChange={value => set("priority", value)}/></div>}</div>
       <label>Description <textarea rows={4} maxLength={8000} value={draft.description} onChange={(e) => set("description", e.target.value)} placeholder="Describe the task…"/></label>
+      {!draft.id && canUploadAttachments && <DirectTaskAttachmentPicker files={files} uploading={uploading} progress={uploadProgress} error={uploadError} disabled={busy} onChoose={chooseFiles} onRemove={url => { setFiles(current => current.filter(file => file.url !== url)); setUploadError(""); }}/> }
       {error && <p role="alert" className="tm-direct-error">{error}</p>}
-      <div className="tm-direct-actions"><button type="button" className="tm-direct-secondary" disabled={busy} onClick={close}>Cancel</button><button type="submit" className="tm-direct-primary" disabled={busy || (!draft.id && !members.length)}>{busy ? "Saving…" : draft.id ? "Save changes" : "Create Task"}</button></div>
+      <div className="tm-direct-actions"><button type="button" className="tm-direct-secondary" disabled={busy || uploading} onClick={close}>Cancel</button><button type="submit" className="tm-direct-primary" disabled={busy || uploading || (!draft.id && !members.length)}>{busy ? "Saving…" : draft.id ? "Save changes" : "Create Task"}</button></div>
     </form>
   </Dialog>;
 }
@@ -116,6 +153,7 @@ export function DirectTaskDetail({ ticket, view, canWork, onClose, onEdit, onArc
     <span className={`tm-direct-status tm-direct-status--${ticket.status}`}>{ticket.isArchived ? "Archived" : STATUS[ticket.status] || ticket.statusLabel}</span>
     <dl className="tm-direct-meta"><div><dt>Assigned to</dt><dd>{ticket.directAssigneeName}</dd></div><div><dt>Created by</dt><dd>{ticket.createdByName}</dd></div><div><dt>Due date</dt><dd>{ticket.dueDate || "—"}</dd></div><div><dt>Priority</dt><dd>{ticket.priority}</dd></div></dl>
     <div className="tm-direct-description"><strong>Description</strong><p>{ticket.description || "No description provided."}</p></div>
+    {ticket.directAttachments?.length > 0 && <div className="tm-direct-description"><strong>Attachments</strong><DirectTaskFiles files={ticket.directAttachments}/></div>}
     {canWork ? <form className="tm-direct-form" onSubmit={submit}>
       <label>Status <select value={status} onChange={(e) => setStatus(e.target.value)}>{Object.entries(STATUS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
       <label>Work report <textarea rows={3} maxLength={8000} value={report} onChange={(e) => setReport(e.target.value)} placeholder="Write a progress update…"/></label>

@@ -653,7 +653,7 @@ export default function TaskManagementClient({ view, initialMeta, initialTickets
       {calendarOnly ? <link rel="stylesheet" href="/next/css/task-management-calendar-only-v1.css?v=2" precedence="erp-detail" /> : null}
       {view === "delegated" ? <link rel="stylesheet" href="/next/css/task-delegated-status-fab-v1.css?v=2" precedence="erp-detail" /> : null}
       {canCreate ? <link rel="stylesheet" href="/next/css/task-delegated-add-dock-v1.css?v=4" precedence="erp-detail" /> : null}
-      {canCreate ? <link rel="stylesheet" href="/next/css/task-create-sheets-v1.css?v=3" precedence="erp-detail" /> : null}
+      <link rel="stylesheet" href="/next/css/task-create-sheets-v1.css?v=4" precedence="erp-detail" />
       <BodyClassSync className="task-management-page" />
       <Toast toast={toast} onClose={() => setToast(null)} />
       <header className="main-header tm-page-header next-task-classic-header">
@@ -703,7 +703,7 @@ export default function TaskManagementClient({ view, initialMeta, initialTickets
         onArchive={directCanManage(selectedTicket) && canOnTicket("project_archive", selectedTicket) ? (ticket) => requestAction("archive", ticket) : null}
         onDelete={directCanManage(selectedTicket) && canOnTicket("project_delete", selectedTicket) ? (ticket) => requestAction("delete", ticket) : null}
         requestJson={requestJson} notify={notify} onSaved={async (ticket) => { await refresh({ silent: true }); await openTicket(ticket, { force: true }); }} /></TaskPortal> : selectedTicket ? <TaskPortal><ClassicTaskWorkflowDetails ticket={selectedTicket} view={view} meta={meta} onClose={() => setSelectedTicket(null)} onEdit={canOnTicket("project_edit", selectedTicket) ? (ticket) => requestAction("edit", ticket) : null} onRefresh={() => refresh({ silent: true })} onWork={canOnTicket("assignment_work", selectedTicket, { personalWork: true }) || canOnTicket("section_work", selectedTicket, { personalWork: true }) || canOnTicket("section_work", selectedTicket) ? setWorkTarget : null} onTeamWorkflow={canOnTicket("workflow_save", selectedTicket) ? setTeamSection : null} onArchive={canOnTicket("project_archive", selectedTicket) ? (ticket) => requestAction("archive", ticket) : null} onDelete={canOnTicket("project_delete", selectedTicket) ? (ticket) => requestAction("delete", ticket) : null} onDelivered={canOnTicket("mark_delivered", selectedTicket) ? delivered : null} featurePermissions={Object.fromEntries(["workflow_save", "assignment_work", "section_work", "assignment_archive", "assignment_delete"].map(key => [key, canOnTicket(key, selectedTicket, { personalWork: key.startsWith("assignment_") || key === "section_work" }) || (key === "section_work" && canOnTicket(key, selectedTicket))]))} notify={notify} /></TaskPortal> : null}
-      {editor?.kind === "task" ? <TaskPortal><DirectTaskEditor key={editor.id || "new"} editor={editor} meta={meta} view={view} requestJson={requestJson} notify={notify} onClose={() => setEditor(null)} onSaved={afterSaved} /></TaskPortal> : null}
+      {editor?.kind === "task" ? <TaskPortal><DirectTaskEditor key={editor.id || "new"} editor={editor} meta={meta} view={view} requestJson={requestJson} notify={notify} canUploadAttachments={can("attachment_upload")} onClose={() => setEditor(null)} onSaved={afterSaved} /></TaskPortal> : null}
       {((editor && editor.kind !== "task") || workTarget || teamSection || adminAction || confirmAction || rejectedReason) ? <TaskPortal><TaskManagementDialogs
         editor={editor?.kind === "task" ? null : editor}
         meta={meta}

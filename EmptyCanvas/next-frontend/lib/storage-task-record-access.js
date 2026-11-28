@@ -18,7 +18,7 @@ function deny(message, status = 403) {
  * visibility. The signed file reference alone never establishes record access.
  * A task URL can be shared with a colleague who is allowed to see its project.
  */
-export async function assertTaskStorageRecordAccess(reference) {
+export async function assertTaskStorageRecordAccess(reference, { directTaskOnly = false } = {}) {
   if (!reference || reference.length > 6000) deny("Invalid attachment reference.", 400);
   let links;
   try {
@@ -40,7 +40,10 @@ export async function assertTaskStorageRecordAccess(reference) {
   for (const link of links) {
     const ticketId = String(link.ticket_id || "");
     const sectionId = String(link.section_id || "");
-    if (!ticketId || !sectionId) continue;
+    const direct = link.file_kind === "direct_task_attachment";
+    // Dedicated direct-task references must never gain access through a
+    // copied link in a project section or assignment.
+    if (direct !== directTaskOnly || !ticketId || (!direct && !sectionId)) continue;
     for (const context of contexts) {
       let ticket;
       try {

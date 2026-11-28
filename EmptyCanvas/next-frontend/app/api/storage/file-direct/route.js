@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getDirectAccountGate } from "../../../../lib/products-auth";
 import { assertTaskStorageRecordAccess } from "../../../../lib/storage-task-record-access";
+import { isDirectTaskAttachment } from "../../../../lib/direct-task-attachment-policy.mjs";
 import { assertB2cStorageRecordAccess, assertKpiStorageRecordAccess } from "../../../../lib/storage-b2c-kpi-record-access";
 import {
   canUseStorage,
@@ -43,7 +44,7 @@ export async function GET(request) {
     const taskRecordAuth = payload.scope === "task-management" && (bound || process.env.ERP_STORAGE_TASK_RECORD_AUTH_ENABLED === "1");
     const b2cRecordAuth = payload.scope === "b2c" && (bound || process.env.ERP_STORAGE_B2C_RECORD_AUTH_ENABLED === "1");
     const kpiRecordAuth = payload.scope === "kpi-evidence" && (bound || process.env.ERP_STORAGE_KPI_RECORD_AUTH_ENABLED === "1");
-    if (taskRecordAuth) await assertTaskStorageRecordAccess(reference);
+    if (taskRecordAuth) await assertTaskStorageRecordAccess(reference, { directTaskOnly: isDirectTaskAttachment(payload) });
     if (b2cRecordAuth) await assertB2cStorageRecordAccess(reference);
     if (kpiRecordAuth) await assertKpiStorageRecordAccess(reference);
     const recordAuth = taskRecordAuth || b2cRecordAuth || kpiRecordAuth;

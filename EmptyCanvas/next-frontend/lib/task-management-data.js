@@ -310,7 +310,7 @@ function serializeTicket(row = {}, sectionRows = [], edgeRows = [], { summary = 
   return {
     ...base,
     description: text(valueFor(row, ["description", "details", "Description"]), 8000),
-    ...(kind === "task" ? { directWorkReport: text(row.direct_work_report, 8000), directRejectionReason: text(row.direct_rejection_reason, 8000) } : {}),
+    ...(kind === "task" ? { directAttachments: attachments(row.direct_attachments), directWorkReport: text(row.direct_work_report, 8000), directRejectionReason: text(row.direct_rejection_reason, 8000) } : {}),
     edges: (kind === "task" ? [] : edgeRows).map(serializeEdge).filter((edge) => edge.from && edge.to),
   };
 }

@@ -22,6 +22,9 @@ import {
   taskManagementTicketBelongsToView,
 } from "./task-management-data";
 import { verifyPageAdminPasswordDirect } from "./order-action-auth";
+import { featureGate } from "./feature-permissions-server";
+import { verifyFileReference, fileUrl } from "./storage-direct";
+import { validateDirectTaskAttachments } from "./direct-task-attachment-policy.mjs";
 
 const PAGE_BY_VIEW = Object.freeze({ all: "All Tasks", my: "My Tasks", delegated: "Delegated Tasks" });
 
@@ -478,11 +481,19 @@ async function createDirectTask(context, payload) {
   const members = await listTeamMembersLite({ fresh: true });
   const assignee = members.find((member) => text(member.id) === assigneeId);
   if (!assignee) throw errorWithStatus("The selected assignee is not a valid team member.");
+  const files = validateDirectTaskAttachments(payload.attachments, {
+    memberId: currentUser.id, verifyReference: verifyFileReference, makeUrl: fileUrl,
+  });
+  if (files.length) {
+    const gate = featureGate(context, "tasks.attachment_upload");
+    if (!gate.ok) throw errorWithStatus(gate.error || "Attachment upload is not permitted.", gate.status || 403);
+  }
   let created;
   try {
     created = await insert(ticketsTable(), {
       ...fields,
       ticket_kind: "task",
+      ...(files.length ? { direct_attachments: files } : {}),
       direct_assignee_id: assigneeId,
       direct_assignee_name: assignee.name,
       status: "not_started",
@@ -490,6 +501,9 @@ async function createDirectTask(context, payload) {
       created_by_name: currentUser.name,
     });
   } catch (error) {
+    if (/direct_attachments/i.test(text(error?.message)) && ["42703", "PGRST204"].includes(error?.details?.code)) {
+      throw errorWithStatus("Run the Individual Task Attachments SQL migration before attaching files.", 503);
+    }
     if (/ticket_kind|direct_assignee_/i.test(text(error?.message)) && ["42703", "PGRST204"].includes(error?.details?.code)) {
       throw errorWithStatus("Run the Individual Tasks SQL migration before creating a task.", 503);
     }
