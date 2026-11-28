@@ -9,7 +9,7 @@ function Symbol({ name }) {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{name === "task" ? <><rect x="4" y="3" width="16" height="18" rx="3"/><path d="m8 11 2 2 5-5M8 17h8"/></> : name === "project" ? <><circle cx="6" cy="5" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="6" cy="19" r="2.5"/><path d="M6 7.5v9M18 8.5c0 6-4 9-9.5 10"/></> : name === "close" ? <path d="m6 6 12 12M18 6 6 18"/> : <path d="m9 5 7 7-7 7"/>}</svg>;
 }
 
-function Dialog({ title, eyebrow, onClose, children, choice = false, elevated = false }) {
+function Dialog({ title, eyebrow, onClose, children, choice = false, elevated = false, sheetIcon = "" }) {
   const titleId = useId();
   const panel = useRef(null);
   const closeRef = useRef(onClose);
@@ -31,11 +31,17 @@ function Dialog({ title, eyebrow, onClose, children, choice = false, elevated = 
     document.addEventListener("keydown", keyboard);
     return () => { document.removeEventListener("keydown", keyboard); if (previous?.isConnected) previous.focus(); };
   }, []);
-  return <div className={`tm-direct-overlay${choice ? " tm-direct-overlay--choice" : ""}${elevated ? " tm-direct-overlay--elevated" : ""}`} role="dialog" aria-modal="true" aria-labelledby={titleId}>
+  const dialogContent = <>
+    <header className="tm-direct-header"><div><span>{eyebrow}</span><h2 id={titleId}>{title}</h2></div><button type="button" onClick={onClose} aria-label="Close" className="tm-direct-close"><Symbol name="close"/></button></header>
+    {children}
+  </>;
+  return <div className={`tm-direct-overlay${choice ? " tm-direct-overlay--choice" : ""}${elevated ? " tm-direct-overlay--elevated" : ""}${sheetIcon ? " tm-create-sheet-overlay" : ""}`} role="dialog" aria-modal="true" aria-labelledby={titleId}>
     <div className="tm-direct-backdrop" onClick={onClose}/>
-    <section className="tm-direct-panel" ref={panel}>
-      <header className="tm-direct-header"><div><span>{eyebrow}</span><h2 id={titleId}>{title}</h2></div><button type="button" onClick={onClose} aria-label="Close" className="tm-direct-close"><Symbol name="close"/></button></header>
-      {children}
+    <section className={`tm-direct-panel${sheetIcon ? " tm-create-sheet" : ""}`} ref={panel}>
+      {sheetIcon ? <>
+        <span className="tm-create-sheet-badge" aria-hidden="true"><Symbol name={sheetIcon}/></span>
+        <div className="tm-create-sheet-scroll">{dialogContent}</div>
+      </> : dialogContent}
     </section>
   </div>;
 }
@@ -69,7 +75,7 @@ export function DirectTaskEditor({ editor, meta, view, requestJson, notify, onCl
     finally { saving.current = false; setBusy(false); }
   };
   const members = meta.taskAssignees || [];
-  return <Dialog title={draft.id ? "Edit task" : "Create task"} eyebrow="Individual task" onClose={close} elevated>
+  return <Dialog title={draft.id ? "Edit task" : "Create task"} eyebrow="Individual task" onClose={close} elevated sheetIcon={draft.id ? "" : "task"}>
     <form className="tm-direct-form" onSubmit={submit}>
       <label>Task title <input required autoComplete="off" maxLength={500} value={draft.title} onChange={(e) => set("title", e.target.value)} placeholder="Enter task title"/></label>
       {draft.id ? <label>Assigned to <input readOnly value={draft.assigneeName || ""}/></label> : <label>Assigned to <select required value={draft.assigneeId} onChange={(e) => set("assigneeId", e.target.value)}><option value="">{members.length ? "Select a team member" : "No team members available"}</option>{members.map((member) => <option key={member.id} value={member.id}>{member.name}{member.department ? ` · ${member.department}` : ""}</option>)}</select></label>}

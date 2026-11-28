@@ -1,0 +1,107 @@
+/* New Task and Project Information only: existing ERP full-bleed mobile sheet.
+   Desktop, individual-task details/edit, and the workflow builder are unchanged. */
+.tm-create-sheet-badge { display: none; }
+.tm-create-sheet-scroll { display: contents; }
+
+@media (max-width: 768px) {
+  body.task-management-page > :is(.tm-direct-overlay, .tm-overlay).tm-create-sheet-overlay {
+    box-sizing: border-box;
+    display: grid !important;
+    place-items: end stretch !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100dvh !important;
+    min-height: 0 !important;
+    padding: 44px 0 0 !important;
+    overflow: hidden !important;
+  }
+
+  /* Match the existing Project Information backdrop for the new-task sheet. */
+  body.task-management-page > .tm-direct-overlay.tm-create-sheet-overlay > .tm-direct-backdrop {
+    background: rgba(15, 20, 32, .48);
+    -webkit-backdrop-filter: blur(5px);
+    backdrop-filter: blur(5px);
+  }
+
+  /* A non-scrolling outer surface lets the badge cross the top edge.
+     The inner container is the only scroller, including on short displays. */
+  body.task-management-page > :is(.tm-direct-overlay, .tm-overlay).tm-create-sheet-overlay > :is(.tm-direct-panel, .tm-dialog).tm-create-sheet {
+    position: relative !important;
+    display: flex !important;
+    flex-direction: column;
+    box-sizing: border-box !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    min-height: 0 !important;
+    height: auto !important;
+    max-height: calc(100dvh - 44px) !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border-radius: 28px 28px 0 0 !important;
+    overflow: visible !important;
+    box-shadow: 0 -14px 42px rgba(15, 23, 42, .18);
+    animation: tm-create-sheet-rise .32s cubic-bezier(.22, 1, .36, 1) backwards;
+  }
+
+  body.task-management-page .tm-create-sheet > .tm-create-sheet-badge {
+    position: absolute;
+    z-index: 3;
+    display: grid;
+    place-items: center;
+    top: -28px;
+    left: 50%;
+    box-sizing: border-box;
+    width: 56px;
+    height: 56px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 18px;
+    background: #111111;
+    color: #fff;
+    box-shadow: 0 16px 36px rgba(15, 23, 42, .2), 0 2px 8px rgba(15, 23, 42, .12);
+    transform: translateX(-50%);
+    animation: none !important;
+    pointer-events: none;
+  }
+
+  body.task-management-page .tm-create-sheet > .tm-create-sheet-badge svg {
+    display: block;
+    box-sizing: border-box;
+    width: 28px !important;
+    height: 28px !important;
+    padding: 0 !important;
+    color: #fff !important;
+    stroke: currentColor !important;
+    transform: none !important;
+  }
+
+  body.task-management-page .tm-create-sheet > .tm-create-sheet-scroll {
+    box-sizing: border-box;
+    display: block;
+    flex: 1 1 auto;
+    min-height: 0;
+    max-width: 100%;
+    padding: 48px 20px max(24px, env(safe-area-inset-bottom, 0px));
+    border-radius: inherit;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  body.task-management-page .tm-create-sheet > .tm-create-sheet-scroll::-webkit-scrollbar { display: none; }
+
+  @media (max-width: 380px) {
+    body.task-management-page .tm-create-sheet > .tm-create-sheet-scroll { padding-inline: 15px; }
+  }
+
+  @keyframes tm-create-sheet-rise {
+    from { transform: translateY(100%); }
+    to { transform: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    body.task-management-page > :is(.tm-direct-overlay, .tm-overlay).tm-create-sheet-overlay > :is(.tm-direct-panel, .tm-dialog).tm-create-sheet { animation: none !important; }
+  }
+}
