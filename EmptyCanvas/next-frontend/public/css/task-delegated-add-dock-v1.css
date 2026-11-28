@@ -5,14 +5,13 @@
 
 @media (max-width: 760px) {
   body.next-classic-shell-active:has(.tm-delegated-add-dock) {
-    --tm-add-dock-side-w: clamp(48px, 15vw, 72px);
-    --tm-add-dock-gap: 11px;
+    /* Reuse the normal Classic Home rail dimensions on both ends.
+       Only the fluid middle track gives up space for Add. */
+    --tm-add-dock-side-w: var(--mobile-home-block-w, 88px);
+    --tm-add-dock-gap: var(--mobile-home-gap, 18px);
   }
 
   body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host > .sidebar-nav:has(> .tm-delegated-add-dock) {
-    --mobile-home-block-w: var(--tm-add-dock-side-w);
-    --mobile-home-gap: var(--tm-add-dock-gap);
-    --mobile-home-bridge-w: 6px;
     grid-template-columns: var(--tm-add-dock-side-w) minmax(0, 1fr) var(--tm-add-dock-side-w) !important;
     column-gap: var(--tm-add-dock-gap) !important;
     padding-right: 0 !important;
@@ -24,10 +23,6 @@
   body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host > .sidebar-nav:has(> .tm-delegated-add-dock) > .mobile-dock-pages-clip > .mobile-dock-pages-list {
     gap: 2px !important;
     padding: 4px 5px !important;
-  }
-
-  body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host > .sidebar-nav:has(> .tm-delegated-add-dock) > .mobile-dock-home-rail::after {
-    left: calc(100% + 2.5px) !important;
   }
 
   /* Keep the earlier secondary navigation dock above the now-narrower
@@ -55,12 +50,30 @@
     box-shadow: var(--mobile-dock-shadow, 0 18px 40px #0f172a2e);
     overflow: visible;
   }
+  /* A very narrow middle rail must not squeeze its secondary page labels.
+     Let the secondary navigation float just above all three tracks. */
+  @media (max-width: 476px) {
+    html[data-theme] body.next-classic-shell-active:has(.tm-delegated-add-dock) .task-management-secondary-sidebar {
+      left: max(12px, calc((100% - 240px) / 2)) !important;
+      right: max(12px, calc((100% - 240px) / 2)) !important;
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 106px) !important;
+      height: auto !important;
+      min-height: 70px !important;
+      padding: 10px !important;
+      border-radius: 20px !important;
+      transform: translateY(12px) !important;
+    }
+    html[data-theme] body.next-classic-shell-active:has(.tm-delegated-add-dock) .task-management-secondary-sidebar.is-open {
+      transform: translateY(0) !important;
+    }
+  }
+
   .tm-delegated-add-dock::before {
     content: "";
     position: absolute;
     top: 50%;
-    right: calc(100% + 2.5px);
-    width: 6px;
+    right: calc(100% + (var(--tm-add-dock-gap) - var(--mobile-home-bridge-w, 10px)) / 2);
+    width: var(--mobile-home-bridge-w, 10px);
     height: 24px;
     transform: translateY(-50%);
     border-radius: 999px;
