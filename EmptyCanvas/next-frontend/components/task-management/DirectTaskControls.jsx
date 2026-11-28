@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import TaskCreateSelect from "./TaskCreateSelect";
 
 const STATUS = { not_started: "Not started", in_progress: "In progress", completed: "Done", rejected: "Rejected" };
 const PRIORITIES = ["Low", "Normal", "High", "Urgent"];
@@ -16,14 +17,15 @@ function Dialog({ title, eyebrow, onClose, children, choice = false, elevated = 
   useEffect(() => { closeRef.current = onClose; }, [onClose]);
   useEffect(() => {
     const previous = document.activeElement;
-    panel.current?.querySelector("button, input, select")?.focus();
+    if (sheetIcon) panel.current?.querySelector("h2")?.focus({ preventScroll: true });
+    else panel.current?.querySelector("button, input, select")?.focus();
     const keyboard = (event) => {
       // Only the topmost dialog handles keyboard navigation.
       const dialogs = document.querySelectorAll('[role="dialog"][aria-modal="true"]');
-      if (dialogs[dialogs.length - 1] !== panel.current?.parentElement) return;
+      if (event.defaultPrevented || dialogs[dialogs.length - 1] !== panel.current?.parentElement) return;
       if (event.key === "Escape") { event.preventDefault(); closeRef.current?.(); }
       if (event.key !== "Tab") return;
-      const els = [...(panel.current?.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex="0"]') || [])];
+      const els = [...(panel.current?.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex="0"]') || [])].filter(element => element.tabIndex >= 0 && element.getClientRects().length);
       if (!els.length) return;
       if (event.shiftKey && document.activeElement === els[0]) { event.preventDefault(); els[els.length - 1].focus(); }
       else if (!event.shiftKey && document.activeElement === els[els.length - 1]) { event.preventDefault(); els[0].focus(); }
@@ -32,7 +34,7 @@ function Dialog({ title, eyebrow, onClose, children, choice = false, elevated = 
     return () => { document.removeEventListener("keydown", keyboard); if (previous?.isConnected) previous.focus(); };
   }, []);
   const dialogContent = <>
-    <header className="tm-direct-header"><div><span>{eyebrow}</span><h2 id={titleId}>{title}</h2></div><button type="button" onClick={onClose} aria-label="Close" className="tm-direct-close"><Symbol name="close"/></button></header>
+    {sheetIcon ? <header className="tm-direct-header tm-create-sheet-header"><h2 id={titleId} tabIndex={-1}>{title}</h2></header> : <header className="tm-direct-header"><div><span>{eyebrow}</span><h2 id={titleId}>{title}</h2></div><button type="button" onClick={onClose} aria-label="Close" className="tm-direct-close"><Symbol name="close"/></button></header>}
     {children}
   </>;
   return <div className={`tm-direct-overlay${choice ? " tm-direct-overlay--choice" : ""}${elevated ? " tm-direct-overlay--elevated" : ""}${sheetIcon ? " tm-create-sheet-overlay" : ""}`} role="dialog" aria-modal="true" aria-labelledby={titleId}>
@@ -63,6 +65,10 @@ export function DirectTaskEditor({ editor, meta, view, requestJson, notify, onCl
   const submit = async (event) => {
     event.preventDefault();
     if (saving.current) return;
+    if (!draft.id && !members.some(member => String(member.id) === String(draft.assigneeId))) {
+      setError("Select a team member.");
+      return;
+    }
     saving.current = true; setBusy(true); setError("");
     try {
       const result = await requestJson("/next/api/task-management/mutations-direct", { method: "POST", body: JSON.stringify({
@@ -75,14 +81,14 @@ export function DirectTaskEditor({ editor, meta, view, requestJson, notify, onCl
     finally { saving.current = false; setBusy(false); }
   };
   const members = meta.taskAssignees || [];
-  return <Dialog title={draft.id ? "Edit task" : "Create task"} eyebrow="Individual task" onClose={close} elevated sheetIcon={draft.id ? "" : "task"}>
+  return <Dialog title={draft.id ? "Edit task" : "Create Task"} eyebrow="Individual task" onClose={close} elevated sheetIcon={draft.id ? "" : "task"}>
     <form className="tm-direct-form" onSubmit={submit}>
       <label>Task title <input required autoComplete="off" maxLength={500} value={draft.title} onChange={(e) => set("title", e.target.value)} placeholder="Enter task title"/></label>
-      {draft.id ? <label>Assigned to <input readOnly value={draft.assigneeName || ""}/></label> : <label>Assigned to <select required value={draft.assigneeId} onChange={(e) => set("assigneeId", e.target.value)}><option value="">{members.length ? "Select a team member" : "No team members available"}</option>{members.map((member) => <option key={member.id} value={member.id}>{member.name}{member.department ? ` · ${member.department}` : ""}</option>)}</select></label>}
-      <div className="tm-direct-fields"><label>Due date <input required type="date" value={draft.dueDate} onChange={(e) => set("dueDate", e.target.value)}/></label><label>Priority <select required value={draft.priority} onChange={(e) => set("priority", e.target.value)}>{PRIORITIES.map(p => <option key={p}>{p}</option>)}</select></label></div>
+      {draft.id ? <label>Assigned to <input readOnly value={draft.assigneeName || ""}/></label> : <div className="tm-create-select-field"><span>Assigned to</span><TaskCreateSelect label="Assigned to" value={draft.assigneeId} onChange={(value) => { set("assigneeId", value); setError(""); }} placeholder={members.length ? "Select a team member" : "No team members available"} options={members.map(member => ({ value: member.id, label: `${member.name}${member.department ? ` · ${member.department}` : ""}` }))}/></div>}
+      <div className="tm-direct-fields"><label>Due date <input required type="date" value={draft.dueDate} onChange={(e) => set("dueDate", e.target.value)}/></label>{draft.id ? <label>Priority <select required value={draft.priority} onChange={(e) => set("priority", e.target.value)}>{PRIORITIES.map(p => <option key={p}>{p}</option>)}</select></label> : <div className="tm-create-select-field"><span>Priority</span><TaskCreateSelect label="Priority" priority value={draft.priority} options={PRIORITIES.map(p => ({value:p,label:p}))} onChange={value => set("priority", value)}/></div>}</div>
       <label>Description <textarea rows={4} maxLength={8000} value={draft.description} onChange={(e) => set("description", e.target.value)} placeholder="Describe the task…"/></label>
       {error && <p role="alert" className="tm-direct-error">{error}</p>}
-      <div className="tm-direct-actions"><button type="button" className="tm-direct-secondary" disabled={busy} onClick={close}>Cancel</button><button type="submit" className="tm-direct-primary" disabled={busy || (!draft.id && !members.length)}>{busy ? "Saving…" : draft.id ? "Save changes" : "Create task"}</button></div>
+      <div className="tm-direct-actions"><button type="button" className="tm-direct-secondary" disabled={busy} onClick={close}>Cancel</button><button type="submit" className="tm-direct-primary" disabled={busy || (!draft.id && !members.length)}>{busy ? "Saving…" : draft.id ? "Save changes" : "Create Task"}</button></div>
     </form>
   </Dialog>;
 }

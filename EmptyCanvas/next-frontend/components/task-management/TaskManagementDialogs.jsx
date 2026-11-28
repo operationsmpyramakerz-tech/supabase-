@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import ActionLoadingModal, { useActionLoading } from "../ActionLoadingModal";
 import ClassicTaskSelect from "./ClassicTaskSelect";
+import TaskCreateSelect from "./TaskCreateSelect";
 import { DeleteConfirmDialog, DeleteVerificationDialog } from "../shared/SystemDeleteDialogs";
 import { confirmDelete } from "../../lib/client-confirm";
 
@@ -648,12 +649,12 @@ function ProjectEditor({ editor, meta, view, onClose, onSaved, notify }) {
   }, [mode, draft.sections, zoom, boardWidth, boardHeight]);
 
   const projectInfoContent = <>
-    <div className="tm-dialog__top"><div><span className="tm-eyebrow">Project details</span><h2>Project information</h2></div><button type="button" className="tm-icon-btn" aria-label="Close" onClick={onClose}><FeatherIcon name="x" /></button></div>
-    <form onSubmit={continueToBuilder}><div className="tm-form-grid"><label className="tm-field tm-field--wide"><span>Project title <b>*</b></span><input value={draft.title} onChange={(event) => update("title", event.target.value)} maxLength={500} required /></label><label className="tm-field"><span>Priority <b>*</b></span><ClassicTaskSelect kind="priority" value={draft.priority} onChange={(event) => update("priority", event.target.value)}>{PRIORITIES.map((item) => <option value={item} key={item}>{item}</option>)}</ClassicTaskSelect></label><label className="tm-field"><span>Target date <b>*</b></span><input type="date" value={draft.dueDate} onChange={(event) => update("dueDate", event.target.value)} required /></label><label className="tm-field tm-field--wide"><span>Description</span><textarea rows="4" value={draft.description} onChange={(event) => update("description", event.target.value)} /></label></div>{error ? <div className="tm-form-error">{error}</div> : null}<div className="tm-dialog__actions"><button type="button" className="tm-btn tm-btn--secondary" onClick={onClose}>Cancel</button><button type="submit" className="tm-btn tm-btn--primary"><span>{draft.id ? "Save Project Details" : "Continue to Workflow"}</span><FeatherIcon name="chevron-right" /></button></div></form>
+    {draft.id ? <div className="tm-dialog__top"><div><span className="tm-eyebrow">Project details</span><h2>Project information</h2></div><button type="button" className="tm-icon-btn" aria-label="Close" onClick={onClose}><FeatherIcon name="x" /></button></div> : <div className="tm-dialog__top tm-create-sheet-header"><h2>Create Project</h2></div>}
+    <form onSubmit={continueToBuilder}><div className="tm-form-grid"><label className="tm-field tm-field--wide"><span>Project title <b>*</b></span><input value={draft.title} onChange={(event) => update("title", event.target.value)} maxLength={500} required /></label>{draft.id ? <label className="tm-field"><span>Priority <b>*</b></span><ClassicTaskSelect kind="priority" value={draft.priority} onChange={(event) => update("priority", event.target.value)}>{PRIORITIES.map((item) => <option value={item} key={item}>{item}</option>)}</ClassicTaskSelect></label> : <div className="tm-field"><span>Priority <b>*</b></span><TaskCreateSelect label="Priority" priority value={draft.priority} options={PRIORITIES.map(item => ({value:item,label:item}))} onChange={value => update("priority", value)}/></div>}<label className="tm-field"><span>Target date <b>*</b></span><input type="date" value={draft.dueDate} onChange={(event) => update("dueDate", event.target.value)} required /></label><label className="tm-field tm-field--wide"><span>Description</span><textarea rows="4" value={draft.description} onChange={(event) => update("description", event.target.value)} /></label></div>{error ? <div className="tm-form-error">{error}</div> : null}<div className="tm-dialog__actions"><button type="button" className="tm-btn tm-btn--secondary" onClick={onClose}>Cancel</button><button type="submit" className="tm-btn tm-btn--primary"><span>{draft.id ? "Save Project Details" : "Continue to Workflow"}</span><FeatherIcon name="chevron-right" /></button></div></form>
   </>;
 
   return <>
-    {mode === "meta" ? <div className={`tm-overlay tm-overlay--above${draft.id ? "" : " tm-create-sheet-overlay"}`} role="dialog" aria-modal="true" aria-label="Project information">
+    {mode === "meta" ? <div className={`tm-overlay tm-overlay--above${draft.id ? "" : " tm-create-sheet-overlay"}`} role="dialog" aria-modal="true" aria-label={draft.id ? "Project information" : "Create Project"}>
       <div className="tm-overlay__backdrop" onClick={onClose} />
       <section className={`tm-dialog tm-dialog--meta${draft.id ? "" : " tm-create-sheet"}`}>
         {!draft.id ? <>

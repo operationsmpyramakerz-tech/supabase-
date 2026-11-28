@@ -111,3 +111,88 @@
     body.task-management-page > :is(.tm-direct-overlay, .tm-overlay).tm-create-sheet-overlay > :is(.tm-direct-panel, .tm-dialog).tm-create-sheet { animation: none !important; }
   }
 }
+
+/* V3: creation-only headings and controls; detail/edit/builder remain untouched. */
+body.task-management-page .tm-create-sheet .tm-create-sheet-header {
+  display: block;
+  text-align: center;
+  margin: 0 0 22px;
+}
+body.task-management-page .tm-create-sheet .tm-create-sheet-header h2 {
+  margin: 0;
+  font-size: 23px;
+  font-weight: 800;
+  line-height: 1.25;
+  outline: none;
+}
+body.task-management-page .tm-create-sheet .tm-create-select-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 700;
+}
+body.task-management-page .tm-create-sheet .tm-direct-fields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+body.task-management-page .tm-create-sheet .tm-direct-fields input[type="date"] {
+  min-height: 52px;
+}
+body.task-management-page .tm-create-sheet .tm-create-select .tm-select__button {
+  gap: 8px;
+  padding-inline: 12px 8px;
+}
+body.task-management-page .tm-create-sheet .tm-create-select .tm-select__value {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  overflow: visible;
+}
+body.task-management-page .tm-create-sheet .tm-create-select__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body.task-management-page .tm-create-sheet .tm-create-select.is-open {
+  z-index: 5;
+}
+body.task-management-page .tm-create-sheet .tm-create-select .tm-select__menu {
+  overscroll-behavior: contain;
+  box-sizing: border-box;
+  min-width: 100%;
+}
+body.task-management-page .tm-create-sheet .tm-create-select .tm-select__option-main > span:last-child {
+  overflow-wrap: anywhere;
+}
+body.task-management-page .tm-create-sheet .tm-create-select .tm-select__option:focus-visible {
+  outline: 2px solid #fa7111;
+  outline-offset: -2px;
+}
+body.task-management-page .tm-create-sheet .tm-direct-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+body.task-management-page .tm-create-sheet .tm-direct-actions > button {
+  width: 100%;
+  min-height: 56px;
+  border-radius: 16px;
+  font-size: 14px;
+  font-weight: 800;
+}
+@media (max-width: 380px) {
+  body.task-management-page .tm-create-sheet .tm-create-select .tm-select__button {
+    gap: 6px;
+    padding-inline: 9px 6px;
+  }
+  body.task-management-page .tm-create-sheet .tm-create-select .tm-select__chevron {
+    width: 25px; height: 25px; flex-basis: 25px;
+  }
+  body.task-management-page .tm-create-sheet .tm-create-select .tm-select__value { gap: 7px; }
+  body.task-management-page .tm-create-sheet .tm-create-select .tm-priority-marker {
+    width: 17px; height: 17px; flex-basis: 17px;
+  }
+}
