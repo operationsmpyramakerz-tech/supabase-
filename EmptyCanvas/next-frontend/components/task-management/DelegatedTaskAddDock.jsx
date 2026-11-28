@@ -118,18 +118,19 @@ export default function DelegatedTaskAddDock({ onTask, onProject }) {
         aria-controls={panelId}
         onClick={() => setOpen((previous) => !previous)}
       >
-        <span className="tm-delegated-add-dock__accent"><DockIcon name={open ? "close" : "plus"} /></span>
+        <span className="tm-delegated-add-dock__accent"><DockIcon name="plus" /></span>
       </button>
-      {open ? (
-        <div className="tm-delegated-add-menu" id={panelId} role="group" aria-label="Add new">
-          <button type="button" className="tm-delegated-add-menu__choice" onClick={() => choose(onTask)}>
-            <span className="tm-delegated-add-menu__icon"><DockIcon name="task" /></span><strong>Task</strong>
-          </button>
-          <button type="button" className="tm-delegated-add-menu__choice" onClick={() => choose(onProject)}>
-            <span className="tm-delegated-add-menu__icon"><DockIcon name="project" /></span><strong>Project</strong>
-          </button>
-        </div>
-      ) : null}
+      {/* Keep the same panel for opening and closing transitions. A closed
+          panel is immediately excluded from pointer, tab and AT interaction. */}
+      <div className="tm-delegated-add-menu" id={panelId} role="group" aria-label="Add new"
+        data-open={open} aria-hidden={!open} inert={!open}>
+        <button type="button" className="tm-delegated-add-menu__choice" onClick={() => choose(onTask)}>
+          <span className="tm-delegated-add-menu__icon"><DockIcon name="task" /></span><strong>Task</strong>
+        </button>
+        <button type="button" className="tm-delegated-add-menu__choice" onClick={() => choose(onProject)}>
+          <span className="tm-delegated-add-menu__icon"><DockIcon name="project" /></span><strong>Project</strong>
+        </button>
+      </div>
     </div>,
     host,
   );

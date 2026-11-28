@@ -49,6 +49,7 @@
     background: var(--mobile-dock-bg, #0b0c10);
     box-shadow: var(--mobile-dock-shadow, 0 18px 40px #0f172a2e);
     overflow: visible;
+    animation: tm-add-rail-appear .32s cubic-bezier(.22,1,.36,1) backwards;
   }
   /* A very narrow middle rail must not squeeze its secondary page labels.
      Let the secondary navigation float just above all three tracks. */
@@ -80,34 +81,49 @@
     background: var(--mobile-dock-bg, #0b0c10);
     pointer-events: none;
   }
-  .tm-delegated-add-dock .tm-delegated-add-dock__trigger {
+  /* Explicit, identical geometry in closed/open/pressed/focused states.
+     Avoid relying on grid/aspect-ratio auto sizing on mobile browsers. */
+  body.next-classic-shell-active .tm-delegated-add-dock .tm-delegated-add-dock__trigger {
     appearance: none;
-    display: grid;
-    place-items: center;
+    position: relative;
+    box-sizing: border-box;
+    display: block;
     width: 100%;
     height: 100%;
     min-width: 0;
+    min-height: 0;
     margin: 0;
-    padding: 0;
-    border: 0;
+    padding: 0 !important;
+    border: 0 !important;
     border-radius: inherit;
-    background: transparent;
+    background: transparent !important;
     color: #fff;
-    box-shadow: none;
+    box-shadow: none !important;
     cursor: pointer;
     touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
   }
-  .tm-delegated-add-dock__accent {
+  body.next-classic-shell-active .tm-delegated-add-dock .tm-delegated-add-dock__trigger > .tm-delegated-add-dock__accent {
+    position: absolute;
+    inset: 0;
+    margin: auto !important;
+    box-sizing: border-box !important;
     display: grid;
     place-items: center;
-    width: 46px;
-    max-width: calc(100% - 8px);
-    aspect-ratio: 1;
-    border-radius: 50%;
-    background: #ff7110;
+    width: 46px !important;
+    min-width: 46px !important;
+    max-width: 46px !important;
+    height: 46px !important;
+    min-height: 46px !important;
+    max-height: 46px !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 50% !important;
+    background: #ff7110 !important;
     color: #fff;
     box-shadow: 0 5px 12px #ed690d30;
-    transition: transform .2s ease;
+    transition: transform .15s ease-out;
+    pointer-events: none;
   }
   .tm-delegated-add-dock__accent svg {
     display: block;
@@ -115,7 +131,12 @@
     height: 23px !important;
     stroke: currentColor;
     color: #fff;
-    transform: none !important;
+    transform: rotate(0deg) !important;
+    transform-origin: center;
+    transition: transform .28s cubic-bezier(.34,1.35,.64,1);
+  }
+  .tm-delegated-add-dock__trigger[aria-expanded="true"] .tm-delegated-add-dock__accent svg {
+    transform: rotate(45deg) !important;
   }
   .tm-delegated-add-dock__trigger:active .tm-delegated-add-dock__accent {
     transform: scale(.94);
@@ -139,8 +160,19 @@
     background: #0b0c10;
     color: #fff;
     box-shadow: 0 10px 24px #0f172a44;
-    animation: tm-add-dock-enter .2s cubic-bezier(.22,1,.36,1) both;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateY(10px) scale(.95);
     transform-origin: bottom right;
+    transition: opacity .18s ease, transform .24s cubic-bezier(.22,1,.36,1), visibility 0s linear .24s;
+  }
+  .tm-delegated-add-dock > .tm-delegated-add-menu[data-open="true"] {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateY(0) scale(1);
+    transition-delay: 0s;
   }
   .tm-delegated-add-menu::after {
     content: "";
@@ -206,12 +238,16 @@
     outline: 2px solid #ff8d38;
     outline-offset: 2px;
   }
-  @keyframes tm-add-dock-enter {
-    from { opacity: 0; transform: translateY(8px) scale(.97); }
-    to { opacity: 1; transform: translateY(0) scale(1); }
+  @keyframes tm-add-rail-appear {
+    from { opacity: 0; transform: translateY(12px) scale(.96); }
+    to { opacity: 1; transform: none; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .tm-delegated-add-menu { animation: none !important; }
-    .tm-delegated-add-dock__accent { transition: none; }
+    body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host > .sidebar-nav > .tm-delegated-add-dock {
+      animation: none !important;
+    }
+    .tm-delegated-add-dock > .tm-delegated-add-menu,
+    .tm-delegated-add-dock__accent,
+    .tm-delegated-add-dock__accent svg { transition: none !important; }
   }
 }
